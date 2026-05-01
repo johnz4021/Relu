@@ -64,10 +64,10 @@ export default function Transcript({ segments, agentStatus, centered }) {
               <span className="text-xs text-accent font-medium block mb-1">You asked:</span>
             )}
             {seg.type === 'answer' && (
-              <span className="text-xs text-text-tertiary font-medium block mb-1">Argmax:</span>
+              <span className="text-xs text-text-tertiary font-medium block mb-1">ReLU:</span>
             )}
             {seg.type === 'guided_question' && (
-              <span className="text-xs text-text-tertiary font-medium block mb-1">Argmax asked:</span>
+              <span className="text-xs text-text-tertiary font-medium block mb-1">ReLU asked:</span>
             )}
             {seg.type === 'guided_answer' && (
               <span className="text-xs text-accent font-medium block mb-1">Your answer:</span>

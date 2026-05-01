@@ -27,7 +27,7 @@ export default function ConversationTranscript({ messages, onBack }) {
               className={`text-sm ${isStudent ? 'pl-4 border-l-2 border-accent' : ''}`}
             >
               <span className="text-xs text-text-tertiary mr-2">
-                {isStudent ? 'You' : 'Argmax'}
+                {isStudent ? 'You' : 'ReLU'}
               </span>
               <span className={style}>
                 <MathText>{msg.content}</MathText>

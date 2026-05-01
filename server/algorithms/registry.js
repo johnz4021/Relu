@@ -1,10 +1,10 @@
-import { dijkstra, bfs, dfs, DEFAULT_GRAPH, kruskal, prim, DEFAULT_UNDIRECTED_GRAPH, maxflow, DEFAULT_FLOW_NETWORK, bellmanFord, DEFAULT_BELLMAN_FORD_GRAPH, dagShortest, DEFAULT_DAG_GRAPH, unionFind, DEFAULT_UNION_FIND_GRAPH, topologicalSort, backtracking } from './graph/index.js';
+import { dijkstra, bfs, dfs, DEFAULT_GRAPH, kruskal, prim, DEFAULT_UNDIRECTED_GRAPH, maxflow, DEFAULT_FLOW_NETWORK, bellmanFord, DEFAULT_BELLMAN_FORD_GRAPH, dagShortest, DEFAULT_DAG_GRAPH, unionFind, DEFAULT_UNION_FIND_GRAPH, topologicalSort, backtracking, wordSearch, DEFAULT_WORD_SEARCH_INPUT } from './graph/index.js';
 import { mergesort } from './sorting/index.js';
-import { knapsack, editDistance, lcs, coinChange } from './dp/index.js';
+import { knapsack, editDistance, lcs, coinChange, maxSubarray, DEFAULT_MAX_SUBARRAY_INPUT, wordBreak, DEFAULT_WORD_BREAK_INPUT, climbingStairs, DEFAULT_CLIMBING_STAIRS_INPUT, minPathSum, DEFAULT_MIN_PATH_SUM_INPUT } from './dp/index.js';
 import { polyReduction, DEFAULT_REDUCTION_FORMULA } from './complexity/index.js';
-import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT } from './searching/index.js';
+import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT, rotateArray, DEFAULT_ROTATE_ARRAY_INPUT } from './searching/index.js';
 import { huffman } from './compression/index.js';
-import { heapOperations, trie, DEFAULT_TRIE_INPUT, bstInsert } from './tree/index.js';
+import { heapOperations, trie, DEFAULT_TRIE_INPUT, bstInsert, treeDfs, DEFAULT_TREE_DFS_INPUT, treeLevelOrder, DEFAULT_TREE_LEVEL_ORDER_INPUT, treePath, DEFAULT_TREE_PATH_INPUT } from './tree/index.js';
 import { linkedListReversal, stackOperations, queueOperations } from './linked/index.js';
 
 /**
@@ -179,6 +179,27 @@ export const ALGORITHMS = {
     defaultInput: { values: [5, 3, 7, 1, 4, 6, 8] },
     capabilities: { max_nodes: 15 },
   },
+  tree_depth_dfs: {
+    run: (input) => treeDfs(input),
+    renderer: 'tree',
+    category: 'Trees',
+    defaultInput: DEFAULT_TREE_DFS_INPUT,
+    capabilities: { max_nodes: 15 },
+  },
+  tree_level_order: {
+    run: (input) => treeLevelOrder(input),
+    renderer: 'tree',
+    category: 'Trees',
+    defaultInput: DEFAULT_TREE_LEVEL_ORDER_INPUT,
+    capabilities: { max_nodes: 15 },
+  },
+  tree_path: {
+    run: (input) => treePath(input),
+    renderer: 'tree',
+    category: 'Trees',
+    defaultInput: DEFAULT_TREE_PATH_INPUT,
+    capabilities: { max_nodes: 15 },
+  },
   linked_list_reversal: {
     run: (input) => linkedListReversal(input.values),
     renderer: 'linked',
@@ -299,6 +320,50 @@ export const ALGORITHMS = {
     capabilities: { max_string_length: 20, max_pattern_length: 10 },
   },
 
+  // ── Phase 3: Pattern-specific Tier 1 replacements (fixes cache-poisoning Tier 2 entries) ──
+  max_subarray: {
+    run: (input) => maxSubarray(input),
+    renderer: 'array',
+    category: 'Dynamic Programming',
+    defaultInput: DEFAULT_MAX_SUBARRAY_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+  word_break: {
+    run: (input) => wordBreak(input),
+    renderer: 'table',
+    category: 'Dynamic Programming',
+    defaultInput: DEFAULT_WORD_BREAK_INPUT,
+    capabilities: { max_table_cols: 20 },
+  },
+  climbing_stairs: {
+    run: (input) => climbingStairs(input),
+    renderer: 'table',
+    category: 'Dynamic Programming',
+    defaultInput: DEFAULT_CLIMBING_STAIRS_INPUT,
+    capabilities: { max_table_cols: 20 },
+  },
+  min_path_sum: {
+    run: (input) => minPathSum(input),
+    renderer: 'table',
+    category: 'Dynamic Programming',
+    defaultInput: DEFAULT_MIN_PATH_SUM_INPUT,
+    capabilities: { max_table_rows: 8, max_table_cols: 8 },
+  },
+  word_search: {
+    run: (input) => wordSearch(input),
+    renderer: 'graph',
+    category: 'Backtracking',
+    defaultInput: DEFAULT_WORD_SEARCH_INPUT,
+    capabilities: { max_nodes: 20, max_edges: 40 },
+  },
+  rotate_array: {
+    run: (input) => rotateArray(input),
+    renderer: 'array',
+    category: 'Algorithms',
+    defaultInput: DEFAULT_ROTATE_ARRAY_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+
   // ── Tier 2 synthetic keys (no Tier 1 hand-written trace; generated on demand) ──
   // run: null marks these as Tier 2-only — runAlgorithmWithFallback skips to Tier 2.
   hash_map_grouping: {
@@ -320,11 +385,6 @@ export const ALGORITHMS = {
     run: null, renderer: 'array', category: 'Algorithms', tier: 2,
     defaultInput: { nums: [1, 2, 3, 4, 5], target: 9 },
     capabilities: { max_array_length: 15 },
-  },
-  matrix_dp: {
-    run: null, renderer: 'table', category: 'Dynamic Programming', tier: 2,
-    defaultInput: { grid: [[1,3,1],[1,5,1],[4,2,1]] },
-    capabilities: { max_table_rows: 8, max_table_cols: 8 },
   },
   string_hash: {
     run: null, renderer: 'context', category: 'Data Structures', tier: 2,
@@ -350,31 +410,6 @@ export const ALGORITHMS = {
     run: null, renderer: 'context', category: 'Algorithms', tier: 2,
     defaultInput: { n: 19 },
     capabilities: {},
-  },
-  array_manipulation: {
-    run: null, renderer: 'array', category: 'Algorithms', tier: 2,
-    defaultInput: { nums: [1, 2, 3, 4, 5], k: 2 },
-    capabilities: { max_array_length: 15 },
-  },
-  string_dp: {
-    run: null, renderer: 'table', category: 'Dynamic Programming', tier: 2,
-    defaultInput: { s: 'leetcode', wordDict: ['leet', 'code'] },
-    capabilities: { max_table_rows: 15, max_table_cols: 15 },
-  },
-  divide_conquer_array: {
-    run: null, renderer: 'array', category: 'Divide and Conquer', tier: 2,
-    defaultInput: { nums: [-2, 1, -3, 4, -1, 2, 1, -5, 4] },
-    capabilities: { max_array_length: 15 },
-  },
-  recursion_memoization: {
-    run: null, renderer: 'table', category: 'Dynamic Programming', tier: 2,
-    defaultInput: { n: 6 },
-    capabilities: { max_table_cols: 15 },
-  },
-  backtrack_grid: {
-    run: null, renderer: 'graph', category: 'Backtracking', tier: 2,
-    defaultInput: { board: [['A','B','C','E'],['S','F','C','S'],['A','D','E','E']], word: 'ABCCED' },
-    capabilities: { max_nodes: 20, max_edges: 40 },
   },
 };
 

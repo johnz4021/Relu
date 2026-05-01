@@ -765,7 +765,7 @@ app.get('*', (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Server] Argmax running on http://localhost:${PORT}`);
+  console.log(`[Server] ReLU running on http://localhost:${PORT}`);
   if (authEnabled) {
     console.log(`[Server] Auth enabled (Supabase)`);
   } else {

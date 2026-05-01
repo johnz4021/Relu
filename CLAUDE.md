@@ -45,3 +45,15 @@ Key routing rules:
 - Review what gstack has learned → invoke /learn
 - Tune question sensitivity → invoke /plan-tune
 - Code quality dashboard → invoke /health
+
+## Project Documentation
+
+- `PIPELINE.md` — Full pipeline reference: agent orchestration, solver classifications,
+  Tier 1 vs Tier 2 trace generation, renderer selection, trace mode vs design mode,
+  context panels, interrupt handling, LeetCode mode. Read this before working on
+  anything in `server/`.
+
+**Keep PIPELINE.md up to date.** Whenever you modify any part of the pipeline —
+solver classification, reasoning modes, trace generation, renderer selection, vizMapper,
+agent system prompts, tool schemas, algorithm registry, context panel defaults, or
+interrupt handling — update the relevant section(s) of PIPELINE.md in the same change.

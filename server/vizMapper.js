@@ -211,6 +211,29 @@ function mapGraphStep(algo, step, state) {
         for (const e of step.edges || []) {
           v.push(viz('graph', 'add_edge', { from: e.from, to: e.to }));
         }
+      } else if (algo === 'word_search' && step.graph) {
+        for (const n of step.graph.nodes) {
+          v.push(viz('graph', 'add_node', { id: n.id, label: n.label, position: n.position }));
+        }
+        for (const e of step.graph.edges || []) {
+          v.push(viz('graph', 'add_edge', { from: e.source, to: e.target }));
+        }
+        c.push(ctxUpdate('search_state', {
+          entries: [
+            { key: 'Word', value: step.word },
+            { key: 'Matched', value: '0 chars' },
+            { key: 'Status', value: 'Searching…' },
+          ],
+        }));
+      } else if (algo === 'union_find' && step.parent) {
+        c.push(ctxUpdate('components', {
+          entries: [{ key: 'Components', value: step.components, status: 'default' }],
+        }));
+        c.push(ctxUpdate('parent', {
+          entries: Object.entries(step.parent).map(([k, p]) => ({
+            key: k, value: p, status: 'default',
+          })),
+        }));
       }
       break;
     }
@@ -267,6 +290,14 @@ function mapGraphStep(algo, step, state) {
         if (step.mst_edges) {
           state.mstWeight = step.mst_edges.reduce((s, e) => s + e.weight, 0);
         }
+      } else if (algo === 'word_search') {
+        c.push(ctxUpdate('search_state', {
+          entries: [
+            { key: 'Word', value: step.word },
+            { key: 'Matched', value: `${step.word_index + 1} / ${step.word?.length ?? '?'} chars` },
+            { key: 'At cell', value: `(${step.node}) = '${step.char}'`, status: 'highlight' },
+          ],
+        }));
       }
       break;
     }
@@ -379,12 +410,33 @@ function mapGraphStep(algo, step, state) {
     }
 
     case 'backtrack': {
-      v.push(viz('graph', 'mark_visited', { node: step.node }));
-      if (step.stack) {
-        c.push(ctxUpdate('stack', {
-          items: step.stack.map((n) => ({ value: n })),
-          style: 'stack',
+      if (algo === 'word_search') {
+        v.push(viz('graph', 'highlight_node', { node: step.node, className: 'default' }));
+        c.push(ctxLog('decisions', `Backtrack from (${step.node}) '${step.char}'`, 'info'));
+      } else {
+        v.push(viz('graph', 'mark_visited', { node: step.node }));
+        if (step.stack) {
+          c.push(ctxUpdate('stack', {
+            items: step.stack.map((n) => ({ value: n })),
+            style: 'stack',
+          }));
+        }
+      }
+      break;
+    }
+
+    case 'found_path': {
+      if (algo === 'word_search') {
+        for (const nodeId of step.path || []) {
+          v.push(viz('graph', 'highlight_node', { node: nodeId, className: 'visited' }));
+        }
+        c.push(ctxUpdate('search_state', {
+          entries: [
+            { key: 'Word', value: step.word },
+            { key: 'Matched', value: `${step.word?.length} / ${step.word?.length} — FOUND`, status: 'updated' },
+          ],
         }));
+        c.push(ctxLog('decisions', `Found "${step.word}"! Path: ${(step.path || []).join(' → ')}`, 'result'));
       }
       break;
     }
@@ -453,6 +505,26 @@ function mapGraphStep(algo, step, state) {
       }
       if (algo === 'backtracking') {
         v.push(viz('graph', 'reset_highlights', {}));
+      }
+      if (algo === 'union_find' && step.component_map) {
+        const componentEntries = Object.entries(step.component_map).map(([root, members]) => ({
+          key: `Root ${root}`, value: members.join(', '), status: 'updated',
+        }));
+        c.push(ctxUpdate('components', {
+          entries: [
+            { key: 'Components', value: step.components, status: 'updated' },
+            ...componentEntries,
+          ],
+        }));
+        c.push(ctxLog('decisions', `Complete: ${step.components} component${step.components !== 1 ? 's' : ''} found`, 'result'));
+      }
+      if (algo === 'word_search') {
+        c.push(ctxUpdate('search_state', {
+          entries: [
+            { key: 'Word', value: step.word },
+            { key: 'Result', value: step.found ? 'FOUND' : 'NOT FOUND', status: step.found ? 'updated' : 'highlight' },
+          ],
+        }));
       }
       break;
     }
@@ -906,6 +978,65 @@ function mapGraphStep(algo, step, state) {
       }
       break;
     }
+
+    // ── Union-Find ────────────────────────────────────────────────────────
+    case 'process_edge': {
+      if (algo === 'union_find') {
+        v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.to, className: 'examining' }));
+        v.push(viz('graph', 'highlight_node', { node: step.from, className: 'current' }));
+        v.push(viz('graph', 'highlight_node', { node: step.to, className: 'current' }));
+        c.push(ctxLog('decisions', `Process edge (${step.from}, ${step.to})`, 'info'));
+      }
+      break;
+    }
+
+    case 'find': {
+      if (algo === 'union_find') {
+        v.push(viz('graph', 'highlight_node', { node: step.node, className: 'current' }));
+        if (step.root !== step.node) {
+          v.push(viz('graph', 'highlight_node', { node: step.root, className: 'highlighted' }));
+        }
+        if (step.parent) {
+          c.push(ctxUpdate('parent', {
+            entries: Object.entries(step.parent).map(([k, p]) => ({
+              key: k, value: p, status: k === step.node ? 'highlight' : 'default',
+            })),
+          }));
+        }
+        c.push(ctxLog('decisions', `find(${step.node}) = ${step.root}`, 'info'));
+      }
+      break;
+    }
+
+    case 'already_connected': {
+      if (algo === 'union_find') {
+        v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.to, className: 'mst-edge' }));
+        c.push(ctxUpdate('components', {
+          entries: [{ key: 'Components', value: step.components, status: 'default' }],
+        }));
+        c.push(ctxLog('decisions', `${step.from}–${step.to} already connected (root: ${step.root})`, 'decision'));
+      }
+      break;
+    }
+
+    case 'union': {
+      if (algo === 'union_find') {
+        v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.to, className: 'highlighted' }));
+        v.push(viz('graph', 'highlight_node', { node: step.merged_under, className: 'visited' }));
+        if (step.parent) {
+          c.push(ctxUpdate('parent', {
+            entries: Object.entries(step.parent).map(([k, p]) => ({
+              key: k, value: p, status: p === step.merged_under && k !== step.merged_under ? 'updated' : 'default',
+            })),
+          }));
+        }
+        c.push(ctxUpdate('components', {
+          entries: [{ key: 'Components', value: step.components, status: 'updated' }],
+        }));
+        c.push(ctxLog('decisions', `Union(${step.from}, ${step.to}) → root: ${step.merged_under}`, 'result'));
+      }
+      break;
+    }
   }
 
   return { viz: v, ctx: c };
@@ -956,6 +1087,21 @@ function mapArrayStep(algo, step, state) {
           entries: [
             { key: 'a', value: cs.a ?? step.array?.[0] ?? '–' },
             { key: 'b', value: cs.b ?? step.array?.[1] ?? '–' },
+          ],
+        }));
+      } else if (algo === 'max_subarray') {
+        c.push(ctxUpdate('kadane_state', {
+          entries: [
+            { key: 'current_sum', value: '—' },
+            { key: 'max_sum', value: '—' },
+            { key: 'Max subarray', value: '—' },
+          ],
+        }));
+      } else if (algo === 'rotate_array') {
+        c.push(ctxUpdate('stats', {
+          entries: [
+            { key: 'k (rotate by)', value: step.k ?? 0 },
+            { key: 'Phase', value: '0 of 3' },
           ],
         }));
       } else {
@@ -1242,6 +1388,39 @@ function mapArrayStep(algo, step, state) {
       break;
     }
 
+    // ── max_subarray (Kadane's) ──────────────────────────────────────────
+    case 'visit': {
+      if (algo === 'max_subarray') {
+        v.push(viz('array', 'highlight', { indices: [step.index], className: 'active' }));
+        if (step.max_start !== undefined) {
+          v.push(viz('array', 'slide_window', { start: step.max_start, end: step.max_end }));
+        }
+        c.push(ctxUpdate('kadane_state', {
+          entries: [
+            { key: 'current_sum', value: step.current_sum, status: 'highlight' },
+            { key: 'max_sum', value: step.max_sum, status: step.current_sum === step.max_sum ? 'updated' : 'default' },
+            { key: 'Max subarray', value: `[${step.max_start}..${step.max_end}]` },
+          ],
+        }));
+      }
+      break;
+    }
+
+    // ── rotate_array ─────────────────────────────────────────────────────
+    case 'phase': {
+      if (step.array) {
+        v.push(viz('array', 'set_data', { values: step.array }));
+      }
+      c.push(ctxUpdate('stats', {
+        entries: [
+          { key: 'k (rotate by)', value: '' },
+          { key: 'Phase', value: `${step.phase} of 3 complete`, status: 'updated' },
+        ],
+      }));
+      c.push(ctxUpdate('expression', { expression: step.description || `Phase ${step.phase} complete` }));
+      break;
+    }
+
     // ── informational ────────────────────────────────────────────────────
     case 'pass_start':
     case 'early_exit':
@@ -1276,7 +1455,19 @@ function mapArrayStep(algo, step, state) {
     }
 
     case 'result':
-      if (step.array) {
+      if (algo === 'max_subarray' && step.start !== undefined) {
+        v.push(viz('array', 'slide_window', { start: step.start, end: step.end }));
+        v.push(viz('array', 'mark_sorted', {
+          indices: Array.from({ length: step.end - step.start + 1 }, (_, i) => step.start + i),
+        }));
+        c.push(ctxUpdate('kadane_state', {
+          entries: [
+            { key: 'Max sum', value: step.max_sum, status: 'updated' },
+            { key: 'Subarray', value: `[${(step.subarray || []).join(', ')}]`, status: 'updated' },
+            { key: 'Indices', value: `[${step.start}..${step.end}]` },
+          ],
+        }));
+      } else if (step.array) {
         v.push(viz('array', 'set_data', { values: step.array }));
         if (algo === 'sliding_window' && step.max_start !== undefined) {
           v.push(viz('array', 'slide_window', { start: step.max_start, end: step.max_end }));
@@ -1372,6 +1563,23 @@ function mapTableStep(algo, step, state) {
       } else if (algo === 'coin_change') {
         c.push(ctxUpdate('expression', {
           expression: 'dp[a] = min(dp[a], dp[a-coin] + 1)',
+        }));
+      } else if (algo === 'word_break') {
+        c.push(ctxUpdate('expression', {
+          expression: 'dp[i] = true if s[0..i-1] can be segmented using wordDict',
+        }));
+        if (step.wordDict) {
+          c.push(ctxUpdate('stats', {
+            entries: step.wordDict.map(w => ({ key: w, value: '✓ in dict', status: 'default' })),
+          }));
+        }
+      } else if (algo === 'climbing_stairs') {
+        c.push(ctxUpdate('expression', {
+          expression: 'dp[i] = dp[i-1] + dp[i-2]  (ways to climb i stairs)',
+        }));
+      } else if (algo === 'min_path_sum') {
+        c.push(ctxUpdate('expression', {
+          expression: 'dp[i][j] = min(dp[i-1][j], dp[i][j-1]) + grid[i][j]',
         }));
       }
       break;
@@ -1475,6 +1683,52 @@ function mapTableStep(algo, step, state) {
           }));
           c.push(ctxLog('decisions', `Use coin ${step.coin}: dp[${step.index}] = ${value}`, 'decision'));
         }
+      } else if (algo === 'word_break') {
+        if (step.type === 'fill_cell') {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[${step.col}] = true  (s[${step.from_j}..${step.col}] = "${step.word}")`,
+            result: 1,
+          }));
+          c.push(ctxLog('decisions', `dp[${step.col}] = T via "${step.word}"`, 'decision'));
+        } else {
+          c.push(ctxLog('decisions', `dp[${step.col}] = F (no valid split ends here)`, 'info'));
+        }
+      } else if (algo === 'climbing_stairs') {
+        if (step.is_base) {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[${step.col}] = ${step.value}  (base case)`,
+            result: step.value,
+          }));
+        } else {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[${step.col}] = dp[${step.col - 1}] + dp[${step.col - 2}] = ${step.prev1} + ${step.prev2} = ${step.value}`,
+            result: step.value,
+          }));
+          c.push(ctxLog('decisions', `dp[${step.col}] = ${step.value}`, 'info'));
+        }
+      } else if (algo === 'min_path_sum') {
+        if (step.is_base) {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[0][0] = grid[0][0] = ${step.value}`,
+            result: step.value,
+          }));
+        } else if (step.from_above !== undefined && step.from_left !== undefined) {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[${step.row}][${step.col}] = min(${step.from_above}, ${step.from_left}) + ${step.grid_val} = ${step.value}`,
+            result: step.value,
+          }));
+        } else if (step.from_left !== undefined) {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[0][${step.col}] = dp[0][${step.col - 1}] + ${step.grid_val} = ${step.value}`,
+            result: step.value,
+          }));
+        } else if (step.from_above !== undefined) {
+          c.push(ctxUpdate('expression', {
+            expression: `dp[${step.row}][0] = dp[${step.row - 1}][0] + ${step.grid_val} = ${step.value}`,
+            result: step.value,
+          }));
+        }
+        c.push(ctxLog('decisions', `dp[${step.row}][${step.col}] = ${step.value}`, 'info'));
       }
       break;
     }
@@ -1512,8 +1766,31 @@ function mapTableStep(algo, step, state) {
     }
 
     case 'result': {
-      if (step.table) {
-        // Mark all cells with final optimal highlights if available
+      if (algo === 'word_break') {
+        c.push(ctxUpdate('expression', {
+          expression: step.found
+            ? `dp[${step.dp?.length ? step.dp.length - 1 : '?'}] = T — "${step.s}" can be segmented`
+            : `dp[end] = F — "${step.s}" cannot be segmented`,
+          result: step.found ? 1 : 0,
+        }));
+        c.push(ctxLog('decisions', step.found ? 'Word Break: TRUE' : 'Word Break: FALSE',
+          step.found ? 'result' : 'info'));
+      } else if (algo === 'climbing_stairs') {
+        c.push(ctxUpdate('expression', {
+          expression: `dp[${step.n}] = ${step.ways} distinct ways to climb ${step.n} stairs`,
+          result: step.ways,
+        }));
+      } else if (algo === 'min_path_sum') {
+        if (step.path) {
+          for (const [r, c2] of step.path) {
+            v.push(viz('table', 'highlight_cell', { row: r, col: c2, className: 'optimal' }));
+          }
+        }
+        c.push(ctxUpdate('expression', {
+          expression: `Min cost path = ${step.min_cost}`,
+          result: step.min_cost,
+        }));
+        c.push(ctxLog('decisions', `Minimum path cost: ${step.min_cost}`, 'result'));
       }
       break;
     }
@@ -1542,6 +1819,29 @@ function mapTreeStep(algo, step, state) {
           entries: [
             { key: 'Values to insert', value: step.values?.join(', ') || '' },
             { key: 'Inserted', value: 0 },
+          ],
+        }));
+      } else if (algo === 'tree_depth_dfs' && step.tree) {
+        v.push(viz('tree', 'set_tree', step.tree));
+        c.push(ctxUpdate('stats', {
+          entries: [{ key: 'Max Depth', value: '?', status: 'default' }],
+        }));
+      } else if (algo === 'tree_level_order' && step.tree) {
+        v.push(viz('tree', 'set_tree', step.tree));
+        c.push(ctxUpdate('traversal_order', { items: [], style: 'queue' }));
+        if (step.queue) {
+          c.push(ctxUpdate('queue', {
+            items: step.queue.map(id => ({ value: id })),
+            style: 'queue',
+          }));
+        }
+      } else if (algo === 'tree_path' && step.tree) {
+        v.push(viz('tree', 'set_tree', step.tree));
+        c.push(ctxUpdate('path_state', {
+          entries: [
+            { key: 'Target', value: step.target },
+            { key: 'Remaining', value: step.target, status: 'default' },
+            { key: 'Path', value: '—' },
           ],
         }));
       }
@@ -1676,6 +1976,22 @@ function mapTreeStep(algo, step, state) {
             entries: Object.entries(step.codes).map(([char, code]) => ({ key: char, value: code, status: 'default' })),
           }));
         }
+      } else if (algo === 'tree_depth_dfs') {
+        c.push(ctxUpdate('stats', {
+          entries: [{ key: 'Max Depth', value: step.max_depth, status: 'updated' }],
+        }));
+      } else if (algo === 'tree_level_order') {
+        if (step.order) {
+          c.push(ctxUpdate('traversal_order', {
+            items: step.order.map(val => ({ value: val, status: 'updated' })),
+            style: 'queue',
+          }));
+        }
+      } else if (algo === 'tree_path') {
+        c.push(ctxLog('traversal_log',
+          step.found ? `Path found: ${step.path.join(' → ')}` : `No path sums to ${step.target}`,
+          step.found ? 'result' : 'info',
+        ));
       } else {
         v.push(viz('tree', 'reset', {}));
         if (step.tree) {
@@ -1721,6 +2037,76 @@ function mapTreeStep(algo, step, state) {
       if (step.codes) {
         c.push(ctxUpdate('codes', {
           entries: Object.entries(step.codes).map(([char, code]) => ({ key: char, value: code, status: 'default' })),
+        }));
+      }
+      break;
+    }
+
+    // ── Tree Traversal (tree_depth_dfs / tree_level_order / tree_path) ──────
+    case 'visit_node': {
+      if (step.node_id) {
+        v.push(viz('tree', 'highlight_node', { id: step.node_id, className: 'current' }));
+      }
+      if (step.remaining !== undefined) {
+        c.push(ctxUpdate('path_state', {
+          entries: [
+            { key: 'Target', value: step.remaining + (step.value ?? 0) + (step.path?.length > 1 ? '' : '') },
+            { key: 'Path so far', value: (step.path || []).join(' → '), status: 'highlight' },
+            { key: 'Remaining', value: step.remaining, status: step.remaining === 0 ? 'highlight' : 'default' },
+          ],
+        }));
+      } else if (!state.traversalOrder) {
+        state.traversalOrder = [];
+      }
+      if (step.value !== undefined && step.remaining === undefined) {
+        state.traversalOrder = state.traversalOrder || [];
+        state.traversalOrder.push(step.value);
+        c.push(ctxUpdate('traversal_order', {
+          items: state.traversalOrder.map(val => ({ value: val })),
+          style: 'queue',
+        }));
+      }
+      break;
+    }
+
+    case 'backtrack': {
+      if (step.node_id) {
+        v.push(viz('tree', 'highlight_node', { id: step.node_id, className: 'visited' }));
+      }
+      if (step.height !== undefined) {
+        c.push(ctxUpdate('expression', {
+          expression: `h(${step.value}) = max(${step.left_height}, ${step.right_height}) + 1 = ${step.height}`,
+        }));
+        c.push(ctxUpdate('stats', {
+          entries: [{ key: 'Max Depth', value: step.height, status: 'default' }],
+        }));
+      }
+      break;
+    }
+
+    case 'found_path': {
+      if (step.node_id) {
+        v.push(viz('tree', 'highlight_node', { id: step.node_id, className: 'visited' }));
+      }
+      if (step.path) {
+        c.push(ctxLog('traversal_log', `Found: ${step.path.join(' → ')}`, 'result'));
+      }
+      break;
+    }
+
+    case 'level_complete': {
+      if (step.values) {
+        c.push(ctxLog('traversal_log', `Level ${step.level}: [${step.values.join(', ')}]`, 'info'));
+      }
+      if (step.level_nodes) {
+        for (const nodeId of step.level_nodes) {
+          v.push(viz('tree', 'highlight_node', { id: nodeId, className: 'visited' }));
+        }
+      }
+      if (step.queue_after !== undefined) {
+        c.push(ctxUpdate('queue', {
+          items: step.queue_after.map(id => ({ value: id })),
+          style: 'queue',
         }));
       }
       break;

@@ -56,7 +56,7 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
             You've used all {limit} free sessions
           </div>
           <p className="text-sm text-text-secondary">
-            You've completed {count} sessions. To continue using Argmax, bring your own API key or request more access.
+            You've completed {count} sessions. To continue using ReLU, bring your own API key or request more access.
           </p>
         </div>
 
@@ -64,14 +64,23 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
         <div className="mb-8">
           <h3 className="text-sm font-semibold text-text-primary mb-3">Option 1: Use your own API key</h3>
           <p className="text-xs text-text-tertiary mb-3">
-            Your key is encrypted and only used for your sessions.{' '}
+            Your key is AES-256 encrypted and never logged.{' '}
+            <a
+              href="https://github.com/johnz4021/ReLU/blob/main/server/index.js#L455"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:underline"
+            >
+              See exactly how it's stored →
+            </a>
+            {' '}Get a key at{' '}
             <a
               href="https://console.anthropic.com/settings/keys"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline"
             >
-              Get a key from Anthropic
+              console.anthropic.com
             </a>
           </p>
           <div className="flex gap-2">

@@ -155,9 +155,9 @@ prefix_sum:
   Input: { "nums": [1, 2, 3, 4, 5], "target": 9 }
   Use for: Subarray Sum Equals K, Range Sum Query, Count Subarrays with Sum. Input: { "nums": [...], "target": k }
 
-matrix_dp:
+min_path_sum:
   Input: { "grid": [[1,3,1],[1,5,1],[4,2,1]] }
-  Use for: Unique Paths, Minimum Path Sum, Maximal Square, Triangle (grid DP where each cell depends on neighbors).
+  Use for: Minimum Path Sum (LC64), Unique Paths (LC62, use a grid of 1s). Fill 2D DP table left-to-right, top-to-bottom; each cell depends on the cell above and to the left.
 
 string_hash:
   Input: { "s": "egg", "t": "add" }
@@ -184,29 +184,46 @@ math_simulation:
   Use for: Happy Number, Palindrome Number, Integer to Roman, Factorial Trailing Zeroes.
   Use when: problem is solved by simulating a mathematical process step by step.
 
-array_manipulation:
+rotate_array:
   Input: { "nums": [1, 2, 3, 4, 5, 6, 7], "k": 3 }
-  Use for: Rotate Array, Move Zeroes, Next Permutation, Product of Array Except Self.
-  Use when: problem transforms an array in-place without a well-known specialized algorithm.
+  Use for: Rotate Array (LC189) specifically. Three-reversal method.
+  Do NOT use for: Move Zeroes, Product of Array Except Self, Next Permutation (these have no matching visualization).
 
-string_dp:
+word_break:
   Input: { "s": "leetcode", "wordDict": ["leet", "code"] }
-  Use for: Word Break, Palindrome Partitioning, Decode Ways, Regular Expression Matching.
-  Use when: string DP where dp[i] = whether some property holds for s[0..i].
+  Use for: Word Break (LC139). 1D boolean DP where dp[i] = s[0..i-1] can be segmented.
+  Do NOT use for: Decode Ways, Palindrome Partitioning, or Regex Matching (different recurrences/inputs).
 
-divide_conquer_array:
+max_subarray:
   Input: { "nums": [-2, 1, -3, 4, -1, 2, 1, -5, 4] }
-  Use for: Maximum Subarray (Kadane variant), Find Peak Element, Merge Sort Count Inversions.
-  Use when: problem applies divide-and-conquer or Kadane's algorithm on a linear array.
+  Use for: Maximum Subarray (LC53, Kadane's algorithm). Single-pass, track current_sum and max_sum.
+  Do NOT use for: Find Peak Element or Count Inversions (different algorithms, no visualization).
 
-recursion_memoization:
+climbing_stairs:
   Input: { "n": 6 }
-  Use for: Climbing Stairs, Fibonacci, House Robber, Decode Ways with simple 1D state.
-  Use when: problem has a simple 1D DP recurrence (f(n) = f(n-1) + f(n-2) style).
+  Use for: Climbing Stairs (LC70), Fibonacci Number (LC509). Input MUST be a single integer n.
+  Do NOT use for: House Robber (needs {nums} array, different recurrence) or Decode Ways.
 
-backtrack_grid:
+word_search:
   Input: { "board": [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]], "word": "ABCCED" }
-  Use for: Word Search, N-Queens, Sudoku Solver. Input: board as 2D array + target.
+  Use for: Word Search (LC79) only. DFS + backtracking on a 2D character grid.
+  Do NOT use for: N-Queens or Sudoku Solver (incompatible input schemas).
+
+tree_depth_dfs:
+  Input: { "values": [3, 9, 20, null, null, 15, 7] }
+  Use for: Maximum Depth of Binary Tree, Balanced Binary Tree, Diameter of Binary Tree, Count Good Nodes, Same Tree, Symmetric Tree, Subtree of Another Tree, Invert Binary Tree.
+  Key insight: DFS visits every node and propagates a computed value (height, bool, count) bottom-up.
+  Input format: level-order (BFS) array where null = missing child.
+
+tree_level_order:
+  Input: { "values": [3, 9, 20, null, null, 15, 7] }
+  Use for: Binary Tree Level Order Traversal, Right Side View, Zigzag Level Order, Average of Levels, Minimum Depth (BFS finds shallowest leaf first).
+  Key insight: BFS queue drains one full level at a time; result is a list of levels.
+
+tree_path:
+  Input: { "values": [5, 4, 8, 11, null, 13, 4, 7, 2, null, null, null, 1], "target": 22 }
+  Use for: Path Sum I/II, Binary Tree Paths (list all root-to-leaf paths), Sum Root to Leaf Numbers, Binary Tree Maximum Path Sum.
+  Key insight: DFS tracks a running sum/path from root to leaf; backtracks when a leaf is reached.
 
 sliding_window_string:
   Input: { "s": "abcabcbb" }
@@ -242,7 +259,16 @@ DISAMBIGUATION RULES:
 - two_sum_hash vs two_pointers: two_sum_hash when array is UNSORTED; two_pointers when array IS sorted
 - hash_map_grouping vs frequency_count: hash_map_grouping when grouping items by derived key; frequency_count when counting occurrences to find top-K or most frequent
 - greedy_choice vs interval_scheduling: greedy_choice for non-interval greedy (jump game, stock prices); interval_scheduling for interval selection
-- string_dp vs lcs/edit_distance: use lcs for longest common subsequence, edit_distance for edit distance; use string_dp for other string DP (word break, decode ways)
+- word_break vs lcs/edit_distance: use lcs for longest common subsequence, edit_distance for edit distance, word_break ONLY for Word Break (LC139) with wordDict input
+- max_subarray vs divide_conquer_array: REMOVED — use max_subarray for Maximum Subarray (Kadane's); Find Peak / Count Inversions → null
+- climbing_stairs vs recursion_memoization: REMOVED — use climbing_stairs ONLY for {n} input (Climbing Stairs, Fibonacci); House Robber → null
+- word_search vs backtrack_grid: REMOVED — use word_search ONLY for board+word grid DFS; N-Queens/Sudoku → null
+- min_path_sum vs matrix_dp: REMOVED — use min_path_sum for Minimum Path Sum and Unique Paths; Maximal Square → null
+- rotate_array vs array_manipulation: REMOVED — use rotate_array ONLY for Rotate Array (LC189); Move Zeroes/Product Except Self → null
+- tree_depth_dfs vs tree_level_order vs tree_path: depth/balance/comparison problems → tree_depth_dfs; level-by-level output → tree_level_order; root-to-leaf sum/path → tree_path
+- bst_insert vs tree_depth_dfs: bst_insert ONLY when inserting values into a BST; tree_depth_dfs for any other binary tree operation
+- bfs/dfs (graph keys) vs tree_* keys: use tree_* keys when the input IS a binary tree (root/left/right structure); use bfs/dfs for grid or general graph traversal
+- word_search vs bfs/dfs: word_search when the problem is specifically about finding a word string in a char grid; bfs/dfs for flood fill, island count, or unweighted graph traversal
 
 RULES:
 - Prefer graph algorithms (bfs/dfs) for grid/matrix traversal problems — convert grid to graph
@@ -250,8 +276,8 @@ RULES:
 - Truncate test cases that exceed algorithm capability limits (max_nodes: 12 for graphs, max_array_length: 15 for arrays, max_words: 10 for trie, max_ops: 10 for heap)
 - For graphs with more than 12 nodes: BFS from source node, keep only the first 12 reachable nodes and edges between them
 - If the problem has multiple valid algorithms, pick the most canonical one
-- The synthetic keys (hash_map_grouping, frequency_count, etc.) now have interactive visualizations — prefer them over null
-- Use null algorithm_key ONLY when the problem genuinely doesn't fit any of the registered keys`;
+- Each Tier 1 key is specific: route ONLY the named canonical problem to it; prefer null over routing a mismatched problem to a wrong visualization
+- Use null algorithm_key when the problem doesn't fit any registered key — a missing visualization is better than a wrong one`;
 
 /**
  * Parse a LeetCode problem statement into structured extraction.

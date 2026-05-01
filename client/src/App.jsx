@@ -519,7 +519,7 @@ export default function App() {
           )}
           {vizTier === 2 && !showSelector && (
             <span
-              title="This problem type doesn't have a hand-written trace, so Argmax generated one on-the-fly using AI. It may be less polished than built-in visualizations."
+              title="This problem type doesn't have a hand-written trace, so ReLU generated one on-the-fly using AI. It may be less polished than built-in visualizations."
               className="text-[10px] font-medium text-amber-600/80 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400/80 border border-amber-200 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full cursor-help"
             >
               live viz

@@ -13,6 +13,49 @@ const DISPLAY_NAMES = {
   bellman_ford: 'Bellman-Ford',
 };
 
+const SAMPLE_PROBLEMS = [
+  {
+    label: 'Number of Islands',
+    text: `Given an m x n 2D binary grid grid which represents a map of '1's (land) and '0's (water), return the number of islands.
+
+An island is surrounded by water and is formed by connecting adjacent lands horizontally or vertically. You may assume all four edges of the grid are all surrounded by water.
+
+Example 1:
+Input: grid = [
+  ["1","1","1","1","0"],
+  ["1","1","0","1","0"],
+  ["1","1","0","0","0"],
+  ["0","0","0","0","0"]
+]
+Output: 1
+
+Example 2:
+Input: grid = [
+  ["1","1","0","0","0"],
+  ["1","1","0","0","0"],
+  ["0","0","1","0","0"],
+  ["0","0","0","1","1"]
+]
+Output: 3`,
+  },
+  {
+    label: 'Course Schedule',
+    text: `There are a total of numCourses courses you have to take, labeled from 0 to numCourses - 1. You are given an array prerequisites where prerequisites[i] = [ai, bi] indicates that you must take course bi first if you want to take course ai.
+
+Return true if you can finish all courses. Otherwise, return false.
+
+Example 1:
+Input: numCourses = 2, prerequisites = [[1,0]]
+Output: true
+Explanation: There are a total of 2 courses to take. To take course 1 you should have finished course 0. So it is possible.
+
+Example 2:
+Input: numCourses = 2, prerequisites = [[1,0],[0,1]]
+Output: false
+Explanation: There are a total of 2 courses to take. To take course 1 you should have finished course 0, and to take course 0 you should have finished course 1. So it is impossible.`,
+  },
+];
+
 export default function LeetCodeSolver({ onSelect, disabled, lcParsed }) {
   const [problemText, setProblemText] = useState('');
 
@@ -33,8 +76,21 @@ export default function LeetCodeSolver({ onSelect, disabled, lcParsed }) {
           Practice Interview Problems
         </h1>
         <p className="text-text-secondary font-body">
-          Paste a LeetCode problem. Watch it think.
+          Paste a LeetCode problem. Build intuition.
         </p>
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <span className="text-xs text-text-tertiary font-body">Try a sample:</span>
+          {SAMPLE_PROBLEMS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => setProblemText(p.text)}
+              disabled={disabled || isLoading}
+              className="text-xs px-3 py-1 rounded-lg bg-surface-2 border border-border text-text-secondary hover:text-text-primary hover:border-border-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-body"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="w-full max-w-2xl">
@@ -68,7 +124,7 @@ export default function LeetCodeSolver({ onSelect, disabled, lcParsed }) {
                   : 'bg-surface-3 text-text-tertiary cursor-not-allowed'
               }`}
             >
-              {isLoading ? 'Loading...' : 'Solve with Argmax'}
+              {isLoading ? 'Loading...' : 'Solve with ReLU'}
             </button>
           </div>
         </div>

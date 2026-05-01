@@ -7,6 +7,7 @@ export { bellmanFord, DEFAULT_BELLMAN_FORD_GRAPH } from './bellmanFord.js';
 export { dagShortest, DEFAULT_DAG_GRAPH } from './dagShortest.js';
 export { topologicalSort } from './topologicalSort.js';
 export { backtracking } from './backtracking.js';
+export { wordSearch, DEFAULT_WORD_SEARCH_INPUT } from './wordSearch.js';
 
 export const DEFAULT_UNDIRECTED_GRAPH = {
   nodes: [

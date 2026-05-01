@@ -1,4 +1,4 @@
-// Claude tool schemas for Argmax
+// Claude tool schemas for ReLU
 
 import { ALGORITHMS } from './algorithms/registry.js';
 
