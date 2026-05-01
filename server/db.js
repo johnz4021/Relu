@@ -173,8 +173,9 @@ export async function getUserSettings(userId) {
 /**
  * Create a new LeetCode practice session record.
  */
-export async function createLcSession(userId, title, algorithmKey, confidence, hasViz) {
+export async function createLcSession(userId, title, algorithmKey, confidence, hasViz, outcomes = {}) {
   if (!supabase) return null;
+  const { solver_succeeded, viz_rendered, session_completed } = outcomes;
   const { data, error } = await supabase
     .from('lc_sessions')
     .insert({
@@ -183,6 +184,9 @@ export async function createLcSession(userId, title, algorithmKey, confidence, h
       algorithm_key: algorithmKey,
       confidence,
       has_viz: hasViz,
+      ...(solver_succeeded !== undefined && { solver_succeeded }),
+      ...(viz_rendered !== undefined && { viz_rendered }),
+      ...(session_completed !== undefined && { session_completed }),
     })
     .select('id')
     .single();

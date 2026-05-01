@@ -21,8 +21,8 @@ Prerequisite order matters — items marked with [REQUIRES] must follow their de
 - [ ] **Container With Most Water (11) / Trapping Rain Water (42)** — Two-pointer variants that need unsorted-array traversal logic. Different algorithm than two_pointers sorted-array. Route to text-only for now. [REQUIRES: two_pointers validated]
 - [ ] **Sorting suite (bubble, insertion, quicksort, selection)** — Files exist in server/algorithms/sorting/, array renderer handles compare/swap steps generically. Low LeetCode value; deferred until class-mode is revived. [REQUIRES: none — standalone, low priority]
 - [ ] **StackRenderer** — Dedicated renderer for stack-based algorithms. Vertical stack display + animated push/pop + input array cursor (shows what element is currently being processed) + result array panel. Would replace LinkedRenderer for `stack_operations` and `monotonic_stack`. ~200 lines: `client/src/components/renderers/StackRenderer.jsx` + `mapStackStep` in vizMapper + `case 'stack'` dispatch. [REQUIRES: monotonic_stack shipped + user feedback that stack visualization is confusing]
-- [ ] **sliding_window vizMapper coverage** — Integer sliding_window is registered but has no vizMapper step handlers for `initial_window`, `slide`, `new_max`. Produces empty viz. BUNDLED INTO string-renderer PR (vizMapper fix while in vizMapper for StringRenderer work). [REQUIRES: none — in-flight]
-- [ ] **union_find vizMapper coverage** — Registered but emits `find`, `already_connected`, `union`, `process_edge` with no handlers. All produce empty viz. [REQUIRES: none — standalone fix pass]
+- [x] **sliding_window vizMapper coverage** — Verified complete 2026-05-01. Handlers exist at vizMapper.js:1431-1455 (initial_window, slide, new_max, result cases).
+- [x] **union_find vizMapper coverage** — Verified complete 2026-05-01. Handlers exist at vizMapper.js:983-1039 (process_edge, find, already_connected, union cases).
 
 ## String Renderer — Deferred (from /plan-ceo-review 2026-04-29, branch: leetcode-version)
 
@@ -37,12 +37,18 @@ Prerequisite order matters — items marked with [REQUIRES] must follow their de
 - [ ] **ISSUE-003: LC70 routing** — Climbing Stairs does not match `recursion_memoization` key. Add few-shot example to extraction prompt. The fib-style DP memo table is the Tier 2 trace to show.
 
 ## Infrastructure
-- [ ] **lc_sessions Supabase migration** — create table + RLS rules (user_id = auth.uid()) before deploy.
+- [ ] **lc_sessions Supabase migration** — create table + RLS rules (user_id = auth.uid()) before deploy. Include outcome columns: `solver_succeeded bool`, `viz_rendered bool`, `session_completed bool` (added 2026-05-01 arch review — bundle into same migration, not a separate one).
 - [ ] **POST /api/lc-sessions/:id/master** — endpoint or WS message for marking a problem mastered. Accepted scope from CEO plan — implement in this PR alongside lc_sessions write.
 
 ## Renderer UX (from /plan-design-review 2026-04-30)
 
 - [ ] **Empty states for all 7 non-String renderers** — Array, Graph, Tree, Linked, Interval, RecursionTree, Table each need ghost placeholder elements matching their renderer type (nodes/bars/intervals) + "Run an algorithm to see the visualization" instructional text. Approved direction: Variant A (ghost cells with dashed borders). Graph empty state shipped in quick-wins PR. [REQUIRES: none — standalone pass]
+
+## Pipeline Efficiency (from /plan-eng-review 2026-05-01)
+
+- [ ] **Auto-generate leetcodeAgent extraction prompt input formats from registry.defaultInput** — SCHEDULED for implementation (arch review 2026-05-01). The 230-line INPUT FORMAT EXAMPLES section in `leetcodeAgent.js:EXTRACTION_SYSTEM_PROMPT` is manually maintained in parallel with `registry.js`. When a new algorithm is added to the registry without updating this prompt, Haiku can't classify it. Fix: `generateInputFormats(ALGORITHMS)` generates the format block at module load. Keep disambiguation rules and "Use for:" guidance hand-authored. CRITICAL: must handle null defaultInput gracefully (crash here breaks all LC classification). Write `server/leetcodeAgent.test.js` covering null-defaultInput case. [REQUIRES: none — in Architecture Cleanup plan]
+
+- [ ] **LeetCode solver eval suite** — Unit tests (T-1, from this PR) cover prompt assembly. What they can't cover: does the restricted-mode solver actually produce better keyInsight? Does hint_algorithm produce more targeted paradigmShift? Create a small eval set: 10-15 representative problems spanning null-key (hard DP, hard greedy), known-key-with-paradigm-shift, and known-key-obvious. Run before/after D1/D2 and persist outputs. [REQUIRES: D1/D2 changes shipped]
 
 ## DX Gaps (from /plan-devex-review 2026-04-24)
 - [ ] **Auth wall — Google OAuth or skip email verification** — Email verification makes TTHW ~4-5min, putting Argmax in "Needs Work" tier vs VisuAlgo's 30s. Supabase supports Google OAuth in ~30min. Alternatively, disable email verification for beta (Supabase dashboard toggle). [REQUIRES: none — standalone change]

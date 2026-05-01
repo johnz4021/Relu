@@ -8,9 +8,8 @@ import { CANONICAL_EXAMPLES } from './examples/canonicalExamples.js';
 import { getDefaultContextPanels, getModeDefaultPanels } from './contextPanelDefaults.js';
 import { layoutGrid, autoLayout } from './graphLayout.js';
 import { RENDERER_MANIFEST, buildRendererDocs } from './rendererManifest.js';
-import { solveProblem, solveProblems } from './solver.js';
+import { solveProblem, solveLeetcodeProblem, solveProblems } from './solver.js';
 import { buildExampleGraph } from './graphBuilder.js';
-import { adviseRenderer } from './rendererAdvisor.js';
 import { saveMessage, saveAgentState, completeConversation } from './db.js';
 
 // Build algorithm list dynamically from registry
@@ -160,121 +159,6 @@ ALGORITHM EXECUTION MODE (existing flow):
   1. CLASSIFY algorithm (2-4 exchanges using the algorithm subtree)
   2. REFRESH (optional — offer canonical example)
   3. REDUCTION SKETCH (build input → run algorithm → narrate → verify)
-
-MODELING MODE (LP, reductions, data structure tracing, duality):
-  Problems that ask "write an LP," "define variables," "take a dual," "reduce X to Y,"
-  or implement a data structure solution (hash maps, sets, etc.).
-  After run_solver, two panels are auto-configured: "formulation" (Variables/Objective/Constraints)
-  and "algorithm_state" (key_value — use this to show intermediate state as you trace through
-  examples, e.g., growing hash map entries, visited sets, counter values).
-  No renderer is auto-created — call create_visualization if a graph, table, or array would help.
-
-  For LP/formulation problems, follow the Modeling Template:
-  NOTE: For each step below, the student should PROPOSE the content first.
-  Ask "What are the decision variables?" and WAIT — do not fill in the panel
-  yourself until the student has responded. Update the panel with their answer
-  (corrected if needed), not with your pre-planned version.
-
-  1. OBJECTS — Ask "What are the decision variables?"
-     Call create_visualization with a graph renderer if a network structure applies.
-  2. OBJECTIVE — Ask "What is being optimized?"
-     Use emit_segment with viz_actions to update the formulation panel (add objective line).
-  3. CONSTRAINTS — Ask "What constraints must hold?"
-     Update panel with each new constraint line.
-  4. TRICK — "Is there a transformation needed?" (absolute value linearization, graph layering, etc.)
-  5. SANITY CHECK — "Does this enforce exactly what the problem states? Missing anything?"
-
-  For data structure tracing problems (hash map, stack, queue grouping), use the
-  algorithm_state panel to show state as the student traces through examples:
-    viz_actions: [{ renderer: "context", action: "update", params: { panel_id: "algorithm_state",
-      entries: [{ key: "aet", value: "eat, tea" }, { key: "ant", value: "tan" }] } }]
-  Update after EACH step the student traces — do not batch-update at the end.
-
-  IMPORTANT: Each panel update must include ALL accumulated lines, not just the new one.
-  Do NOT call run_algorithm unless the student explicitly asks.
-  The related algorithm provides context, not execution.
-
-GREEDY DESIGN MODE:
-  After run_solver, Greedy Rule and Proof Skeleton panels are auto-configured.
-  If run_solver has completed, call advise_renderer for a viz recommendation.
-  Use emit_segment with viz_actions (renderer:"context", action:"update") to fill them.
-
-  1. RULE — Guide student to propose the greedy criterion (student-produces)
-  2. EXAMPLE — Set up a concrete example and trace through the greedy behavior.
-     The tutor CAN lead the example walkthrough — this is setup, not the learning
-     objective. Use the example to build intuition before the proof.
-  3. ALGORITHM — After the example, the student should assemble the full algorithm.
-     Do NOT narrate "Here's the complete algorithm." Instead:
-     - Acknowledge the pieces they've identified so far
-     - Ask: "Can you put this together as pseudocode / step-by-step?"
-     - Use the hint escalation ladder if they're stuck
-     - After they've produced a version: confirm, refine, or correct it
-  4. PROOF — This is the critical learning moment. Do NOT write the proof for them.
-     - The Proof Skeleton panel already has headers: "Lower bound: ___", "Upper bound: ___", "Combining: ___"
-     - Ask the student to fill each section, one at a time
-     - The student should articulate WHY greedy ≤ OPT before seeing the formal proof
-     - Only complete a section yourself after the student has attempted it and
-       escalated through the hint ladder
-  5. RUNTIME — Ask the student to analyze (usually straightforward, Level 2-3 is fine)
-
-DP DESIGN MODE:
-  After run_solver, DP Definition and Recurrence panels are auto-configured.
-  If run_solver has completed, call advise_renderer for a viz recommendation.
-  Use emit_segment with viz_actions (renderer:"context", action:"update") to fill them.
-
-  1. SUBPROBLEM — "What does dp[i] (or dp[i][j]) represent?" (student-produces)
-     This is the hardest part. Use hint escalation ladder starting at Level 0.
-  2. RECURRENCE — The Recurrence panel already has blank placeholders.
-     Ask the student to write the recurrence. Do NOT fill it in for them.
-     Use emit_segment viz_actions to update the panel only after the student
-     provides their version (correct or corrected).
-  3. BASE CASES — "What are the boundary conditions?" (student-produces, usually quick)
-  4. ORDER — "In what order do we fill the table?" (student-produces)
-  5. RUNTIME — "What's the runtime based on table size and per-cell work?"
-  Optionally run the algorithm on a small example if one exists in the registry.
-
-DIVIDE-AND-CONQUER MODE:
-  After run_solver, D&C Structure and Recurrence context panels are auto-configured.
-  No visualization renderer is pre-created.
-
-  FIRST: If run_solver has completed, call advise_renderer to get a viz
-  recommendation. Follow its renderer choice, timing, and stage plan.
-  If the solver hasn't completed or the planner fails, choose yourself:
-  - RECURRENCE TREE: If the problem has a clean T(n) = aT(n/b) + O(n^d) recurrence,
-    call create_visualization with panels:[{renderer:"recursion_tree"}]. Then use
-    set_recurrence_tree({a, b, d, n: 16}) via viz_actions to populate it.
-  - DECISION/CASE TREE: If case analysis or branching logic is the key insight,
-    call create_visualization with panels:[{renderer:"graph"}]. Use update_graph to
-    build a top-down decision tree (nodes=states, edges labeled via weight field).
-  - NO VIZ: If purely structural/proof-based, skip visualization.
-
-  D&C STAGES:
-  1. SPLIT — How to divide the input
-  2. SUBPROBLEMS — What recursive calls are made
-  3. COMBINE — How to merge subproblem results
-  4. RECURRENCE — Analyze runtime. If using recursion tree:
-     a. reveal_level({level: 0}), reveal_level({level: 1}), ... to show levels
-     b. highlight_level({level}) to show work distribution
-     c. show_master_case({case: "balanced"|"root_heavy"|"leaf_heavy"})
-     d. set_cumulative({level}) to show running total
-
-RUNTIME / ASYMPTOTICS MODE:
-  After run_solver, a Runtime Analysis context panel is auto-configured (no renderer yet).
-  Use emit_segment viz_actions (renderer:"context", action:"update") to fill the panel.
-
-  1. Identify what bound is needed (upper, lower, tight)
-  2. For recurrences: identify which method applies (Master theorem, substitution, recursion tree)
-  3. If using recursion tree method or Master Theorem:
-     FIRST guide the student to identify a, b, d. THEN, once you have the values,
-     call create_visualization with panels:[{renderer:"recursion_tree"}] AND in the
-     SAME emit_segment include set_recurrence_tree({a, b, d, n: 16}) via viz_actions.
-     This ensures the tree appears already populated — never show an empty tree.
-     After creating:
-     a. Walk through levels progressively with reveal_level and highlight_level
-     b. Use show_master_case to apply the color gradient showing which levels dominate
-     c. Use set_cumulative to show the total work sum
-     d. Use add_level_annotation to annotate specific levels with custom formulas
-  4. Use concrete values to build intuition
 
 HANDLING STUDENT MESSAGES:
 - Messages tagged [STUDENT MESSAGE] are first-class conversation continuations.
@@ -680,11 +564,7 @@ CONFIDENCE CALIBRATION:
 - Unverified assumptions → use hedged language.
 
 VISUALIZATION PLANNING:
-  CRITICAL: Use the correct planner for the mode:
-  - algorithm_execution → ALWAYS call build_example_graph (builds concrete example graphs)
-  - design/proof modes (modeling, greedy_design, dp_design, dc_design, runtime) → call advise_renderer
-  NEVER call advise_renderer for algorithm_execution mode. It will return null
-  because it's not designed to construct example graphs. build_example_graph handles that.
+  After run_solver, call build_example_graph to plan the visualization layout.
 
 ALGORITHM VISUALIZATION (algorithm_execution mode):
 After run_solver succeeds, call build_example_graph with the problem text.
@@ -892,27 +772,13 @@ const guidedTools = [
   },
   {
     name: 'build_example_graph',
-    description: 'Plan the visualization layout for an algorithm_execution problem. Call AFTER run_solver to get a pre-built visualization setup (graphs, panels, algorithm runs). The planner constructs a concrete example graph even if the problem is abstract. IMPORTANT: For algorithm_execution mode, ALWAYS use this tool — never use advise_renderer.',
+    description: 'Plan the visualization layout for the problem. Call AFTER run_solver to get a pre-built visualization setup (graphs, panels, algorithm runs). The planner constructs a concrete example graph even if the problem is abstract.',
     input_schema: {
       type: 'object',
       properties: {
         problem_text: {
           type: 'string',
           description: 'The problem text being explained',
-        },
-      },
-      required: ['problem_text'],
-    },
-  },
-  {
-    name: 'advise_renderer',
-    description: 'Plan visualization for NON-EXECUTION modes only (D&C, DP, greedy, modeling, runtime). NEVER call this for algorithm_execution mode — use build_example_graph instead. Call AFTER run_solver completes. Returns renderer recommendation and stage-by-stage viz plan.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        problem_text: {
-          type: 'string',
-          description: 'The problem text being worked on',
         },
       },
       required: ['problem_text'],
@@ -1354,7 +1220,6 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
         run_solver_batch: 'Analyzing problems...',
         switch_part: 'Switching to next part...',
         build_example_graph: 'Designing layout...',
-        advise_renderer: 'Planning visualization...',
       };
 
       for (const block of response.content) {
@@ -1760,58 +1625,6 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
               ? `Visualization planned: ${plan.panels.length} panel(s). ${plan.graph_variants ? Object.keys(plan.graph_variants).length + ' graph variant(s) available.' : ''} ${plan.teaching_notes || ''} Now call create_visualization with these panels, then run_algorithm for each planned run. To swap graphs mid-lesson, call create_graph with variant_id.`
               : 'Viz planning failed. Construct visualization manually.',
           };
-        } else if (block.name === 'advise_renderer') {
-          if (!solverResult?.success) {
-            result = {
-              success: false,
-              message: 'Solver has not completed yet. Skip visualization planning and use your judgment — create visualization manually when you know what fits the problem.',
-            };
-          } else {
-            const statusCb = (label) => sendJSON(ws, { type: 'agent_status', status: 'tool', tool: label });
-            const dvPlan = await adviseRenderer(
-              block.input.problem_text,
-              solverResult,
-              session.reasoningMode,
-              statusCb,
-              session.imageBase64,
-              session.imageMimeType,
-              session.anthropicClient,
-            );
-            if (session.endSessionFlag) throw new Error('__end_session__');
-
-            if (dvPlan.success) {
-              let dvMsg = `Viz plan: renderer=${dvPlan.renderer || 'none'}, create_at=${dvPlan.create_at_stage}. ${dvPlan.reasoning}`;
-              if (dvPlan.recurrence_params) {
-                const { a, b, d } = dvPlan.recurrence_params;
-                dvMsg += `\nRecurrence pre-computed: a=${a}, b=${b}, d=${d}. When you reach the recurrence stage, call create_visualization with panels:[{renderer:"recursion_tree"}], then immediately emit set_recurrence_tree({a:${a}, b:${b}, d:${d}, n:16}) via viz_actions.`;
-              }
-              if (dvPlan.renderer && dvPlan.create_at_stage === 'immediately') {
-                dvMsg += `\nCall create_visualization now with panels:[{renderer:"${dvPlan.renderer}"}].`;
-              } else if (dvPlan.renderer && dvPlan.create_at_stage !== 'never') {
-                dvMsg += `\nDo NOT create visualization yet — wait until the "${dvPlan.create_at_stage}" stage, then call create_visualization with panels:[{renderer:"${dvPlan.renderer}"}].`;
-              }
-              if (dvPlan.viz_stages?.length > 0) {
-                dvMsg += '\nStage plan:';
-                for (const s of dvPlan.viz_stages) {
-                  dvMsg += `\n  - ${s.stage}: ${s.description}`;
-                }
-              }
-              result = {
-                success: true,
-                renderer: dvPlan.renderer,
-                create_at_stage: dvPlan.create_at_stage,
-                viz_stages: dvPlan.viz_stages || [],
-                recurrence_params: dvPlan.recurrence_params,
-                extra_context_panels: dvPlan.extra_context_panels || [],
-                message: dvMsg,
-              };
-            } else {
-              result = {
-                success: false,
-                message: 'Design viz planning failed. Use your judgment — see mode-specific instructions for visualization choices. Default to no visualization rather than an empty one.',
-              };
-            }
-          }
         } else if (block.name === 'get_renderer_docs') {
           result = { docs: buildRendererDocs(block.input.renderers) };
         } else if (block.name === 'suggest_independent_work') {
@@ -1905,19 +1718,27 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           }
         } else if (block.name === 'run_solver') {
           const statusCb = (label) => sendJSON(ws, { type: 'agent_status', status: 'tool', tool: label });
-          const sr = await solveProblem(
-            block.input.subproblem_text,
-            statusCb,
-            session.imageBase64,
-            session.imageMimeType,
-            session.anthropicClient
-          );
+          const sr = session._leetcodeAlgorithmKey
+            ? await solveLeetcodeProblem(
+                block.input.subproblem_text,
+                session._leetcodeAlgorithmKey,
+                statusCb,
+                session.anthropicClient
+              )
+            : await solveProblem(
+                block.input.subproblem_text,
+                statusCb,
+                session.imageBase64,
+                session.imageMimeType,
+                session.anthropicClient
+              );
           console.log(`[GuidedAgent] run_solver completed: success=${sr.success}, approach=${sr.approach || 'N/A'}, mode=${sr.reasoning_mode || 'N/A'}`);
 
           if (!sr.success) {
             result = { success: false, message: 'Solver failed. Proceed with your best judgment on the approach and mode.' };
           } else {
             solverResult = sr;
+            session._solverSucceeded = true;
             systemPrompt = GUIDED_SYSTEM_PROMPT + buildSolverContext(sr);
 
             if (sr.reasoning_mode) {

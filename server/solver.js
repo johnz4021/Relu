@@ -198,6 +198,42 @@ const SUBMIT_SOLUTIONS_TOOL = {
 };
 
 const SOLVER_TIMEOUT_MS = 300_000;
+const LC_SOLVER_TIMEOUT_MS = 60_000;
+
+const SUBMIT_LC_SOLUTION_TOOL = {
+  name: 'submit_lc_solution',
+  description: 'Submit your solution analysis for a LeetCode problem.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      solution: {
+        type: 'string',
+        description: 'Complete solution with explanation of the approach and key steps.',
+      },
+      approach: {
+        type: 'string',
+        description: 'Short name for the approach (e.g., "BFS grid traversal", "Sliding window").',
+      },
+      complexity: {
+        type: 'string',
+        description: 'Time and space complexity (e.g., "O(n log n) time, O(n) space").',
+      },
+      paradigmShift: {
+        type: 'boolean',
+        description: 'True if the obvious/naive approach won\'t achieve optimal complexity and a non-obvious technique is required.',
+      },
+      obviousApproach: {
+        type: 'string',
+        description: 'What approach most students would try first (e.g., "brute force nested loops").',
+      },
+      keyInsight: {
+        type: 'string',
+        description: 'The single most important insight needed to solve this problem. Be specific to this algorithm.',
+      },
+    },
+    required: ['solution', 'approach', 'complexity', 'paradigmShift', 'obviousApproach', 'keyInsight'],
+  },
+};
 
 /**
  * Pre-solve multiple sub-problems in a single API call.
@@ -315,6 +351,69 @@ export async function solveProblem(problemText, statusCallback, imageBase64, ima
     return { success: true, ...result };
   } catch (err) {
     console.error('[Solver] Failed:', err.message);
+    return { success: false };
+  }
+}
+
+/**
+ * LeetCode-specific solver: faster, cheaper, no thinking.
+ * algorithm_key is already known from parseLeetcodeProblem — skip classification.
+ * Returns { success: true, ...solutionFields, reasoning_mode, is_in_scope, target_algorithm }
+ * or { success: false }.
+ */
+export async function solveLeetcodeProblem(problemText, algorithmKey, statusCallback, anthropicClient) {
+  if (statusCallback) statusCallback('Analyzing problem...');
+
+  const systemPrompt = `You are an expert algorithm tutor preparing to teach a LeetCode problem. The problem has already been classified as algorithm: ${algorithmKey}.
+
+Analyze the problem and provide:
+1. A complete solution using ${algorithmKey}
+2. The key insight that makes ${algorithmKey} the right choice
+3. Why the obvious naive approach is insufficient
+
+You MUST call submit_lc_solution. Do NOT respond with plain text.`;
+
+  try {
+    const responsePromise = (anthropicClient || defaultAnthropicClient).messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      tools: [SUBMIT_LC_SOLUTION_TOOL],
+      tool_choice: { type: 'any' },
+      messages: [
+        {
+          role: 'user',
+          content: `Analyze this LeetCode problem:\n\n${problemText}`,
+        },
+      ],
+    });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('LC solver timeout')), LC_SOLVER_TIMEOUT_MS)
+    );
+
+    if (statusCallback) statusCallback('Building solution...');
+
+    const response = await Promise.race([responsePromise, timeoutPromise]);
+
+    const toolUse = response.content.find((b) => b.type === 'tool_use' && b.name === 'submit_lc_solution');
+    if (!toolUse) {
+      console.warn('[Solver] No submit_lc_solution tool call in response');
+      return { success: false };
+    }
+
+    const result = toolUse.input;
+    console.log(`[Solver][LC] approach="${result.approach}", algorithmKey=${algorithmKey}, paradigmShift=${result.paradigmShift}`);
+
+    return {
+      success: true,
+      ...result,
+      reasoning_mode: 'algorithm_execution',
+      is_in_scope: true,
+      target_algorithm: algorithmKey,
+    };
+  } catch (err) {
+    console.error('[Solver][LC] Failed:', err.message);
     return { success: false };
   }
 }

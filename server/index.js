@@ -7,7 +7,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { DEFAULT_GRAPH } from './algorithms.js';
 import { startGuidedSession, resumeGuidedSession } from './guidedAgent.js';
-import { startExplainSession } from './explainAgent.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyJWT } from './supabase.js';
 import { createConversation, listConversations, loadConversationMessages, loadAgentState, countConversations, getUserSettings, saveUserSettings, saveFeedback, createLcSession, masterLcSession, listLcSessions } from './db.js';
@@ -110,132 +109,6 @@ function attachHandlers(ws, session) {
       console.log(`[WS] Received:`, msg.type);
 
       switch (msg.type) {
-        case 'start_guided': {
-          console.log(`[WS] start_guided received (active=${session.active}, endSessionFlag=${session.endSessionFlag}, mode=${session.mode}, gen=${session.runGeneration})`);
-          if (session.active) {
-            console.log(`[WS] start_guided — force-terminating old session (mode=${session.mode}, gen=${session.runGeneration})`);
-            session.endSessionFlag = true;
-            session.pauseFlag = true;
-            if (session.pauseResolver) { session.pauseResolver(); session.pauseResolver = null; }
-            if (session.guidedResponseResolver) { session.guidedResponseResolver('__end_session__'); session.guidedResponseResolver = null; }
-            if (session.followUpResolver) { session.followUpResolver('__end_session__'); session.followUpResolver = null; }
-          }
-          session.active = false;
-          session.endSessionFlag = false;
-          session.pauseFlag = false;
-          session.skipFlag = false;
-          session.runGeneration++;
-          session.currentGraph = null;
-          session.currentTrace = null;
-          session._emittedTraceSteps = [];
-          const guidedGen = session.runGeneration;
-          {
-            const gate = await checkSessionGate(session);
-            if (!gate.allowed) {
-              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT }));
-              return;
-            }
-            if (gate.byok) {
-              const settings = await getUserSettings(session.userId);
-              const apiKey = decrypt(settings.anthropic_api_key_encrypted);
-              session.anthropicClient = new Anthropic({ apiKey, maxRetries: 5 });
-            }
-          }
-          session.active = true;
-          session.mode = 'guided';
-
-          // Create conversation in DB
-          if (session.userId) {
-            const convId = await createConversation(session.userId, msg.problemText);
-            session.conversationId = convId;
-            if (convId) {
-              ws.send(JSON.stringify({ type: 'conversation_created', conversationId: convId }));
-            }
-          }
-
-          try {
-            await startGuidedSession(session, msg.problemText, msg.imageBase64, msg.imageMimeType);
-          } catch (err) {
-            if (err.message === '__end_session__') {
-              console.log('[GuidedAgent] Session ended by user');
-            } else {
-              console.error('[GuidedAgent] Error:', err);
-              if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type: 'error', message: 'Guided session failed: ' + err.message }));
-            }
-          }
-          if (session.runGeneration === guidedGen) {
-            console.log(`[GuidedAgent] Cleanup: setting active=false (gen=${guidedGen})`);
-            session.active = false;
-            session.endSessionFlag = false;
-            session.mode = 'direct';
-            session.followUpResolver = null;
-            session.followUpSent = false;
-            session.conversationId = null;
-            if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type: 'session_ended' }));
-          } else {
-            console.log(`[GuidedAgent] Cleanup skipped — gen mismatch (mine=${guidedGen}, current=${session.runGeneration})`);
-          }
-          break;
-        }
-
-        case 'start_explain': {
-          console.log(`[WS] start_explain received (active=${session.active}, endSessionFlag=${session.endSessionFlag}, mode=${session.mode}, gen=${session.runGeneration})`);
-          if (session.active) {
-            console.log(`[WS] start_explain — force-terminating old session (mode=${session.mode}, gen=${session.runGeneration})`);
-            session.endSessionFlag = true;
-            session.pauseFlag = true;
-            if (session.pauseResolver) { session.pauseResolver(); session.pauseResolver = null; }
-            if (session.guidedResponseResolver) { session.guidedResponseResolver('__end_session__'); session.guidedResponseResolver = null; }
-            if (session.followUpResolver) { session.followUpResolver('__end_session__'); session.followUpResolver = null; }
-          }
-          session.active = false;
-          session.endSessionFlag = false;
-          session.pauseFlag = false;
-          session.skipFlag = false;
-          session.runGeneration++;
-          session.currentGraph = null;
-          session.currentTrace = null;
-          session._emittedTraceSteps = [];
-          const explainGen = session.runGeneration;
-          {
-            const gate = await checkSessionGate(session);
-            if (!gate.allowed) {
-              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT }));
-              return;
-            }
-            if (gate.byok) {
-              const settings = await getUserSettings(session.userId);
-              const apiKey = decrypt(settings.anthropic_api_key_encrypted);
-              session.anthropicClient = new Anthropic({ apiKey, maxRetries: 5 });
-            }
-          }
-          session.active = true;
-          session.mode = 'explain';
-
-          try {
-            await startExplainSession(session, msg.problemText, msg.imageBase64, msg.imageMimeType);
-          } catch (err) {
-            if (err.message === '__end_session__') {
-              console.log('[ExplainAgent] Session ended by user');
-            } else {
-              console.error('[ExplainAgent] Error:', err);
-              if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type: 'error', message: 'Explain session failed: ' + err.message }));
-            }
-          }
-          if (session.runGeneration === explainGen) {
-            console.log(`[ExplainAgent] Cleanup: setting active=false (gen=${explainGen})`);
-            session.active = false;
-            session.endSessionFlag = false;
-            session.mode = 'direct';
-            session.followUpResolver = null;
-            session.followUpSent = false;
-            if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type: 'session_ended' }));
-          } else {
-            console.log(`[ExplainAgent] Cleanup skipped — gen mismatch (mine=${explainGen}, current=${session.runGeneration})`);
-          }
-          break;
-        }
-
         case 'guided_response': {
           if (!session.active) {
             console.warn(`[WS] guided_response dropped — session inactive (${session.userEmail || session.id})`);
@@ -622,7 +495,11 @@ function attachHandlers(ws, session) {
 
           // Write to lc_sessions after session completes
           if (session.userId) {
-            await createLcSession(session.userId, title, algorithm_key, confidence, hasViz);
+            await createLcSession(session.userId, title, algorithm_key, confidence, hasViz, {
+              solver_succeeded: session._solverSucceeded === true,
+              viz_rendered: (session._leetcodeTrace?.length ?? 0) >= 1,
+              session_completed: session.followUpSent === true,
+            });
           }
 
           if (session.runGeneration === lcGen) {

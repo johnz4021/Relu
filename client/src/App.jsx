@@ -283,26 +283,9 @@ export default function App() {
       setVizTier(null);
       sessionStartRef.current = Date.now();
 
-      if (algorithm === 'leetcode') {
-        track('leetcode_started', {});
-        setLcParsed({ loading: true });
-        send({ type: 'start_leetcode', problemText: data.problemText });
-        return;
-      }
-
-      track('session_started', {
-        mode: algorithm === 'guided' ? 'guided' : 'explain',
-        algorithm,
-      });
-      const msg = {
-        type: algorithm === 'explain' ? 'start_explain' : 'start_guided',
-        problemText: data.problemText,
-      };
-      if (data.imageBase64) {
-        msg.imageBase64 = data.imageBase64;
-        msg.imageMimeType = data.imageMimeType;
-      }
-      send(msg);
+      track('leetcode_started', {});
+      setLcParsed({ loading: true });
+      send({ type: 'start_leetcode', problemText: data.problemText });
     },
     [send, reset, audioPlayer]
   );
