@@ -518,6 +518,7 @@ function attachHandlers(ws, session) {
             session._leetcodeTestCase = null;
             session._leetcodeTitle = null;
             session._leetcodeConfidence = null;
+            session._solverSucceeded = false;
             if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type: 'session_ended' }));
           } else {
             console.log(`[LeetCode] Cleanup skipped — gen mismatch (mine=${lcGen}, current=${session.runGeneration})`);
