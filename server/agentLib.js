@@ -811,6 +811,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
 
         // Swap to the example graph
         sendJSON(ws, { type: 'create_graph', graph: graphData });
+        session.currentGraph = graphData;
         await new Promise((r) => setTimeout(r, 600));
 
         // Mark illustration active and return immediately — agent teaches with emit_segment
