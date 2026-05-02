@@ -14,6 +14,8 @@ Each trace step must have:
 - description: string (human-readable explanation of this step)
 - Additional fields specific to the step type
 
+The final step (type: 'result') MUST include an output field with the algorithm's answer as a plain string (e.g. output: "MMMDCCXLIX", output: "3", output: "[0,1]").
+
 The function must CORRECTLY implement the algorithm. Use proper data structures.
 Do not simulate or approximate.
 

@@ -430,7 +430,7 @@ function attachHandlers(ws, session) {
             return;
           }
 
-          const { title, algorithm_key, confidence, test_case } = parsed;
+          const { title, algorithm_key, confidence, test_case, expected_output } = parsed;
           const algoEntry = ALGORITHMS[algorithm_key];
           const tier1Available = !!(algorithm_key && confidence >= 0.7 && algoEntry?.run);
           const tier2Available = !!(algorithm_key && confidence >= 0.7 && algoEntry && !algoEntry.run);
@@ -440,7 +440,7 @@ function attachHandlers(ws, session) {
           // Pre-run the trace so client gets viz immediately
           if (hasViz) {
             try {
-              const result = await runAlgorithmWithFallback(algorithm_key, test_case);
+              const result = await runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput: expected_output || null });
               session._leetcodeTrace = result.trace;
               session._leetcodeRenderer = result.renderer;
               session._leetcodeInput = result.input;
@@ -458,6 +458,7 @@ function attachHandlers(ws, session) {
           session._leetcodeAlgorithmKey = algorithm_key;
           session._leetcodeTestCase = test_case;
           session._leetcodeTitle = title;
+          session._leetcodeExpectedOutput = expected_output || null;
           session._leetcodeConfidence = confidence;
           session._leetcodeVizTier = vizTier;
 

@@ -54,6 +54,10 @@ const EXTRACTION_TOOL = {
         enum: ['example_1', 'example_2', 'generated'],
         description: 'Which example was used as the test case',
       },
+      expected_output: {
+        type: 'string',
+        description: 'The expected output from Example 1 as a plain string (e.g. "MMMDCCXLIX", "3", "[0,1]", "true"). Omit if no example output is present in the problem.',
+      },
       fallback_reason: {
         type: 'string',
         description: 'If algorithm_key is null or confidence < 0.7, explain why. Otherwise null.',

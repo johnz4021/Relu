@@ -63,6 +63,12 @@ function reducer(state, action) {
       return { ...state, residualToggle: { show: action.show, ts: Date.now() } };
 
     case 'CREATE_GRAPH': {
+      // Skip mounting a graph panel for empty graphs — an empty graph produces a
+      // "Run an algorithm to see the visualization" placeholder with nothing to run,
+      // which happens when build_example_graph is called in non-algorithm-execution modes
+      // (e.g. greedy_design, modeling) that have no corresponding run_algorithm step.
+      if (!action.graph?.nodes?.length) return state;
+
       const existingPanels = state.vizPanels;
       // Preserve existing graph panel id to avoid key change → remount → snapshot loss
       const existingGraphId = existingPanels?.find((p) => p.renderer === 'graph')?.id || 'graph';

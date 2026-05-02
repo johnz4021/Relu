@@ -442,7 +442,7 @@ export async function runAlgorithmWithFallback(algorithmId, input, context) {
   }
 
   // Tier 2: Lazy-import to avoid circular deps and keep startup fast
-  const { getCachedGenerator, incrementHitCount, cacheGenerator } = await import('./cache.js');
+  const { getCachedGenerator, incrementHitCount, cacheGenerator, outputMatchesExpected } = await import('./cache.js');
   const { executeTraceInSandbox } = await import('./sandbox.js');
 
   // Renderer: use registry entry if available, otherwise guess from name
@@ -450,17 +450,18 @@ export async function runAlgorithmWithFallback(algorithmId, input, context) {
   // Merge default input from registry with provided input
   const actualInput = algo?.defaultInput ? { ...algo.defaultInput, ...input } : input;
 
-  // Check cache
-  const cached = await getCachedGenerator(algorithmId);
+  // Check cache — use compound key when a problem description is available
+  const description = context?.description;
+  const cached = await getCachedGenerator(algorithmId, description);
   if (cached) {
-    await incrementHitCount(algorithmId);
+    await incrementHitCount(algorithmId, description);
     const trace = executeTraceInSandbox(cached.code, actualInput, 5000, cached.renderer);
     return { trace, renderer: cached.renderer, input: actualInput, tier: 2 };
   }
 
-  // Generate new trace generator
+  // Generate new trace generator — pass description so the LLM gets the actual problem name
   const { generateTraceGenerator } = await import('../authorAgent.js');
-  const code = await generateTraceGenerator(algorithmId, renderer, undefined, context);
+  const code = await generateTraceGenerator(algorithmId, renderer, description, context);
   const trace = executeTraceInSandbox(code, actualInput, 5000, renderer);
 
   // Validate node IDs in trace exist in input graph (for graph algorithms)
@@ -479,9 +480,14 @@ export async function runAlgorithmWithFallback(algorithmId, input, context) {
     }
   }
 
-  // Require at least 3 steps (init + ≥1 algorithm step + result) before caching
+  // Cache only when trace is long enough AND output matches expected (if known)
   if (trace.length >= 3) {
-    await cacheGenerator(algorithmId, { code, renderer, verifiedAt: Date.now() });
+    if (outputMatchesExpected(trace, context?.expectedOutput)) {
+      await cacheGenerator(algorithmId, { code, renderer, verifiedAt: Date.now() }, description);
+    } else {
+      const actual = [...trace].reverse().find(s => s.type === 'result')?.output;
+      console.warn(`[Registry] Trace rejected (output mismatch): expected="${context.expectedOutput}" actual="${actual}" algo=${algorithmId}`);
+    }
   }
 
   return { trace, renderer, input: actualInput, tier: 2 };

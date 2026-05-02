@@ -371,7 +371,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             adaptAlgorithmInput(algo, registryInput, validation.adaptations);
           }
 
-          const result = await runAlgorithmWithFallback(algo, registryInput);
+          const result = await runAlgorithmWithFallback(algo, registryInput, { description: session._leetcodeTitle, expectedOutput: session._leetcodeExpectedOutput || null });
           console.log(`[Agent] run_algorithm '${algo}' returned ${result.trace.length} steps, renderer: ${result.renderer}, tier: ${result.tier}`);
 
           // ── Store trace on session for deterministic mapping ──
@@ -426,14 +426,23 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               registerPanels(session, [], contextPanels);
             }
           } else {
-            // Non-graph: auto-send create_visualization with renderer + context panels
+            // Non-graph: auto-send create_visualization with renderer + context panels.
+            // If the agent already called create_visualization with a named panel id (e.g.
+            // "array_main" from build_example_graph), reuse that id so we don't replace
+            // the named panel with an id-less one that the client auto-ids as the renderer
+            // type (e.g. "array") — which would break subsequent viz_actions targeting the
+            // original name.
+            const existingEntry = Object.entries(session._panels || {}).find(
+              ([, p]) => p.renderer === algoInfo.renderer && p.type === 'renderer'
+            );
+            const rendererPanelId = existingEntry ? existingEntry[0] : algoInfo.renderer;
             const autoVizMsg = {
               type: 'create_visualization',
-              panels: [{ renderer: algoInfo.renderer, config: {} }],
+              panels: [{ id: rendererPanelId, renderer: algoInfo.renderer, config: {} }],
               context_panels: contextPanels,
             };
             sendJSON(ws, autoVizMsg);
-            registerPanels(session, [{ renderer: algoInfo.renderer }], contextPanels);
+            registerPanels(session, [{ id: rendererPanelId, renderer: algoInfo.renderer }], contextPanels);
             session._lastVizMessage = autoVizMsg;
             if (!session._rendererVizHistory) session._rendererVizHistory = {};
             session._rendererVizHistory[algoInfo.renderer] = [];

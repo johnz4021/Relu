@@ -379,23 +379,29 @@ Every algorithm in the registry has:
 
 **Flow:**
 ```
-runAlgorithmWithFallback(algorithmId, input)
+runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
   ├── Check if algo.run exists → Tier 1 (fast path)
   └── Tier 2 path:
-       ├── getCachedGenerator(algorithmId)
+       ├── getCachedGenerator(algorithmId, description)
        │    └── if cached: executeTraceInSandbox(cached.code, input)
        └── if not cached:
-            ├── generateTraceGenerator(algorithmId, renderer)  ← authorAgent.js + claude-opus-4-6
-            ├── executeTraceInSandbox(code, input, 5000ms)      ← sandbox.js
+            ├── generateTraceGenerator(algorithmId, renderer, description)  ← authorAgent.js
+            ├── executeTraceInSandbox(code, input, 5000ms)                   ← sandbox.js
             ├── Validate node IDs (graph renderer only)
-            └── if trace.length >= 3: cacheGenerator(algorithmId, code)
+            └── if trace.length >= 3 AND outputMatchesExpected(trace, expectedOutput):
+                 └── cacheGenerator(algorithmId, code, description)
+                (mismatches log a [Registry] warning and skip caching — will retry next session)
 ```
 
-**`authorAgent.js`:** Writes a JS function `run(input) { return trace; }` for the given algorithm + renderer. Each step must include `type`, `description`, and renderer-specific fields. For `context` renderer, every step must include `viz_actions` that update the `algorithm_state` panel.
+**Cache keys** (`cache.js` → `buildCacheKey`): plain `algorithmId` when no problem title is available; compound `algorithmId:normalized_title` (e.g. `greedy_choice:integer_to_roman`) when a LeetCode title is present. This lets different problem titles backed by the same algorithm get separate cached generators.
+
+**Correctness gate** (`outputMatchesExpected`): the generated trace's last `result`-typed step must have an `output` field matching the `expectedOutput` string extracted from the problem's Example 1. If `expectedOutput` is absent (student pasted a partial problem), the gate passes through and caching falls back to length-only. Comparison is plain string — false negatives possible for array outputs (e.g. `[0,1]` vs `0,1`) but never false positives, so no bad trace can be persisted.
+
+**`authorAgent.js`:** Writes a JS function `run(input) { return trace; }` for the given algorithm + renderer. Each step must include `type`, `description`, and renderer-specific fields. The final `result` step must include `output: "<answer as plain string>"`. For `context` renderer, every step must include `viz_actions` that update the `algorithm_state` panel.
 
 **`sandbox.js`:** Executes generated code in isolation with a 5-second timeout.
 
-**`cache.js`:** Persists generated code to a DB table so it doesn't regenerate on every request. Hit count tracked per algorithm.
+**`cache.js`:** Two-level cache (L1 in-memory Map, L2 Supabase `generated_traces` table). Persists generated code keyed by compound `algorithmId:title` so it doesn't regenerate on every request. Hit count tracked per key. Exports `buildCacheKey`, `outputMatchesExpected`, `getCachedGenerator`, `cacheGenerator`, `incrementHitCount`.
 
 **Tier 2 algorithms:**
 
@@ -406,7 +412,7 @@ runAlgorithmWithFallback(algorithmId, input)
 | `table` | matrix_dp, string_dp, recursion_memoization |
 | `graph` | backtrack_grid |
 
-**Key difference:** Tier 1 traces are guaranteed correct (hand-tested). Tier 2 traces are generated on-demand and may contain minor inaccuracies — they get cached after passing a 3-step minimum bar. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
+**Key difference:** Tier 1 traces are guaranteed correct (hand-tested). Tier 2 traces are generated on-demand — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
 
 #### Renderer Fallback Heuristic
 
@@ -687,13 +693,17 @@ start_leetcode message
 parseLeetcodeProblem(problemText)         ← claude-haiku-4-5-20251001, 10s timeout
     │
     ▼
-{ title, algorithm_key, confidence, test_case, test_case_source, fallback_reason }
+{ title, algorithm_key, confidence, test_case, test_case_source, expected_output, fallback_reason }
+    │   expected_output: Example 1 answer as plain string ("MMMDCCXLIX", "3", "[0,1]")
+    │   or null if student only pasted partial problem (no example output visible)
     │
     ├── confidence >= 0.7 AND algo has run/tier2 entry?
-    │       YES → runAlgorithmWithFallback(algorithm_key, test_case)
+    │       YES → runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput })
     │             ├── returns { trace, renderer, input, tier }
     │             └── sends lc_viz_ready { algorithm_key, renderer, trace, input, tier } to client
     │                (client can render the trace immediately, before teaching begins)
+    │
+    │   session._leetcodeExpectedOutput stored for reuse at agentLib.js call site
     │
     ▼
 sends lc_parsed { title, algorithm_key, confidence, has_viz, viz_tier } to client
@@ -787,11 +797,11 @@ Student pastes problem
 | `server/algorithms/registry.js` | Algorithm registry, Tier 1/2 dispatch, renderer fallback |
 | `server/authorAgent.js` | Tier 2 trace generator code writer |
 | `server/sandbox.js` | Sandboxed execution for Tier 2 generated code |
-| `server/cache.js` | Tier 2 code cache (avoid regenerating) |
+| `server/algorithms/cache.js` | Tier 2 code cache — compound keys, correctness gate (`outputMatchesExpected`), L1+L2 storage |
 | `server/vizMapper.js` | Trace step → viz_actions + context panel updates |
 | `server/contextPanelDefaults.js` | Default context panels per algorithm + per reasoning mode |
 | `server/rendererManifest.js` | Renderer documentation (action schemas, examples) |
-| `server/leetcodeAgent.js` | LeetCode problem classifier (algorithm_key + test_case extraction) |
+| `server/leetcodeAgent.js` | LeetCode problem classifier (algorithm_key + test_case + expected_output extraction) |
 | `server/tts.js` | TTS synthesis + WebSocket audio streaming |
 | `server/pseudocode.js` | Pseudocode definitions for pseudocode panels |
 | `server/graphLayout.js` | Auto-layout (grid + force-directed) for graphs |
