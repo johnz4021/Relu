@@ -488,6 +488,14 @@ export function useTutorState() {
       case 'guided_transition':
         dispatch({ type: 'GUIDED_TRANSITION' });
         break;
+      case 'independent_work':
+        dispatch({
+          type: 'INDEPENDENT_WORK',
+          checkpoint_summary: msg.checkpoint_summary,
+          task_description: msg.task_description,
+          hints: msg.hints,
+        });
+        break;
       case 'agent_status':
         console.log('[State] AGENT_STATUS received:', msg.status, msg.tool);
         dispatch({ type: 'AGENT_STATUS', agentStatus: { status: msg.status, tool: msg.tool } });

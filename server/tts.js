@@ -456,6 +456,11 @@ export async function synthesizeAndStream(sendBinaryFn, text, speedMultiplier = 
         clearInterval(abortCheckInterval);
         abortCheckInterval = null;
       }
+      if (aborted) {
+        // Error from elWs.close() called during abort — not a real ElevenLabs failure
+        console.log('[TTS] ElevenLabs WS error after intentional abort, ignoring:', err.message);
+        return;
+      }
       console.error('[TTS] ElevenLabs WS error, auto-disabling TTS:', err.message);
       ttsDisabled = true;
       try { elWs.close(); } catch (_) {}

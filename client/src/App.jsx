@@ -201,6 +201,7 @@ export default function App() {
       }
       if (msg.type === 'session_resumed') {
         console.log('[App] Session resumed after reconnection');
+        setTtsMuted(false);
       }
       if (msg.type === 'session_ended') {
         // Server confirmed session is fully terminated — flush any lingering audio
@@ -215,14 +216,6 @@ export default function App() {
       }
       if (msg.type === 'credits_exhausted') {
         setShowCreditsModal(true);
-      }
-      if (msg.type === 'independent_work') {
-        processMessage({
-          type: 'INDEPENDENT_WORK',
-          checkpoint_summary: msg.checkpoint_summary,
-          task_description: msg.task_description,
-          hints: msg.hints,
-        });
       }
       if (msg.type === 'lc_parsed') {
         setLcParsed(msg);
@@ -367,23 +360,23 @@ export default function App() {
   const handleIndependentWorkSubmit = useCallback(
     (text) => {
       processMessage({ type: 'add_student_message', text: `[Independent work submission]\n${text}` });
-      processMessage({ type: 'CLEAR_INDEPENDENT_WORK' });
+      dispatchContext({ type: 'CLEAR_INDEPENDENT_WORK' });
       send({ type: 'guided_message', text });
       send({ type: 'resume' });
     },
-    [send, processMessage]
+    [send, processMessage, dispatchContext]
   );
 
   const handleKeepGuiding = useCallback(() => {
-    processMessage({ type: 'CLEAR_INDEPENDENT_WORK' });
+    dispatchContext({ type: 'CLEAR_INDEPENDENT_WORK' });
     send({ type: 'skip' });
-  }, [send, processMessage]);
+  }, [send, dispatchContext]);
 
   const handleRevealHint = useCallback(
     (hintIndex) => {
-      processMessage({ type: 'REVEAL_HINT', hintIndex });
+      dispatchContext({ type: 'REVEAL_HINT', hintIndex });
     },
-    [processMessage]
+    [dispatchContext]
   );
 
   const handleInterrupt = useCallback(

@@ -59,13 +59,14 @@ export function useAudioPlayer() {
       await ctx.suspend();
       // Close the old context and create a fresh one
       await ctx.close();
-      ctxRef.current = new AudioContext({ sampleRate: SAMPLE_RATE });
-      if (ctxRef.current.state === 'suspended') {
-        await ctxRef.current.resume();
+      const newCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      if (newCtx.state === 'suspended') {
+        await newCtx.resume();
       }
+      ctxRef.current = newCtx;
       nextStartTimeRef.current = 0;
       bufferQueueRef.current = [];
-      readyRef.current = true;
+      readyRef.current = newCtx.state === 'running';
     } finally {
       flushingRef.current = false;
     }

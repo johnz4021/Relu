@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { DEFAULT_GRAPH } from './algorithms.js';
 import { startGuidedSession, resumeGuidedSession } from './guidedAgent.js';
+import { resetTTSDisabled } from './tts.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyJWT } from './supabase.js';
 import { createConversation, listConversations, loadConversationMessages, loadAgentState, countConversations, getUserSettings, saveUserSettings, saveFeedback, createLcSession, masterLcSession, listLcSessions } from './db.js';
@@ -598,6 +599,9 @@ wss.on('connection', (ws, req) => {
       existingSession.graceTimer = null;
       existingSession.wsDisconnectedAt = null;
       existingSession.ws = ws;
+      // Reset TTS state so audio works fresh after reconnect
+      resetTTSDisabled();
+      existingSession.ttsMuted = false;
       attachHandlers(ws, existingSession);
       ws.send(JSON.stringify({ type: 'session_resumed' }));
       return;

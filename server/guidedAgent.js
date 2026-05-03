@@ -1033,6 +1033,7 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
 }
 
 export async function resumeGuidedSession(session, savedMessages, savedSolverResult, savedVizState) {
+  resetTTSDisabled();
   const ws = liveWs(session);
 
   // Restore image data from the first user message (if present)
@@ -1351,6 +1352,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           }
 
           // TTS for the reply (abortable on pause/skip) — student can respond during this
+          session.interruptAbortFlag = false;
           const sendBinaryFn = (buffer) => sendBinary(ws, buffer);
           const sendJsonFn = (obj) => sendJSON(ws, obj);
           const ttsResult = await synthesizeAndStream(sendBinaryFn, text, session.speedMultiplier, sendJsonFn, () => session.pauseFlag || session.skipFlag || session.interruptAbortFlag, session.ttsMuted);
@@ -1475,6 +1477,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           });
 
           // TTS for the prompt (abortable on pause/skip) — student can respond during this
+          session.interruptAbortFlag = false;
           const sendBinaryFn = (buffer) => sendBinary(ws, buffer);
           const sendJsonFn = (obj) => sendJSON(ws, obj);
           const ttsResult = await synthesizeAndStream(sendBinaryFn, prompt, session.speedMultiplier, sendJsonFn, () => session.pauseFlag || session.skipFlag || session.interruptAbortFlag, session.ttsMuted);

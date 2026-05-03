@@ -604,6 +604,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
       });
 
       // TTS or simulated delay (synthesizeAndStream waits for playback to finish)
+      session.interruptAbortFlag = false;
       const sendBinaryFn = (buffer) => sendBinary(ws, buffer);
       const sendJsonFn = (obj) => sendJSON(ws, obj);
       const ttsResult = await synthesizeAndStream(sendBinaryFn, input.narration, session.speedMultiplier, sendJsonFn, () => session.pauseFlag || session.skipFlag || session.interruptAbortFlag, session.ttsMuted);
