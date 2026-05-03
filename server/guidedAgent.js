@@ -1019,7 +1019,7 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
     } else if (session._leetcodeTier === 2) {
       const trace = session._leetcodeTrace;
       const traceLen = trace ? trace.length : 0;
-      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps) is pre-loaded for ${session._leetcodeAlgorithmKey}. The context panel "algorithm_state" is already configured and visible to the student. When teaching, call run_solver to get the optimal solution context, then call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" to load the trace — the viz and panels will auto-configure to algorithm_execution mode. Use emit_segment with trace_step_indices to narrate each step. The trace steps have embedded viz_actions that update the algorithm_state panel automatically.`;
+      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm — this mounts the "algorithm_state" context panel (it is NOT visible until run_algorithm is called). After run_algorithm returns, narrate every trace step using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panel will stay blank. Each trace step carries embedded viz_actions that update the panel automatically when referenced via trace_step_indices.`;
     }
   }
 
