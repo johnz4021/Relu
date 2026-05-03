@@ -8,7 +8,7 @@ This document covers the full server-side pipeline: from a student pasting a pro
 
 1. [System Architecture Overview](#1-system-architecture-overview)
 2. [Session Lifecycle](#2-session-lifecycle)
-3. [Three Entry Modes](#3-three-entry-modes)
+3. [Two Entry Modes](#3-two-entry-modes)
 4. [Trace Mode vs Design Mode — The Core Split](#4-trace-mode-vs-design-mode--the-core-split)
 5. [Problem Solving Pipeline (Step-by-Step)](#5-problem-solving-pipeline-step-by-step)
    - [Stage 0: Solver (Pre-teaching Analysis)](#stage-0-solver-pre-teaching-analysis)
@@ -71,7 +71,7 @@ Sessions are WebSocket-based. Each connected client gets a session object:
 session = {
   id, ws, userId,
   active: bool,
-  mode: 'direct' | 'guided' | 'explain' | 'leetcode',
+  mode: 'direct' | 'guided' | 'leetcode',
   runGeneration: int,          // incremented on every new session start
   endSessionFlag: bool,        // set to break out of agent loops
   pauseFlag: bool,
@@ -93,7 +93,7 @@ session = {
 
 ---
 
-## 3. Three Entry Modes
+## 3. Two Entry Modes
 
 | WS message | Handler | Notes |
 |---|---|---|
@@ -365,10 +365,10 @@ Every algorithm in the registry has:
 
 | Renderer | Algorithms |
 |---|---|
-| `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, trie, union_find, topological_sort, backtracking |
-| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, monotonic_stack |
-| `table` | knapsack, edit_distance, coin_change, lcs |
-| `tree` | huffman, heap_ops, bst_insert |
+| `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, trie, union_find, topological_sort, backtracking, word_search |
+| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array |
+| `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum |
+| `tree` | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path |
 | `linked` | linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
 | `interval` | interval_merge, interval_scheduling |
 | `string` | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams |
@@ -408,9 +408,7 @@ runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
 | Renderer | Algorithms |
 |---|---|
 | `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, greedy_choice, set_operations, bit_ops, math_simulation |
-| `array` | prefix_sum, array_manipulation, divide_conquer_array |
-| `table` | matrix_dp, string_dp, recursion_memoization |
-| `graph` | backtrack_grid |
+| `array` | prefix_sum |
 
 **Key difference:** Tier 1 traces are guaranteed correct (hand-tested). Tier 2 traces are generated on-demand — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
 
@@ -446,7 +444,7 @@ The renderer is set on each algorithm's registry entry. The client receives it a
 
 For `algorithm_execution` mode with known algorithms, the renderer is pulled from the registry. For concept flows (A1 path), `run_algorithm` auto-configures graph + context panels via `getDefaultContextPanels(algorithmId)`.
 
-For LeetCode mode, an additional keyword check in `applyClassification()` overrides the registry renderer for algorithms containing `interval`, `schedule`, `machine`, `job`, or `activity` in the name → forces `interval` renderer.
+For all modes, `applyClassification()` (`guidedAgent.js`) overrides the registry renderer when the algorithm name contains `interval`, `schedule`, `machine`, `job`, or `activity` → forces `interval` renderer. This applies to both `algorithm_execution` and non-execution modes.
 
 ---
 
@@ -617,20 +615,20 @@ Algorithm categories:
 
 | Category | Algorithms |
 |---|---|
-| Graph Algorithms | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, union_find, topological_sort, trie, backtracking (poly_reduction registered but excluded from LC classification) |
+| Graph Algorithms | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, union_find, topological_sort, trie, backtracking, word_search (poly_reduction registered but excluded from LC classification) |
 | Sorting | mergesort |
-| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, dag_shortest |
+| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, dag_shortest, max_subarray, word_break, climbing_stairs, min_path_sum |
 | Divide and Conquer | quickselect |
 | Greedy Algorithms | huffman, interval_merge, interval_scheduling |
 | Data Structures | heap_ops, trie, bst_insert, linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
+| Trees | tree_depth_dfs, tree_level_order, tree_path |
 | Searching | binary_search, two_pointers, sliding_window |
 | String Algorithms | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams |
 | Complexity Theory | poly_reduction |
-| Backtracking | backtracking |
+| Backtracking | backtracking, word_search |
+| Algorithms | rotate_array |
 | Tier 2 — Data Structures | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations |
-| Tier 2 — Algorithms | prefix_sum, array_manipulation, divide_conquer_array, bit_ops, math_simulation, greedy_choice |
-| Tier 2 — DP | matrix_dp, string_dp, recursion_memoization |
-| Tier 2 — Backtracking | backtrack_grid |
+| Tier 2 — Algorithms | prefix_sum, bit_ops, math_simulation, greedy_choice |
 
 ---
 
@@ -658,25 +656,301 @@ Context panels are updated via `emit_segment` viz_actions:
 
 ## 9. Interrupt Handling
 
-The student can interrupt mid-explanation with a question. The pipeline:
+### How an interrupt is triggered
 
-1. Client sends `interrupt` WS message with `question` text
-2. `session.interruptFlag` is set
-3. After the current `emit_segment` completes, the agent detects the flag
-4. **Graph state snapshot** saved to `session._savedGraphState` (graph, trace, algorithm, renderer, mapperState, emittedTraceSteps, lastVizMessage, rendererVizHistory)
-5. Remaining tool calls in the current LLM turn are stub-cancelled
-6. `[LEARNER INTERRUPT]` injected into messages
-7. Agent calls `respond_to_interrupt` tool with one of four modes:
+```
+Client sends: { type: 'interrupt', question: '<text>' }
+        │
+        ▼
+session.interruptFlag = { question, timestamp }
+session.interruptAbortFlag = true      ← aborts current TTS stream at next chunk boundary
+        │
+        ▼  (after active emit_segment or conversational_reply completes)
+guidedAgent.js:1888 — interrupt detected
+        │
+        ├── snapshot session._savedGraphState
+        ├── stub-cancel remaining tool calls in current LLM turn
+        │     → tool_result { skipped: true, reason: 'learner interrupt' }
+        └── inject [LEARNER INTERRUPT] into messages
+              → agent calls respond_to_interrupt
+```
 
-| Mode | When to use | Mechanism |
+The interrupt is checked at the **tool boundary** (after `emit_segment` or `conversational_reply` finishes), not mid-narration. The TTS abort flag (`interruptAbortFlag`) stops audio as soon as possible; the agent loop checks `interruptFlag` once audio delivery is complete.
+
+### State snapshot (`session._savedGraphState`)
+
+Captured at `guidedAgent.js:1895` before any interrupt handling begins:
+
+| Field | Source | Purpose |
 |---|---|---|
-| `overlay` | "Why this node?" questions — highlight a subset | Dims entire graph to 15% opacity, spotlights specified nodes/edges at full brightness + annotations |
-| `rewind` | "What just happened?" / "I'm lost" | Replays N recent segments with slower-paced re-narration |
-| `ghost_alternative` | "What if we went through Y instead?" | Shows alternative path as translucent ghost overlay alongside actual chosen path |
-| `illustrate` | Conceptual "why does X work?" where current graph can't show it | Temporarily replaces lesson graph with a small example graph (3–6 nodes), agent narrates freely, then `end_illustration` restores |
-| `none` | Simple factual answer | Just narration, no visual change |
+| `graph` | `session.currentGraph` | Node/edge data for renderer remount |
+| `trace` | `session.currentTrace` | Trace array for deterministic step replay |
+| `algorithm` | `session.currentAlgorithm` | Algorithm ID for `mapTraceStep()` |
+| `renderer` | `session.currentRenderer` | Which renderer to remount |
+| `mapperState` | `session.mapperState` (shallow copy) | Incremental mapper state before interrupt |
+| `emittedTraceSteps[]` | `session._emittedTraceSteps` (copy) | Which trace indices have already been played |
+| `lastVizMessage` | `session._lastVizMessage` | The `create_graph` or `create_visualization` message used to mount the renderer |
+| `rendererVizHistory` | `session._rendererVizHistory` (copy) | Per-renderer action history for renderers built via manual viz_actions |
 
-After interrupt handling, `end_illustration` or the built-in restore logic in `agentLib.restoreGraphState()` replays all previously-emitted trace steps to restore the graph to its pre-interrupt state.
+### Restore strategy (`restoreGraphState`, `agentLib.js:117`)
+
+Called after non-`illustrate` modes finish, and by `end_illustration`:
+
+```
+1. Re-send lastVizMessage (create_graph or create_visualization)  → remounts renderer
+2. Wait 300ms for React to mount
+3. Prefer trace-step replay (deterministic):
+     for each idx in emittedTraceSteps → mapTraceStep(algorithm, renderer, trace[idx], state)
+   Fallback: rendererVizHistory (for renderers built with manual viz_actions:
+             recursion_tree, interval, etc.)
+4. Send segment_start { viz_actions: [...all replayed actions] } + segment_end
+5. session._savedGraphState = null
+```
+
+---
+
+### The five explanation modes
+
+#### `overlay`
+
+**Use when:** "Why this node?" / "Why that edge?" / element-specific "what does this mean?" questions.
+
+**Server validation (`agentLib.js:693`):**
+```js
+if (input.explanation_mode === 'overlay' && !input.overlay) {
+  return { success: false, message: 'overlay mode requires the "overlay" property...' };
+}
+```
+No WS message is sent on validation failure — the agent receives an error and must retry.
+
+**Config shape:**
+```js
+overlay: {
+  spotlight_nodes:   string[],              // node IDs (graph, tree renderers)
+  spotlight_edges:   [{ from, to }],        // edge pairs (graph, tree renderers)
+  spotlight_indices: number[],              // 0-based indices (array, linked renderers)
+  spotlight_cells:   [{ row, col }],        // cell coordinates (table renderer)
+  annotations: [{
+    target:   string,                       // node ID, index, or "row-col" string
+    text:     string,
+    position: 'top' | 'bottom' | 'left' | 'right',
+  }],
+}
+```
+
+**Renderer support:**
+
+| Renderer | Spotlight field |
+|---|---|
+| `graph`, `tree` | `spotlight_nodes`, `spotlight_edges` |
+| `array`, `linked` | `spotlight_indices` |
+| `table` | `spotlight_cells` |
+| `context`, `recursion_tree`, `interval`, `string` | `annotations` only |
+
+**State persistence:** No. After TTS completes, `explanation_complete` is sent. Client restores from its own pre-interrupt snapshot. `session._savedGraphState = null`.
+
+**WS sequence:**
+```
+→ interrupt_response { explanation_mode: 'overlay', answer, overlay: {...} }
+→ [TTS audio chunks]
+→ (500ms delay)
+→ explanation_complete
+```
+
+---
+
+#### `rewind`
+
+**Use when:** "What just happened?" / "I'm lost" / "Can you slow down?" — replay recent steps with clearer re-narration.
+
+**Server validation (`agentLib.js:696`):**
+```js
+if (input.explanation_mode === 'rewind' && (
+  !input.rewind ||
+  !Array.isArray(input.rewind?.narration_per_step) ||
+  input.rewind.narration_per_step.length === 0
+)) {
+  return { success: false, message: 'rewind mode requires a "rewind" object with steps_back and narration_per_step...' };
+}
+```
+
+**Config shape:**
+```js
+rewind: {
+  steps_back:          number,    // 1–5, how many segments to replay visually
+  narration_per_step:  string[],  // re-narration for each replayed segment
+                                  // (length should match steps_back)
+}
+```
+
+**Renderer support:** All renderers. The client handles visual replay of the last N segments independently; the server separately streams `rewind_step_narration` messages + TTS for each step.
+
+**State persistence:** No. `explanation_complete` sent after all steps are narrated. `session._savedGraphState = null`.
+
+**WS sequence:**
+```
+→ interrupt_response { explanation_mode: 'rewind', answer, rewind: {...} }
+→ [TTS audio for initial answer]
+→ for each narration_per_step[i]:
+    → (800ms delay)
+    → rewind_step_narration { narration: "..." }
+    → [TTS audio for this step]
+    → (pause/skip handled per-step)
+→ (500ms delay)
+→ explanation_complete
+```
+
+---
+
+#### `ghost_alternative`
+
+**Use when:** "What if we took Y instead?" / "Why not that path?" — counterfactual comparison of the chosen path vs an alternative.
+
+**Server validation (`agentLib.js:699`):**
+```js
+if (input.explanation_mode === 'ghost_alternative' && !input.ghost_alternative) {
+  return { success: false, message: 'ghost_alternative mode requires the "ghost_alternative" property...' };
+}
+```
+
+**Config shape:**
+```js
+ghost_alternative: {
+  ghost_path:     string[],  // node IDs for the alternative path (graph, tree)
+  actual_path:    string[],  // node IDs for the chosen path (graph, tree)
+  ghost_indices:  number[],  // 0-based indices for the alternative (array, linked)
+  actual_indices: number[],  // 0-based indices for the chosen path (array, linked)
+  ghost_label:    string,    // e.g. "cost: 9 (suboptimal)"
+  actual_label:   string,    // e.g. "cost: 7 (chosen)"
+}
+```
+
+**Renderer support:**
+
+| Renderer | Fields used |
+|---|---|
+| `graph`, `tree` | `ghost_path`, `actual_path` |
+| `array`, `linked` | `ghost_indices`, `actual_indices` |
+| `table`, `context`, others | `ghost_label`, `actual_label` only |
+
+**State persistence:** No. Same pattern as `overlay` — `explanation_complete` sent, `session._savedGraphState = null`.
+
+**WS sequence:**
+```
+→ interrupt_response { explanation_mode: 'ghost_alternative', answer, ghost_alternative: {...} }
+→ [TTS audio chunks]
+→ (500ms delay)
+→ explanation_complete
+```
+
+---
+
+#### `illustrate`
+
+**Use when:** Conceptual "why does X work?" / "what is a cycle?" questions where the current lesson graph cannot demonstrate the concept. The lesson graph is temporarily replaced with a small 3–6 node example.
+
+**Server validation (`agentLib.js:702`):**
+```js
+if (input.explanation_mode === 'illustrate') {
+  if (!input.illustrate?.graph?.nodes?.length) {
+    return {
+      success: false,
+      message: 'illustrate mode requires the "illustrate" property with "graph" (containing nodes and edges)...',
+    };
+  }
+}
+```
+
+**Config shape:**
+```js
+illustrate: {
+  graph: {
+    nodes:    [{ id: string, label?: string }],           // 3–6 nodes recommended
+    edges:    [{ source: string, target: string, weight?: number }],
+    directed?: boolean,
+  },
+  // steps: []  ← deprecated, ignored. Use emit_segment after setup instead.
+}
+```
+
+**Renderer support:** Always `graph` renderer. `illustrate` always sends `create_graph` regardless of the lesson's original renderer (array, table, tree, etc.). The original renderer is remounted by `end_illustration` → `restoreGraphState`.
+
+**State persistence:** YES — the only mode that holds state across multiple tool calls.
+
+```
+session._illustrationActive = true    ← set on entry, cleared by end_illustration
+session._savedGraphState = { ... }    ← held until end_illustration calls restoreGraphState
+```
+
+The server returns immediately after mounting the example graph. The agent then teaches freely using `emit_segment` with manual viz_actions (no `trace_step_indices`) until it calls `end_illustration`.
+
+**Auto-save:** If `session._savedGraphState` is null when `illustrate` fires (can happen on the guided_message path rather than the interrupt path), the server auto-saves it before mounting the example graph (`agentLib.js:790`).
+
+**Auto-cleanup:** If a second `respond_to_interrupt` is called while `session._illustrationActive` is still `true` (agent forgot `end_illustration`), the server auto-restores the graph and logs a warning before processing the new interrupt (`agentLib.js:684`).
+
+**WS sequence:**
+```
+respond_to_interrupt(illustrate) →
+  → interrupt_response { explanation_mode: 'illustrate', answer, illustrate: {...} }
+  → [TTS for initial answer]
+  → create_graph { graph: <example_graph> }    ← swaps to example graph (auto-layout)
+  → (600ms delay)
+  → [agent emits N × emit_segment with manual viz_actions]
+
+end_illustration →
+  → (500ms delay)
+  → explanation_complete
+  → create_graph / create_visualization { ... } ← remounts original renderer
+  → segment_start { viz_actions: [...replayed] }
+  → segment_end
+```
+
+---
+
+#### `none`
+
+**Use when:** Simple factual question that needs only a verbal answer — no visual context needed.
+
+**Server validation:** None — always valid.
+
+**Config shape:** No additional object required.
+
+**Renderer support:** All renderers — no visual change occurs.
+
+**State persistence:** No. `explanation_complete` sent immediately after TTS. `session._savedGraphState = null`.
+
+**WS sequence:**
+```
+→ interrupt_response { explanation_mode: 'none', answer }
+→ [TTS audio chunks]
+→ (500ms delay)
+→ explanation_complete
+```
+
+---
+
+### Mode selection reference
+
+| Student question type | Mode |
+|---|---|
+| "Why this node/edge?" | `overlay` |
+| "What does X mean?" (element-specific) | `overlay` |
+| "What just happened?" / "I'm lost" | `rewind` |
+| "What if we took Y instead?" | `ghost_alternative` |
+| "Why not that path?" | `ghost_alternative` |
+| "Why does X algorithm work?" (conceptual) | `illustrate` |
+| "What is a cycle?" (general concept, no graph needed) | `none` |
+| Simple factual question | `none` |
+
+### Top-level `viz_actions` on `respond_to_interrupt`
+
+All modes accept an optional top-level `viz_actions` array applied **after** the explanation mode setup:
+
+```js
+viz_actions: [{ action: 'highlight_node', node: 'A', className: 'current' }, ...]
+```
+
+These are the same actions as `emit_segment`. They're included in the `interrupt_response` WS message payload and give the agent fine-grained supplementary highlights beyond what the mode config expresses (e.g. overlay a node highlight on top of a `none`-mode answer).
 
 ---
 
@@ -732,9 +1006,8 @@ Student pastes problem
     │  create DB conversation record                              │
     └─────────────────────────────────────────────────────────────┘
           │
-          ├─── mode: guided ──────────────────────────────────────┐
-          ├─── mode: explain ─────────────────────────────────────┤
-          └─── mode: leetcode ────────────────────────────────────┤
+          ├─── mode: guided (resume_conversation) ────────────────┐
+          └─── mode: leetcode (start_leetcode) ───────────────────┤
                                                                   │
           ┌───────────────────────────────────────────────────────┘
           │
