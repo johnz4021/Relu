@@ -1903,6 +1903,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
               trace: session.currentTrace,
               algorithm: session.currentAlgorithm,
               renderer: session.currentRenderer,
+              rendererPanelId: session._rendererPanelId || null,
               mapperState: { ...session.mapperState },
               emittedTraceSteps: [...(session._emittedTraceSteps || [])],
               lastVizMessage: session._lastVizMessage || null,

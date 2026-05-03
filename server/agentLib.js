@@ -125,6 +125,7 @@ export async function restoreGraphState(session, ws) {
   session.currentTrace = saved.trace;
   session.currentAlgorithm = saved.algorithm;
   session.currentRenderer = saved.renderer;
+  session._rendererPanelId = saved.rendererPanelId || saved.renderer;
   session.mapperState = saved.mapperState;
   session._emittedTraceSteps = saved.emittedTraceSteps || [];
   session._lastVizMessage = saved.lastVizMessage || null;
@@ -148,22 +149,30 @@ export async function restoreGraphState(session, ws) {
     // Prefer trace-step replay when available (deterministic). Fall back to
     // viz_action history for renderers built via manual viz_actions (recursion_tree, interval, etc.)
     const hasTraceReplay = saved.emittedTraceSteps?.length > 0 && saved.trace;
-    const vizHistory = primaryRenderer ? saved.rendererVizHistory?.[primaryRenderer] : null;
+    // History is keyed by panel ID (post-rewrite) when agent used a named panel; fall back to type
+    const historyKey = saved.rendererPanelId || primaryRenderer;
+    const vizHistory = historyKey ? (saved.rendererVizHistory?.[historyKey] ?? saved.rendererVizHistory?.[primaryRenderer]) : null;
     const hasVizHistory = vizHistory?.length > 0;
 
     const replayActions = [];
 
     if (hasTraceReplay) {
       const replayState = {};
+      const rendererPanelId = saved.rendererPanelId;
       for (const idx of saved.emittedTraceSteps) {
         const step = saved.trace[idx];
         if (!step) continue;
-        const { viz: vizActs, ctx: ctxActs } = mapTraceStep(
+        let { viz: vizActs, ctx: ctxActs } = mapTraceStep(
           saved.algorithm,
           saved.renderer,
           step,
           replayState
         );
+        if (rendererPanelId && rendererPanelId !== saved.renderer) {
+          vizActs = vizActs.map((act) =>
+            act.renderer === saved.renderer ? { ...act, renderer: rendererPanelId } : act
+          );
+        }
         replayActions.push(...vizActs, ...ctxActs);
       }
     } else if (hasVizHistory) {
@@ -821,6 +830,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           trace: session.currentTrace,
           algorithm: session.currentAlgorithm,
           renderer: session.currentRenderer,
+          rendererPanelId: session._rendererPanelId || null,
           mapperState: session.mapperState ? { ...session.mapperState } : {},
           emittedTraceSteps: session._emittedTraceSteps ? [...session._emittedTraceSteps] : [],
         };
