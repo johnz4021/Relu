@@ -436,14 +436,19 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               ([, p]) => p.renderer === algoInfo.renderer && p.type === 'renderer'
             );
             const rendererPanelId = existingEntry ? existingEntry[0] : algoInfo.renderer;
+            // Store so emit_segment can rewrite Tier 2 viz_action renderer targets
+            session._rendererPanelId = rendererPanelId;
             const autoVizMsg = {
               type: 'create_visualization',
-              panels: [{ id: rendererPanelId, renderer: algoInfo.renderer, config: {} }],
+              // If the agent already registered a named panel (e.g. 'string_main'), send
+              // panels:[] so the client preserves the existing mounted panel rather than
+              // remounting it — which would strip its title and reset renderer state.
+              panels: existingEntry ? [] : [{ id: rendererPanelId, renderer: algoInfo.renderer, config: {} }],
               context_panels: contextPanels,
             };
             sendJSON(ws, autoVizMsg);
-            registerPanels(session, [{ id: rendererPanelId, renderer: algoInfo.renderer }], contextPanels);
-            session._lastVizMessage = autoVizMsg;
+            registerPanels(session, existingEntry ? [] : [{ id: rendererPanelId, renderer: algoInfo.renderer }], contextPanels);
+            if (!existingEntry) session._lastVizMessage = autoVizMsg;
             if (!session._rendererVizHistory) session._rendererVizHistory = {};
             session._rendererVizHistory[algoInfo.renderer] = [];
           }
@@ -512,9 +517,20 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             mapperWarnings.push(`index ${idx} out of bounds (trace has ${activeTrace.length} steps)`);
             continue;
           }
-          // Tier 2 traces embed viz_actions directly in each step — use them as-is
+          // Tier 2 traces embed viz_actions directly in each step.
+          // Rewrite renderer type → named panel ID when the agent gave the panel a
+          // custom ID (e.g. 'string_main' instead of 'string') so the client registry
+          // can find it.
           if (step.viz_actions && Array.isArray(step.viz_actions) && step.viz_actions.length > 0) {
-            allVizActions.push(...step.viz_actions);
+            const rendererType = session.currentRenderer;
+            const panelId = session._rendererPanelId;
+            let actions = step.viz_actions;
+            if (panelId && rendererType && panelId !== rendererType) {
+              actions = actions.map((act) =>
+                act.renderer === rendererType ? { ...act, renderer: panelId } : act
+              );
+            }
+            allVizActions.push(...actions);
             continue;
           }
           const { viz: vizActs, ctx: ctxActs } = mapTraceStep(
@@ -530,6 +546,14 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           if (emitGraphId) {
             for (const act of vizActs) {
               if (act.renderer === 'graph') act.renderer = emitGraphId;
+            }
+          }
+          // Rewrite renderer type → named panel ID (Tier 1 mapper hardcodes the type)
+          const t1RendererType = session.currentRenderer;
+          const t1PanelId = session._rendererPanelId;
+          if (t1PanelId && t1RendererType && t1PanelId !== t1RendererType) {
+            for (const act of vizActs) {
+              if (act.renderer === t1RendererType) act.renderer = t1PanelId;
             }
           }
           allVizActions.push(...vizActs, ...ctxActs);
@@ -722,7 +746,9 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
 
       const sendBinaryFn = (buffer) => sendBinary(ws, buffer);
       const sendJsonFn = (obj) => sendJSON(ws, obj);
+      console.log(`[respond_to_interrupt] TTS start — pauseFlag=${session.pauseFlag}, skipFlag=${session.skipFlag}, ttsMuted=${session.ttsMuted}, interruptAbortFlag=${session.interruptAbortFlag}`);
       const ttsResult = await synthesizeAndStream(sendBinaryFn, input.answer, session.speedMultiplier, sendJsonFn, () => session.pauseFlag || session.skipFlag, session.ttsMuted);
+      console.log(`[respond_to_interrupt] TTS end — result=${JSON.stringify(ttsResult)}, pauseFlag=${session.pauseFlag}, skipFlag=${session.skipFlag}`);
       if (ttsResult?.ttsAutoDisabled && !session._ttsDisabledNotified) {
         session._ttsDisabledNotified = true;
         sendJSON(ws, { type: 'tts_auto_disabled', message: 'Voice narration temporarily unavailable. Continuing with text only.' });

@@ -1355,7 +1355,9 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           session.interruptAbortFlag = false;
           const sendBinaryFn = (buffer) => sendBinary(ws, buffer);
           const sendJsonFn = (obj) => sendJSON(ws, obj);
+          console.log(`[conversational_reply] TTS start — pauseFlag=${session.pauseFlag}, skipFlag=${session.skipFlag}, ttsMuted=${session.ttsMuted}, interruptAbortFlag=${session.interruptAbortFlag}`);
           const ttsResult = await synthesizeAndStream(sendBinaryFn, text, session.speedMultiplier, sendJsonFn, () => session.pauseFlag || session.skipFlag || session.interruptAbortFlag, session.ttsMuted);
+          console.log(`[conversational_reply] TTS end — result=${JSON.stringify(ttsResult)}, pauseFlag=${session.pauseFlag}, skipFlag=${session.skipFlag}, interruptAbortFlag=${session.interruptAbortFlag}`);
           if (ttsResult?.ttsAutoDisabled && !session._ttsDisabledNotified) {
             session._ttsDisabledNotified = true;
             sendJSON(ws, { type: 'tts_auto_disabled', message: 'Voice narration temporarily unavailable. Continuing with text only.' });
