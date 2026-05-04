@@ -428,9 +428,17 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             // Fall back to the trace's first step's graph for algorithms that
             // generate their graph dynamically from other input (trie, backtracking,
             // word_search, etc. — their defaultInput has no top-level `graph` field).
+            // Some runners (number_of_islands, multi_source_bfs, dijkstra_k_stops,
+            // backtracking) emit `nodes` and `edges` as TOP-LEVEL fields on
+            // trace[0] rather than wrapping them in a `graph` object. Synthesize
+            // a graph object from that shape so the client gets create_graph and
+            // doesn't render an empty "context-mode-looking" panel.
+            const firstStep = result.trace?.[0];
+            const trace0Graph = firstStep?.graph
+              || (firstStep?.nodes ? { nodes: firstStep.nodes, edges: firstStep.edges || [] } : null);
             const graphData = registryInput.graph
               || algoInfo.defaultInput?.graph
-              || result.trace?.[0]?.graph;
+              || trace0Graph;
             if (graphData) {
               const directed = graphData.directed !== undefined ? graphData.directed : true;
               console.log(`[Agent] Auto-creating graph: ${graphData.nodes?.length} nodes, directed=${directed}`);
