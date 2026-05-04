@@ -117,4 +117,115 @@ export const PSEUDOCODE = {
     'root ← PQ.extract-min()',                      // 8
     'assign codes: traverse tree (left=0, right=1)',// 9
   ],
+
+  number_of_islands: [
+    'islands ← 0',                                  // 0
+    'for each cell (r, c) in grid:',               // 1
+    '  if grid[r][c] = "1":',                      // 2
+    '    islands += 1',                             // 3
+    '    bfs(r, c)  // flood-fill island',         // 4
+    '',                                             // 5
+    'bfs(r, c):',                                   // 6
+    '  queue ← [(r, c)]',                          // 7
+    '  mark grid[r][c] ← "0"',                    // 8
+    '  while queue not empty:',                     // 9
+    '    (r, c) ← dequeue()',                      // 10
+    '    for each neighbor (nr, nc):',             // 11
+    '      if grid[nr][nc] = "1":',               // 12
+    '        mark grid[nr][nc] ← "0"',            // 13
+    '        queue.enqueue(nr, nc)',               // 14
+  ],
+
+  topological_sort: [
+    'in_deg[v] ← in-degree for each v',           // 0
+    'queue ← {v : in_deg[v] = 0}',                // 1
+    'while queue not empty:',                       // 2
+    '  u ← dequeue()',                             // 3
+    '  sorted.append(u)',                          // 4
+    '  for each neighbor v of u:',                 // 5
+    '    in_deg[v] -= 1',                          // 6
+    '    if in_deg[v] = 0: enqueue(v)',            // 7
+    'if len(sorted) < |V|: cycle detected',        // 8
+    'return sorted',                               // 9
+  ],
+
+  multi_source_bfs: [
+    'dist ← {source: 0, wall: −1, fresh: ∞}',    // 0
+    'queue ← all source nodes (e.g. rotten)',      // 1
+    'while queue not empty:',                       // 2
+    '  u ← dequeue()',                             // 3
+    '  for each neighbor v of u:',                 // 4
+    '    if dist[v] = ∞:',                         // 5
+    '      dist[v] ← dist[u] + 1',               // 6
+    '      enqueue(v)',                            // 7
+    'return max(dist) or −1 if any ∞ remains',    // 8
+  ],
+
+  floyd_warshall: [
+    'dist[i][i] ← 0; dist[i][j] ← w(i,j) or ∞', // 0
+    'for k = 0 to n−1:  // relay through k',      // 1
+    '  for i = 0 to n−1:',                        // 2
+    '    for j = 0 to n−1:',                      // 3
+    '      if dist[i][k] + dist[k][j] < dist[i][j]:', // 4
+    '        dist[i][j] ← dist[i][k] + dist[k][j]',  // 5
+    'return dist  // O(n³) all-pairs',            // 6
+  ],
+
+  tarjan_bridges: [
+    'dfs(u, parent):',                             // 0
+    '  disc[u] ← low[u] ← timer++',              // 1
+    '  for each neighbor v:',                      // 2
+    '    if v not visited:',                       // 3
+    '      dfs(v, u)',                             // 4
+    '      low[u] ← min(low[u], low[v])',        // 5
+    '      if low[v] > disc[u]: bridge!',         // 6
+    '    else if v ≠ parent:',                    // 7
+    '      low[u] ← min(low[u], disc[v])',       // 8
+    'for each unvisited u: dfs(u, null)',          // 9
+  ],
+
+  bipartite_check: [
+    'for each uncolored node s:',                  // 0
+    '  color[s] ← RED; queue ← [s]',             // 1
+    '  while queue not empty:',                    // 2
+    '    u ← dequeue()',                           // 3
+    '    for each neighbor v:',                    // 4
+    '      if v uncolored:',                       // 5
+    '        color[v] ← opposite(color[u])',      // 6
+    '      elif color[v] = color[u]:',             // 7
+    '        return NOT bipartite',               // 8
+    'return bipartite',                            // 9
+  ],
+
+  dijkstra_k_stops: [
+    'prev[src] ← 0; prev[v] ← ∞ for v ≠ src',   // 0
+    'for stop = 0 to k:',                          // 1
+    '  cur ← copy(prev)',                          // 2
+    '  for each flight (u→v, cost):',             // 3
+    '    if prev[u] + cost < cur[v]:',            // 4
+    '      cur[v] ← prev[u] + cost',             // 5
+    '  prev ← cur',                               // 6
+    'return prev[dst]  // −1 if ∞',              // 7
+  ],
+
+  lca_tree: [
+    'lca(node, p, q):',                            // 0
+    '  if node is null: return null',             // 1
+    '  left  ← lca(node.left,  p, q)',           // 2
+    '  right ← lca(node.right, p, q)',           // 3
+    '  if node = p or node = q: return node',    // 4
+    '  if left ≠ null and right ≠ null:',        // 5
+    '    return node  // LCA found!',             // 6
+    '  return left if left ≠ null else right',   // 7
+  ],
+
+  validate_bst: [
+    'validate(node, min=−∞, max=+∞):',            // 0
+    '  if node is null: return true',             // 1
+    '  if node.val ≤ min or node.val ≥ max:',    // 2
+    '    return false  // out of range',          // 3
+    '  left  ← validate(left,  min, node.val)',  // 4
+    '  right ← validate(right, node.val, max)',  // 5
+    '  return left and right',                    // 6
+  ],
 };

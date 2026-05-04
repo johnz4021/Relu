@@ -46,10 +46,10 @@ guidedAgent.js
        │
        ▼
   algorithms/registry.js
-  ┌────┴──────────────────────┐
-  │ Tier 1: hand-written run()│
-  │ Tier 2: authorAgent.js    │
-  └───────────────────────────┘
+  ┌────┴──────────────────────────────────────┐
+  │ Tier 1: hand-written run() (92 algorithms) │
+  │ Tier 2: authorAgent.js (unknown patterns)  │
+  └────────────────────────────────────────────┘
        │
        ▼
    vizMapper.js
@@ -359,29 +359,30 @@ Every algorithm in the registry has:
 
 #### Tier 1: Hand-Written Trace Generators
 
-`run != null`. A synchronous JS function that executes the real algorithm and emits a step-by-step trace array. Deterministic, instant, no network call.
+`run` is a synchronous JS function that executes the real algorithm and emits a step-by-step trace array. Deterministic, instant, no network call. Every algorithm in the registry is Tier 1 — there are no `run: null` stubs.
 
-**Tier 1 algorithms by renderer:**
+**Tier 1 algorithms by renderer (92 total):**
 
 | Renderer | Algorithms |
 |---|---|
-| `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, trie, union_find, topological_sort, backtracking, word_search |
-| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array |
-| `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum |
-| `tree` | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path |
+| `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, poly_reduction, trie, union_find, topological_sort, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
+| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
+| `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum, stock_dp, interval_dp, palindrome_dp, bitmask_dp |
+| `tree` | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path, tree_dp, top_k_heap, median_finder, k_closest_points, lca_tree, validate_bst, linked_list_cycle, merge_k_sorted |
 | `linked` | linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
 | `interval` | interval_merge, interval_scheduling |
-| `string` | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams |
+| `string` | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
+| `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, bit_ops, math_simulation, greedy_choice, jump_game_ii, valid_parentheses, task_scheduler, lru_cache, fast_power, gcd_algorithm, majority_vote |
 
-#### Tier 2: AI-Generated Trace Generators
+#### Tier 2: AI-Generated Trace Generators (dynamic only)
 
-`run: null`. Used for algorithms where a hand-written trace isn't available.
+Tier 2 fires only when a LeetCode problem is submitted with an `algorithm_key` that does **not** match any registry entry — i.e. it's a pattern variant or niche algorithm outside the known 92. There are no pre-defined `run: null` stubs in the registry.
 
 **Flow:**
 ```
 runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
-  ├── Check if algo.run exists → Tier 1 (fast path)
-  └── Tier 2 path:
+  ├── Check if algo exists in registry → Tier 1 (fast path, always for known algorithms)
+  └── Tier 2 path (unknown algorithm IDs only):
        ├── getCachedGenerator(algorithmId, description)
        │    └── if cached: executeTraceInSandbox(cached.code, input)
        └── if not cached:
@@ -403,14 +404,7 @@ runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
 
 **`cache.js`:** Two-level cache (L1 in-memory Map, L2 Supabase `generated_traces` table). Persists generated code keyed by compound `algorithmId:title` so it doesn't regenerate on every request. Hit count tracked per key. Exports `buildCacheKey`, `outputMatchesExpected`, `getCachedGenerator`, `cacheGenerator`, `incrementHitCount`.
 
-**Tier 2 algorithms:**
-
-| Renderer | Algorithms |
-|---|---|
-| `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, greedy_choice, set_operations, bit_ops, math_simulation |
-| `array` | prefix_sum |
-
-**Key difference:** Tier 1 traces are guaranteed correct (hand-tested). Tier 2 traces are generated on-demand — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
+**Key difference:** Tier 1 traces are guaranteed correct (hand-written, deterministic, covered by `tier1.deep.test.js`). Tier 2 traces are generated on-demand for unknown patterns — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
 
 #### Renderer Fallback Heuristic
 
@@ -611,24 +605,27 @@ ALGORITHMS = {
 
 **`runAlgorithmWithFallback(id, input, context)`** — Tier 1 + Tier 2 fallback. Returns `{ trace, renderer, input, tier: 1|2 }`.
 
-Algorithm categories:
+Algorithm categories (all Tier 1):
 
 | Category | Algorithms |
 |---|---|
-| Graph Algorithms | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, union_find, topological_sort, trie, backtracking, word_search (poly_reduction registered but excluded from LC classification) |
+| Graph Algorithms | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, union_find, topological_sort, trie, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
 | Sorting | mergesort |
-| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, dag_shortest, max_subarray, word_break, climbing_stairs, min_path_sum |
+| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, max_subarray, word_break, climbing_stairs, min_path_sum, lis, stock_dp, interval_dp, palindrome_dp, bitmask_dp, tree_dp, house_robber |
 | Divide and Conquer | quickselect |
-| Greedy Algorithms | huffman, interval_merge, interval_scheduling |
-| Data Structures | heap_ops, trie, bst_insert, linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
-| Trees | tree_depth_dfs, tree_level_order, tree_path |
-| Searching | binary_search, two_pointers, sliding_window |
-| String Algorithms | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams |
+| Greedy Algorithms | huffman, interval_merge, interval_scheduling, greedy_choice, jump_game, jump_game_ii |
+| Data Structures | heap_ops, bst_insert, linked_list_reversal, stack_operations, queue_operations, monotonic_stack, top_k_heap, median_finder, k_closest_points, lru_cache, trie |
+| Trees | tree_depth_dfs, tree_level_order, tree_path, tree_dp, lca_tree, validate_bst |
+| Linked Lists | linked_list_cycle, merge_k_sorted |
+| Searching / Two Pointers | binary_search, two_pointers, sliding_window, sliding_window_max |
+| Prefix / Difference Arrays | prefix_sum, difference_array |
+| Matrix | spiral_matrix, rotate_matrix, number_of_islands |
+| Backtracking | backtracking, word_search, combination_sum, subsets, permutations |
+| String Algorithms | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
+| Hashing / Sets | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, valid_parentheses, task_scheduler |
+| Math / Bit Manipulation | sieve_primes, fast_power, gcd_algorithm, majority_vote, bit_ops, math_simulation |
 | Complexity Theory | poly_reduction |
-| Backtracking | backtracking, word_search |
-| Algorithms | rotate_array |
-| Tier 2 — Data Structures | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations |
-| Tier 2 — Algorithms | prefix_sum, bit_ops, math_simulation, greedy_choice |
+| Misc | rotate_array |
 
 ---
 
@@ -1027,8 +1024,9 @@ Student pastes problem
     │  create_visualization / create_graph ─────────────────────► client: mount renderer
     │                                                             │
     │  run_algorithm ───────────────────────────────────────────► registry.js
-    │      └── Tier 1: hand-written run()                         │
-    │          Tier 2: cache.js → sandbox.js → authorAgent.js    │
+    │      └── Tier 1: hand-written run() (all 92 known algos)    │
+    │          Tier 2: cache.js → sandbox.js → authorAgent.js     │
+    │                 (only for unknown LeetCode patterns)         │
     │          returns: { trace, renderer, input, tier }          │
     │                                                             │
     │  emit_segment(narration, trace_step_indices) ─────────────► agentLib.handleToolCall

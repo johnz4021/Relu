@@ -131,6 +131,8 @@ const PANEL_DEFAULTS = {
 
   // --- Phase 2 new implementations ---
   topological_sort: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.topological_sort } },
     { id: 'in_degrees', type: 'key_value', title: 'In-Degrees' },
     { id: 'queue', type: 'collection', title: 'Zero-Degree Queue' },
     { id: 'sorted', type: 'collection', title: 'Sorted Order' },
@@ -221,43 +223,107 @@ const PANEL_DEFAULTS = {
     { id: 'algorithm_state', type: 'key_value', title: 'Vote State' },
   ],
 
-  // --- Array/table/string renderer patterns (no context panels needed) ---
+  // --- Array/table/string renderer patterns ---
   prefix_sum: [],
   difference_array: [],
-  lis: [],
-  stock_dp: [],
+  lis: [
+    { id: 'dp_state', type: 'key_value', title: 'Tails Array' },
+  ],
+  stock_dp: [
+    { id: 'state_machine', type: 'key_value', title: 'State Machine' },
+  ],
   interval_dp: [],
   palindrome_dp: [],
   bitmask_dp: [],
-  house_robber: [],
+  house_robber: [
+    { id: 'dp_values', type: 'key_value', title: 'DP Values' },
+  ],
   sieve_primes: [],
-  spiral_matrix: [],
-  rotate_matrix: [],
+  spiral_matrix: [
+    { id: 'boundaries', type: 'key_value', title: 'Spiral Bounds' },
+  ],
+  rotate_matrix: [
+    { id: 'phase', type: 'key_value', title: 'Phase' },
+  ],
   combination_sum: [],
   subsets: [],
   permutations: [],
-  sliding_window_max: [],
+  sliding_window_max: [
+    { id: 'deque_state', type: 'collection', title: 'Monotonic Deque' },
+  ],
   jump_game: [],
-  rabin_karp: [],
-  manacher: [],
+  rabin_karp: [
+    { id: 'hash_state', type: 'key_value', title: 'Hash Values' },
+  ],
+  manacher: [
+    { id: 'palindrome_state', type: 'key_value', title: 'Palindrome State' },
+  ],
 
   // --- Graph renderer patterns ---
-  multi_source_bfs: [],
-  floyd_warshall: [],
-  tarjan_bridges: [],
-  bipartite_check: [],
-  dijkstra_k_stops: [],
-  number_of_islands: [],
+  multi_source_bfs: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.multi_source_bfs } },
+    { id: 'distances', type: 'key_value', title: 'Time to Reach' },
+  ],
+  floyd_warshall: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.floyd_warshall } },
+    { id: 'distances', type: 'key_value', title: 'All-Pairs Distances' },
+    { id: 'via_node', type: 'key_value', title: 'Current Via Node' },
+  ],
+  tarjan_bridges: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.tarjan_bridges } },
+    { id: 'dfs_state', type: 'key_value', title: 'disc[ ] / low[ ]' },
+    { id: 'bridges', type: 'log', title: 'Bridges Found' },
+  ],
+  bipartite_check: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.bipartite_check } },
+    { id: 'coloring', type: 'key_value', title: 'Node Colors' },
+    { id: 'decisions', type: 'log', title: 'Edge Decisions' },
+  ],
+  dijkstra_k_stops: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.dijkstra_k_stops } },
+    { id: 'distances', type: 'key_value', title: 'Min Cost to Node' },
+    { id: 'stop_info', type: 'key_value', title: 'Stop Budget' },
+  ],
+  number_of_islands: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.number_of_islands } },
+  ],
 
   // --- Tree renderer patterns ---
-  top_k_heap: [],
-  median_finder: [],
-  k_closest_points: [],
-  tree_dp: [],
-  lca_tree: [],
-  validate_bst: [],
-  linked_list_cycle: [],
-  merge_k_sorted: [],
+  top_k_heap: [
+    { id: 'heap_contents', type: 'collection', title: 'Heap (Top-K)' },
+  ],
+  median_finder: [
+    { id: 'heap_stats', type: 'key_value', title: 'Heap State' },
+  ],
+  k_closest_points: [
+    { id: 'heap_contents', type: 'collection', title: 'K Closest So Far' },
+  ],
+  tree_dp: [
+    { id: 'dp_values', type: 'key_value', title: 'Path Values' },
+  ],
+  lca_tree: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.lca_tree } },
+    { id: 'search_state', type: 'key_value', title: 'Search State' },
+  ],
+  validate_bst: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.validate_bst } },
+    { id: 'valid_range', type: 'key_value', title: 'Valid Range' },
+  ],
+  linked_list_cycle: [
+    { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
+  ],
+  merge_k_sorted: [
+    { id: 'heap_state', type: 'collection', title: 'Min-Heap' },
+    { id: 'result_so_far', type: 'log', title: 'Merged Result' },
+  ],
 
   // --- Legacy fallback entries ---
   matrix_dp: [
