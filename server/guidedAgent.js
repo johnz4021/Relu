@@ -2,7 +2,7 @@
 
 import { tools } from './tools.js';
 import { ALGORITHMS, runRegisteredAlgorithm } from './algorithms/registry.js';
-import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels } from './agentLib.js';
+import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState } from './agentLib.js';
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
 import { CANONICAL_EXAMPLES } from './examples/canonicalExamples.js';
 import { getDefaultContextPanels, getModeDefaultPanels } from './contextPanelDefaults.js';
@@ -1187,6 +1187,12 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
       if (emptyEndTurnCount >= 3) {
         // Safety valve: 3 consecutive empty end_turns = force completion
         console.log('[GuidedAgent] Safety valve: 3 consecutive empty end_turns, forcing lesson_complete');
+        if (session._illustrationActive) {
+          console.warn('[GuidedAgent] Safety valve: illustration still active, auto-restoring before lesson_complete');
+          session._illustrationActive = false;
+          sendJSON(ws, { type: 'explanation_complete' });
+          await restoreGraphState(session, ws);
+        }
         if (!session.followUpSent) {
           session.followUpSent = true;
           sendJSON(ws, { type: 'lesson_complete' });
@@ -1694,6 +1700,13 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
             };
           }
         } else if (block.name === 'lesson_complete') {
+          // Auto-restore if agent forgot to call end_illustration before wrapping up
+          if (session._illustrationActive) {
+            console.warn('[lesson_complete] illustration still active, auto-restoring before lesson_complete');
+            session._illustrationActive = false;
+            sendJSON(ws, { type: 'explanation_complete' });
+            await restoreGraphState(session, ws);
+          }
           // Check if there are remaining batch parts to work through
           if (selectedParts.length > 1 && activePart) {
             solverResultsMap[activePart]._completed = true;
