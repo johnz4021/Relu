@@ -140,6 +140,34 @@ const WIP_RENDERER_GAPS = new Set([
   // (none — all renderers used by registry have a case in mapTraceStep)
 ]);
 
+// Algorithms whose mapper output references nodes/edges/cells that don't exist
+// in the trace's known geometry. This catches typos like step.node_id vs step.node
+// where the mapper reads the wrong field and emits actions with `node: undefined`.
+const WIP_ACTION_VALIDITY_GAPS = new Set([
+  // (populated on first run)
+]);
+
+// Algorithms whose mapper output is ONLY the generic-fallback shape:
+// a single ctxUpdate('algorithm_state', { entries: [{ key, value: description }] }).
+// Generic fallback prevents test 1 from failing but produces no meaningful viz.
+// Promote out of this list by adding algo-specific branches in vizMapper.js.
+const WIP_GENERIC_ONLY_GAPS = new Set([
+  // (populated on first run)
+]);
+
+// Algorithms where mapper-emitted renderer types do NOT match a registered
+// panel id under the realistic registration scenarios (graph_main, array_main, etc.).
+// This catches the production-bug class where mapper emits renderer:'graph' but
+// the agent's build_example_graph registered the panel as 'graph_main', causing
+// the client to buffer actions as unregistered.
+const WIP_RENDERER_ROUTING_GAPS = new Set([
+  // mergesort uses a multi-panel viz (array + recursion_tree). The simulation
+  // here models single-panel scenarios only, so cross-renderer 'recursion_tree'
+  // actions look unrouted. Multi-panel modeling is a separate test improvement;
+  // this is not a real production bug.
+  'mergesort',
+]);
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractCaseStrings(source) {
@@ -297,5 +325,232 @@ describe('vizMapper coverage — registry exhaustiveness', () => {
         );
       }
     });
+  });
+
+  // ── 5. Action validity ─────────────────────────────────────────────────────
+  // For each algorithm, every emitted action that references a node/edge/cell
+  // must reference one that actually exists in the trace's known geometry.
+  // Catches typos like reading step.node_id when the producer set step.node.
+  describe('5. Emitted actions reference valid trace geometry', () => {
+    for (const algoId of allAlgos) {
+      it(`${algoId}: emitted actions reference known nodes/cells`, () => {
+        const { trace, renderer } = runAlgo(algoId);
+        const state = {};
+
+        // Build the universe of valid identifiers from the trace
+        const knownNodeIds = new Set();
+        const knownArrayLength = { value: 0 };
+        const knownTableDims = { rows: 0, cols: 0 };
+        const knownStringLength = { value: 0 };
+        for (const step of trace) {
+          if (Array.isArray(step.nodes)) {
+            for (const n of step.nodes) if (n.id !== undefined) knownNodeIds.add(String(n.id));
+          }
+          if (step.tree?.nodes) {
+            for (const n of step.tree.nodes) if (n.id !== undefined) knownNodeIds.add(String(n.id));
+          }
+          if (step.graph?.nodes) {
+            for (const n of step.graph.nodes) if (n.id !== undefined) knownNodeIds.add(String(n.id));
+          }
+          if (Array.isArray(step.array)) knownArrayLength.value = Math.max(knownArrayLength.value, step.array.length);
+          if (step.rows !== undefined) knownTableDims.rows = Math.max(knownTableDims.rows, step.rows);
+          if (step.cols !== undefined) knownTableDims.cols = Math.max(knownTableDims.cols, step.cols);
+          if (step.size !== undefined) knownTableDims.cols = Math.max(knownTableDims.cols, step.size);
+          if (typeof step.s === 'string') knownStringLength.value = Math.max(knownStringLength.value, step.s.length);
+          if (typeof step.transformed === 'string') knownStringLength.value = Math.max(knownStringLength.value, step.transformed.length);
+        }
+
+        const violations = [];
+        for (let i = 0; i < trace.length; i++) {
+          const step = trace[i];
+          if (KNOWN_NARRATION_ONLY.has(step.type)) continue;
+          if (Array.isArray(step.viz_actions) && step.viz_actions.length > 0) continue;
+
+          const { viz } = mapTraceStep(algoId, renderer, step, state);
+          for (const act of viz || []) {
+            const p = act.params || {};
+            const checks = [];
+            if (p.node !== undefined) checks.push(['node', String(p.node)]);
+            if (p.id !== undefined) checks.push(['id', String(p.id)]);
+            if (p.from !== undefined && p.from !== '') checks.push(['from', String(p.from)]);
+            if (p.to !== undefined) checks.push(['to', String(p.to)]);
+
+            for (const [field, value] of checks) {
+              if (value === 'undefined' || value === '') {
+                violations.push(`step ${i} (${step.type}): ${act.action} has ${field}=${JSON.stringify(value)}`);
+                continue;
+              }
+              // Only enforce graph-id membership for graph/tree renderers
+              if ((renderer === 'graph' || renderer === 'tree') && knownNodeIds.size > 0 && !knownNodeIds.has(value)) {
+                violations.push(`step ${i} (${step.type}): ${act.action} references ${field}=${value} not in trace nodes`);
+              }
+            }
+            // Array bounds
+            if (renderer === 'array' && Array.isArray(p.indices) && knownArrayLength.value > 0) {
+              for (const idx of p.indices) {
+                if (idx < 0 || idx >= knownArrayLength.value) {
+                  violations.push(`step ${i} (${step.type}): ${act.action} has out-of-bounds index ${idx} (array length ${knownArrayLength.value})`);
+                }
+              }
+            }
+            // Table bounds
+            if (renderer === 'table' && p.row !== undefined && knownTableDims.rows > 0) {
+              if (p.row < 0 || p.row >= knownTableDims.rows) {
+                violations.push(`step ${i} (${step.type}): ${act.action} has out-of-bounds row ${p.row} (rows ${knownTableDims.rows})`);
+              }
+            }
+          }
+        }
+
+        const isWip = WIP_ACTION_VALIDITY_GAPS.has(algoId);
+        if (violations.length > 0 && !isWip) {
+          throw new Error(
+            `${algoId}: ${violations.length} action(s) reference invalid geometry. ` +
+            `First: ${violations.slice(0, 3).join(' | ')}. ` +
+            `Likely cause: mapper reads a step field that the producer doesn't set ` +
+            `(check field-name match between trace.push and mapTraceStep).`
+          );
+        }
+        if (violations.length === 0 && isWip) {
+          throw new Error(`${algoId}: no longer has validity violations. Remove from WIP_ACTION_VALIDITY_GAPS.`);
+        }
+      });
+    }
+  });
+
+  // ── 6. Generic-fallback detection ──────────────────────────────────────────
+  // Catches algorithms where mapper output is JUST a description-only ctxUpdate
+  // to 'algorithm_state' — the test 1 silencer that emits no meaningful viz.
+  describe('6. Mapper output is more than the generic fallback', () => {
+    function isGenericFallbackOnly(viz, ctx) {
+      if ((viz?.length ?? 0) > 0) return false;
+      if ((ctx?.length ?? 0) === 0) return false;
+      return ctx.every((act) => {
+        if (act.renderer !== 'context') return false;
+        if (act.action !== 'update') return false;
+        if (act.params?.panel_id !== 'algorithm_state') return false;
+        return true;
+      });
+    }
+
+    for (const algoId of allAlgos) {
+      it(`${algoId}: produces specialized output, not just generic fallback`, () => {
+        const { trace, renderer } = runAlgo(algoId);
+        const state = {};
+
+        let totalNonNarrationSteps = 0;
+        let genericOnlySteps = 0;
+
+        for (const step of trace) {
+          if (KNOWN_NARRATION_ONLY.has(step.type)) continue;
+          if (Array.isArray(step.viz_actions) && step.viz_actions.length > 0) continue;
+          totalNonNarrationSteps++;
+
+          const { viz, ctx } = mapTraceStep(algoId, renderer, step, state);
+          if (isGenericFallbackOnly(viz, ctx)) genericOnlySteps++;
+        }
+
+        // An algorithm "fails" if MORE THAN HALF its steps emit only generic fallback
+        const isAllGeneric = totalNonNarrationSteps > 0 && genericOnlySteps / totalNonNarrationSteps > 0.5;
+        const isWip = WIP_GENERIC_ONLY_GAPS.has(algoId);
+
+        if (isAllGeneric && !isWip) {
+          throw new Error(
+            `${algoId}: ${genericOnlySteps}/${totalNonNarrationSteps} steps emit ONLY generic ` +
+            `fallback (ctxUpdate('algorithm_state', description)). Add specialized branches in ` +
+            `mapTraceStep — the generic fallback exists to silence test 1, not to ship.`
+          );
+        }
+        if (!isAllGeneric && isWip) {
+          throw new Error(`${algoId}: now produces specialized output. Remove from WIP_GENERIC_ONLY_GAPS.`);
+        }
+      });
+    }
+  });
+
+  // ── 7. Renderer routing simulation ─────────────────────────────────────────
+  // Replicates agentLib.js emit_segment renderer-rewrite logic. For each
+  // algorithm, simulates the realistic build_example_graph scenario where the
+  // panel is registered under a custom id (e.g. 'graph_main' for grids), runs
+  // the mapper, applies the rewrite, and asserts every emitted action targets
+  // a panel that would actually be registered. Catches the production-bug class
+  // where mapper emits renderer:'graph' but the panel is 'graph_main'.
+  describe('7. Mapper actions route to a registered panel after agentLib rewrite', () => {
+    // Realistic panel-id scenarios per renderer type. The agent's build_example_graph
+    // typically uses '<renderer>_main' for custom-named panels.
+    const PANEL_SCENARIOS = {
+      graph: ['graph', 'graph_main'],
+      array: ['array', 'array_main'],
+      table: ['table', 'table_main'],
+      tree: ['tree', 'tree_main'],
+      linked: ['linked', 'linked_main'],
+      interval: ['interval', 'interval_main'],
+      string: ['string', 'string_main'],
+      context: ['algorithm_state'],  // context-renderer algos always use this id
+    };
+
+    function simulateRewrite(actions, rendererType, registeredPanelId) {
+      // Replicates agentLib.js:565-571 — only rewrite if a custom panel id differs
+      // from the renderer type.
+      if (registeredPanelId && rendererType && registeredPanelId !== rendererType) {
+        return actions.map((act) =>
+          act.renderer === rendererType ? { ...act, renderer: registeredPanelId } : act
+        );
+      }
+      return actions;
+    }
+
+    for (const algoId of allAlgos) {
+      it(`${algoId}: actions route to a registered panel`, () => {
+        const { trace, renderer } = runAlgo(algoId);
+        const scenarios = PANEL_SCENARIOS[renderer];
+        if (!scenarios) {
+          throw new Error(`No panel scenarios defined for renderer '${renderer}' (algo ${algoId})`);
+        }
+
+        const violations = [];
+        for (const panelId of scenarios) {
+          // Registered panels for this scenario. Includes the renderer panel + standard
+          // context panel ids that any algorithm could target.
+          const registered = new Set([
+            panelId,
+            // Context panels are registered under their declared id; assume any context
+            // action's panel_id is registered (covered by getDefaultContextPanels).
+          ]);
+
+          const state = {};
+          for (let i = 0; i < trace.length; i++) {
+            const step = trace[i];
+            if (KNOWN_NARRATION_ONLY.has(step.type)) continue;
+            if (Array.isArray(step.viz_actions) && step.viz_actions.length > 0) continue;
+
+            const { viz } = mapTraceStep(algoId, renderer, step, state);
+            const rewritten = simulateRewrite(viz || [], renderer, panelId);
+            for (const act of rewritten) {
+              if (act.renderer === 'context') continue;  // context routing tested elsewhere
+              if (!registered.has(act.renderer)) {
+                violations.push(
+                  `[panel=${panelId}] step ${i} (${step.type}): ` +
+                  `${act.action} routed to '${act.renderer}' (not registered)`
+                );
+              }
+            }
+          }
+        }
+
+        const isWip = WIP_RENDERER_ROUTING_GAPS.has(algoId);
+        if (violations.length > 0 && !isWip) {
+          throw new Error(
+            `${algoId}: ${violations.length} action(s) target unregistered panel after rewrite. ` +
+            `First: ${violations.slice(0, 3).join(' | ')}. ` +
+            `Fix: ensure agentLib's run_algorithm graph branch sets _rendererPanelId to ` +
+            `the custom panel id when one is registered (e.g. 'graph_main').`
+          );
+        }
+        if (violations.length === 0 && isWip) {
+          throw new Error(`${algoId}: now routes correctly. Remove from WIP_RENDERER_ROUTING_GAPS.`);
+        }
+      });
+    }
   });
 });

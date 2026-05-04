@@ -29,7 +29,7 @@ export function multiSourceBfs(input) {
     type: 'init',
     description: `Multi-source BFS from ${queue.length} rotten orange(s) on ${rows}×${cols} grid`,
     nodes, edges,
-    source: queue.map(([r,c]) => `${r},${c}`).join(','),
+    sources: queue.map(([r,c]) => `${r},${c}`),
     distances: Object.fromEntries(nodes.map(n => [n.id, dist[+n.id.split(',')[0]][+n.id.split(',')[1]]])),
     pseudocode_line: 1,
   });

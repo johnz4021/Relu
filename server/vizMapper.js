@@ -253,8 +253,10 @@ function mapGraphStep(algo, step, state) {
           })),
         }));
       } else if (algo === 'multi_source_bfs') {
-        // Sources start rotten — paint them as a persistent trail
-        const sources = (step.source || '').split(',').filter(Boolean);
+        // Sources start rotten — paint them as a persistent trail.
+        // step.sources is an array of node ids ['0,0', '2,1', ...]; the older
+        // comma-joined string was ambiguous when ids themselves contain commas.
+        const sources = Array.isArray(step.sources) ? step.sources : [];
         for (const s of sources) {
           v.push(viz('graph', 'highlight_node', { node: s, className: 'visited' }));
         }

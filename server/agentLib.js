@@ -430,6 +430,16 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               session.currentGraph = graphData;
               session._lastVizMessage = autoGraphMsg;
             }
+            // If the agent pre-registered a custom-named graph panel (e.g. 'graph_main'
+            // from build_example_graph), point _rendererPanelId at it so emit_segment
+            // rewrites mapper-emitted 'graph' actions to that panel id. Without this,
+            // mapper actions buffer as unregistered renderer 'graph' on the client.
+            const existingGraphEntry = Object.entries(session._panels || {}).find(
+              ([id, p]) => p.renderer === 'graph' && p.type === 'renderer' && id !== 'graph'
+            );
+            if (existingGraphEntry) {
+              session._rendererPanelId = existingGraphEntry[0];
+            }
             // Send context panels via create_visualization
             if (contextPanels.length > 0) {
               sendJSON(ws, {
