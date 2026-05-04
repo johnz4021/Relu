@@ -290,4 +290,77 @@ describe('pipeline coverage — full server-side flow per algorithm', () => {
       });
     }
   });
+
+  // Catches the lca_tree class of bug: panel mounts, mapper emits highlight_node /
+  // mark_current / etc., but never sends the initial set_<structure> action — so
+  // the client-side renderer stays in its "Waiting for X data..." empty state
+  // even though Tier 1 routing tests pass.
+  //
+  // Algos using the renderer types listed below must, *somewhere in the trace*,
+  // emit at least one structure-establishing action so the renderer leaves its
+  // empty state. Most emit it on init. Some (like bst_insert) build the structure
+  // incrementally and emit on the first mutating step. Either is fine — the test
+  // only requires that *one* such action lands during a normal end-to-end run.
+  describe('renderer initial-state: structural action fires before render-only actions', () => {
+    // Renderer-specific empty-state-clearing actions. Each renderer guards a
+    // "Waiting for X data..." block that disappears once one of these actions
+    // populates its state. Some renderers accept multiple shapes: e.g. the
+    // linked renderer leaves empty state once either set_list (with values),
+    // push, enqueue, or insert_after lands. Action names taken from each
+    // client/src/components/renderers/*.jsx applyAction switch.
+    const REQUIRED_INIT_ACTIONS = {
+      tree: ['set_tree', 'insert_node'],
+      array: ['set_data'],
+      table: ['init_grid'],
+      linked: ['set_list', 'push', 'enqueue', 'insert_after'],
+      interval: ['set_jobs'],
+      string: ['set_string'],
+    };
+
+    // Algos with the bug whose fix is deferred (need a runner refactor that
+    // ships separately). Each: runner emits non-structural render-only actions,
+    // so the renderer's "Waiting for X data..." empty state never clears in
+    // production. Fix path: emit the wire-format structure on init or on the
+    // first mutating step. lca_tree/validate_bst were fixed in the same commit
+    // that introduced this test. Drive WIP_NO_STRUCTURAL_ACTION to empty.
+    const WIP_NO_STRUCTURAL_ACTION = new Set([
+      'tree_dp',
+      'top_k_heap',
+      'median_finder',
+      'k_closest_points',
+      'linked_list_cycle',
+      'merge_k_sorted',
+      'stock_dp',
+      'interval_dp',
+      'palindrome_dp',
+      'bitmask_dp',
+    ]);
+
+    for (const algoId of allAlgos) {
+      const algoInfo = ALGORITHMS[algoId];
+      const required = REQUIRED_INIT_ACTIONS[algoInfo.renderer];
+      if (!required) continue;
+
+      it(`${algoId}: emits a ${algoInfo.renderer}-structure action (one of ${required.join('/')}) in trace`, async () => {
+        const { actions } = await runPipeline(algoId, 'bare');
+        const structuralActions = actions.filter(
+          (a) => a.renderer !== 'context' && required.includes(a.action)
+        );
+        const isWip = WIP_NO_STRUCTURAL_ACTION.has(algoId);
+        if (structuralActions.length === 0 && !isWip) {
+          const renderActions = actions.filter((a) => a.renderer !== 'context');
+          throw new Error(
+            `${algoId}: trace emitted ${renderActions.length} render-target action(s) but NONE were structural ` +
+            `(${required.join('/')}). The renderer would mount and stay in its "Waiting for ${algoInfo.renderer} data..." ` +
+            `empty state forever. Likely cause: the algorithm runner doesn't include the wire-format structure on its init ` +
+            `step (e.g. a Map<index,node> never gets serialized to {nodes,edges,root}). ` +
+            `Render actions emitted: ${renderActions.slice(0, 5).map((a) => a.action).join(', ')}.`
+          );
+        }
+        if (structuralActions.length > 0 && isWip) {
+          throw new Error(`${algoId}: now emits a structural action. Remove from WIP_NO_STRUCTURAL_ACTION.`);
+        }
+      });
+    }
+  });
 });

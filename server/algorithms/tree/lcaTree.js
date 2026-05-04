@@ -20,6 +20,22 @@ function buildTree(levelOrder) {
   return nodes;
 }
 
+function serializeTree(nodeMap) {
+  const nodes = [];
+  const edges = [];
+  if (nodeMap.size === 0) return { nodes, edges, root: null };
+  for (const [i, node] of nodeMap) {
+    nodes.push({ id: node.id, value: node.val });
+    if (node.left !== null && nodeMap.has(node.left)) {
+      edges.push({ from: node.id, to: String(node.left), side: 'left' });
+    }
+    if (node.right !== null && nodeMap.has(node.right)) {
+      edges.push({ from: node.id, to: String(node.right), side: 'right' });
+    }
+  }
+  return { nodes, edges, root: '0' };
+}
+
 // ── lca_tree — Lowest Common Ancestor (binary tree, DFS post-order) ───────────
 export function lcaTree(input) {
   const nodes_arr = input.nodes || [3, 5, 1, 6, 2, 0, 8, null, null, 7, 4];
@@ -31,6 +47,7 @@ export function lcaTree(input) {
 
   trace.push({
     type: 'init',
+    tree: serializeTree(nodeMap),
     description: `LCA of nodes p=${p} and q=${q} in binary tree. Post-order DFS: bubble up when p or q found.`,
     node: '0',
     parent: null,
@@ -98,6 +115,7 @@ export function validateBst(input) {
 
   trace.push({
     type: 'init',
+    tree: serializeTree(nodeMap),
     description: `Validate BST: DFS with min/max bounds. Each node must be strictly within (min, max).`,
     node: '0',
     parent: null,
