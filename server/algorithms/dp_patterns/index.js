@@ -61,8 +61,12 @@ export function stockDp(input) {
   let held = -Infinity, sold = 0, rest = 0;
 
   trace.push({
-    type: 'init',
+    type: 'init_table',
     description: `Stock DP with cooldown over ${prices.length} days. States: held/sold/rest`,
+    rows: prices.length + 1,
+    cols: 3,
+    rowLabels: ['init', ...prices.map((p, i) => `Day ${i} (${p})`)],
+    colLabels: ['held', 'sold', 'rest'],
     row: 0, col: 0,
     held, sold, rest,
   });
@@ -110,6 +114,10 @@ export function intervalDp(input) {
   trace.push({
     type: 'init_table',
     description: `Burst Balloons: dp[i][j] = max coins bursting balloons (i..j). Padded: [${balloons.join(', ')}]`,
+    rows: n,
+    cols: n,
+    rowLabels: balloons.map((b, i) => `i=${i} (${b})`),
+    colLabels: balloons.map((b, i) => `j=${i} (${b})`),
     row: 0, col: 0, value: 0,
   });
 
@@ -158,6 +166,10 @@ export function palindromeDp(input) {
   trace.push({
     type: 'init_table',
     description: `LPS in "${s}": dp[i][j] = longest palindromic subsequence in s[i..j]. Diagonal = 1.`,
+    rows: n,
+    cols: n,
+    rowLabels: Array.from(s).map((ch, i) => `i=${i} (${ch})`),
+    colLabels: Array.from(s).map((ch, i) => `j=${i} (${ch})`),
     row: 0, col: 0, value: 1,
   });
 
@@ -213,6 +225,10 @@ export function bitmaskDp(input) {
   trace.push({
     type: 'init_table',
     description: `TSP Bitmask DP on ${n} cities. dp[mask][city] = min cost visiting cities in mask, ending at city.`,
+    rows: 1 << n,
+    cols: n,
+    rowLabels: Array.from({ length: 1 << n }, (_, m) => m.toString(2).padStart(n, '0')),
+    colLabels: Array.from({ length: n }, (_, i) => `city ${i}`),
     row: 1, col: 0, value: 0,
   });
 

@@ -330,10 +330,6 @@ describe('pipeline coverage — full server-side flow per algorithm', () => {
       'k_closest_points',
       'linked_list_cycle',
       'merge_k_sorted',
-      'stock_dp',
-      'interval_dp',
-      'palindrome_dp',
-      'bitmask_dp',
     ]);
 
     for (const algoId of allAlgos) {
