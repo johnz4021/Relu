@@ -147,43 +147,18 @@ function checkActionsRouted(actions, registeredPanels) {
 // ── WIP allowlists ───────────────────────────────────────────────────────────
 
 // Algorithms whose pipeline-level integration is known broken under the bare
-// scenario (no build_example_graph custom panel). Each entry means: the algo's
-// mapper writes to a context panel id that getDefaultContextPanels never
-// registered, so those updates silently no-op in production.
-//
-// Fix per algo: open `server/contextPanelDefaults.js`, find the algo's entry,
-// add the missing panel id (use the harness output to identify which panels
-// are being written but not registered).
-//
-// Drive to empty.
+// scenario. Each entry: getDefaultContextPanels missing a panel id the mapper
+// writes to. Fix by adding the missing panel to the algo's entry in
+// `server/contextPanelDefaults.js`. Drive to empty.
 const WIP_BARE_GAPS = new Set([
-  'binary_search', 'bitmask_dp', 'climbing_stairs', 'combination_sum', 'dfs',
-  'difference_array', 'heap_ops', 'house_robber', 'interval_dp', 'jump_game',
-  'k_closest_points', 'lca_tree', 'linked_list_cycle', 'lis', 'manacher',
-  'max_subarray', 'median_finder', 'merge_k_sorted', 'mergesort', 'min_path_sum',
-  'number_of_islands', 'palindrome_dp', 'permutations', 'poly_reduction',
-  'prefix_sum', 'prim', 'rabin_karp', 'rotate_array', 'rotate_matrix',
-  'sieve_primes', 'sliding_window', 'sliding_window_max', 'spiral_matrix',
-  'stock_dp', 'subsets', 'tarjan_bridges', 'top_k_heap', 'tree_depth_dfs',
-  'tree_dp', 'tree_level_order', 'tree_path', 'trie', 'two_pointers',
-  'union_find', 'validate_bst', 'word_break', 'word_search',
+  // mergesort multi-panel (recursion_tree renderer alongside array) is a
+  // separate scope — see Phase 2 in the cleanup plan.
+  'mergesort',
 ]);
 
-// Algorithms whose pipeline-level integration is known broken under the
-// custom-named-panel scenario (simulates build_example_graph). Same root
-// causes as WIP_BARE_GAPS; populated identically since context-panel
-// registration doesn't depend on the renderer panel scenario.
+// Same as WIP_BARE_GAPS but for the build_example_graph-pre-registered scenario.
 const WIP_CUSTOM_PANEL_GAPS = new Set([
-  'binary_search', 'bitmask_dp', 'climbing_stairs', 'combination_sum', 'dfs',
-  'difference_array', 'heap_ops', 'house_robber', 'interval_dp', 'jump_game',
-  'k_closest_points', 'lca_tree', 'linked_list_cycle', 'lis', 'manacher',
-  'max_subarray', 'median_finder', 'merge_k_sorted', 'mergesort', 'min_path_sum',
-  'number_of_islands', 'palindrome_dp', 'permutations', 'poly_reduction',
-  'prefix_sum', 'prim', 'rabin_karp', 'rotate_array', 'rotate_matrix',
-  'sieve_primes', 'sliding_window', 'sliding_window_max', 'spiral_matrix',
-  'stock_dp', 'subsets', 'tarjan_bridges', 'top_k_heap', 'tree_depth_dfs',
-  'tree_dp', 'tree_level_order', 'tree_path', 'trie', 'two_pointers',
-  'union_find', 'validate_bst', 'word_break', 'word_search',
+  'mergesort',
 ]);
 
 // Algorithms that legitimately produce panel updates from <2 distinct panels

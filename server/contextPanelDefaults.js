@@ -24,6 +24,7 @@ const PANEL_DEFAULTS = {
   dfs: [
     { id: 'visited', type: 'collection', title: 'Visited' },
     { id: 'stack', type: 'collection', title: 'Call Stack' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   kruskal: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -34,6 +35,7 @@ const PANEL_DEFAULTS = {
   prim: [
     { id: 'keys', type: 'key_value', title: 'Keys' },
     { id: 'decisions', type: 'log', title: 'Decisions' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   maxflow: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -47,6 +49,9 @@ const PANEL_DEFAULTS = {
   mergesort: [
     { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // (mergesort emits actions targeting a 'recursion_tree' renderer panel
+  //  in addition to the 'array' renderer; multi-panel registration is handled
+  //  by build_example_graph rather than this default list.)
 
   // --- DP algorithms ---
   knapsack: [
@@ -71,6 +76,8 @@ const PANEL_DEFAULTS = {
       ] } },
     { id: 'reduction_status', type: 'key_value', title: 'Reduction' },
     { id: 'log', type: 'log', title: 'Construction Log' },
+    { id: 'concepts', type: 'log', title: 'Concepts' },
+    { id: 'attempt_log', type: 'log', title: 'Attempts' },
   ],
 
   // --- Divide and Conquer ---
@@ -106,7 +113,10 @@ const PANEL_DEFAULTS = {
 
   // --- Phase 1 free wins ---
   binary_search: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.binary_search } },
     { id: 'bounds', type: 'key_value', title: 'Search Bounds' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   coin_change: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
@@ -139,6 +149,7 @@ const PANEL_DEFAULTS = {
   ],
   two_pointers: [
     { id: 'search_state', type: 'key_value', title: 'Search State' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   interval_merge: [
     { id: 'stats', type: 'key_value', title: 'State' },
@@ -224,39 +235,86 @@ const PANEL_DEFAULTS = {
   ],
 
   // --- Array/table/string renderer patterns ---
-  prefix_sum: [],
-  difference_array: [],
+  prefix_sum: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  difference_array: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
   lis: [
     { id: 'dp_state', type: 'key_value', title: 'Tails Array' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   stock_dp: [
     { id: 'state_machine', type: 'key_value', title: 'State Machine' },
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
-  interval_dp: [],
-  palindrome_dp: [],
-  bitmask_dp: [],
+  interval_dp: [
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+  ],
+  palindrome_dp: [
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+  ],
+  bitmask_dp: [
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+  ],
   house_robber: [
     { id: 'dp_values', type: 'key_value', title: 'DP Values' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
-  sieve_primes: [],
+  sieve_primes: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
   spiral_matrix: [
     { id: 'boundaries', type: 'key_value', title: 'Spiral Bounds' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   rotate_matrix: [
     { id: 'phase', type: 'key_value', title: 'Phase' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'expression', type: 'expression', title: 'Operation' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
-  combination_sum: [],
-  subsets: [],
-  permutations: [],
+  combination_sum: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'bounds', type: 'key_value', title: 'Bounds' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  subsets: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  permutations: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'bounds', type: 'key_value', title: 'Bounds' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
   sliding_window_max: [
     { id: 'deque_state', type: 'collection', title: 'Monotonic Deque' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
-  jump_game: [],
+  jump_game: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
   rabin_karp: [
     { id: 'hash_state', type: 'key_value', title: 'Hash Values' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   manacher: [
     { id: 'palindrome_state', type: 'key_value', title: 'Palindrome State' },
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
 
   // --- Graph renderer patterns ---
@@ -276,6 +334,7 @@ const PANEL_DEFAULTS = {
       initial_data: { lines: PSEUDOCODE.tarjan_bridges } },
     { id: 'dfs_state', type: 'key_value', title: 'disc[ ] / low[ ]' },
     { id: 'bridges', type: 'log', title: 'Bridges Found' },
+    { id: 'disc_low', type: 'key_value', title: 'Discovery / Low' },
   ],
   bipartite_check: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -292,37 +351,105 @@ const PANEL_DEFAULTS = {
   number_of_islands: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.number_of_islands } },
+    { id: 'island_count', type: 'key_value', title: 'Islands' },
   ],
 
   // --- Tree renderer patterns ---
   top_k_heap: [
     { id: 'heap_contents', type: 'collection', title: 'Heap (Top-K)' },
+    { id: 'heap_state', type: 'key_value', title: 'Heap State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   median_finder: [
     { id: 'heap_stats', type: 'key_value', title: 'Heap State' },
+    { id: 'heap_state', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   k_closest_points: [
     { id: 'heap_contents', type: 'collection', title: 'K Closest So Far' },
+    { id: 'heap_state', type: 'key_value', title: 'Heap State' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  heap_ops: [
+    { id: 'heap_array', type: 'collection', title: 'Heap Array' },
+    { id: 'heap_state', type: 'key_value', title: 'Heap State' },
   ],
   tree_dp: [
     { id: 'dp_values', type: 'key_value', title: 'Path Values' },
+    { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
   lca_tree: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.lca_tree } },
     { id: 'search_state', type: 'key_value', title: 'Search State' },
+    { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
   validate_bst: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.validate_bst } },
     { id: 'valid_range', type: 'key_value', title: 'Valid Range' },
+    { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
   linked_list_cycle: [
     { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
+    { id: 'tree_state', type: 'key_value', title: 'State' },
   ],
   merge_k_sorted: [
     { id: 'heap_state', type: 'collection', title: 'Min-Heap' },
     { id: 'result_so_far', type: 'log', title: 'Merged Result' },
+    { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
+  ],
+  tree_depth_dfs: [
+    { id: 'expression', type: 'expression', title: 'Computation' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+    { id: 'traversal_order', type: 'collection', title: 'Traversal Order' },
+  ],
+  tree_level_order: [
+    { id: 'queue', type: 'collection', title: 'BFS Queue' },
+    { id: 'traversal_log', type: 'log', title: 'Traversal Log' },
+    { id: 'traversal_order', type: 'collection', title: 'Traversal Order' },
+  ],
+  tree_path: [
+    { id: 'path_state', type: 'key_value', title: 'Path State' },
+    { id: 'traversal_log', type: 'log', title: 'Traversal Log' },
+  ],
+  trie: [
+    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'trie_state', type: 'key_value', title: 'Trie State' },
+  ],
+  union_find: [
+    { id: 'components', type: 'key_value', title: 'Components' },
+    { id: 'parent', type: 'key_value', title: 'Parent Pointers' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+  ],
+  word_search: [
+    { id: 'search_state', type: 'key_value', title: 'Search State' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+  ],
+  word_break: [
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  rotate_array: [
+    { id: 'expression', type: 'expression', title: 'Operation' },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  sliding_window: [
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  max_subarray: [
+    { id: 'kadane_state', type: 'key_value', title: 'Kadane State' },
+  ],
+  // Additional table-renderer DP algos that need expression + decisions
+  // panels that the mapper writes to but were not registered before:
+  climbing_stairs: [
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
+  ],
+  min_path_sum: [
+    { id: 'expression', type: 'expression', title: 'Recurrence' },
+    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
 
   // --- Legacy fallback entries ---
