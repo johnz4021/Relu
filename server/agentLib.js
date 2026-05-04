@@ -236,12 +236,16 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
         const panelId = Object.keys(session.graphs)[0] || 'graph';
         session.graphs[panelId] = graphData;
       }
-      // Register both 'graph' and the named panel ID so either form of renderer target is valid
+      // Register only 'graph' server-side, matching what the client received via
+      // this create_graph message. Previously we also registered the build_example_graph
+      // custom-named panel id (e.g. 'graph_main') in session._panels, but the client
+      // never received a create_visualization for that id — only the bare create_graph.
+      // That asymmetry caused run_algorithm's _rendererPanelId lookup to find the
+      // orphan custom id, set _rendererPanelId, and rewrite mapper-emitted actions to
+      // a renderer the client doesn't have registered. Result: actions buffered as
+      // unregistered. The named-id registration belongs in the create_visualization
+      // handler (line 338), which DOES send the panel to the client.
       registerPanels(session, [{ id: 'graph', renderer: 'graph' }], []);
-      if (session.graphs) {
-        const panelId = Object.keys(session.graphs)[0];
-        if (panelId && panelId !== 'graph') registerPanels(session, [{ id: panelId, renderer: 'graph' }], []);
-      }
       return {
         success: true,
         message: input.variant_id
@@ -420,8 +424,13 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             registerPanels(session, [], contextPanels);
             session._lastVizMessage = autoVizMsg;
           } else if (algoInfo.renderer === 'graph') {
-            // Always send the graph for the current algorithm run
-            const graphData = registryInput.graph || algoInfo.defaultInput?.graph;
+            // Always send the graph for the current algorithm run.
+            // Fall back to the trace's first step's graph for algorithms that
+            // generate their graph dynamically from other input (trie, backtracking,
+            // word_search, etc. — their defaultInput has no top-level `graph` field).
+            const graphData = registryInput.graph
+              || algoInfo.defaultInput?.graph
+              || result.trace?.[0]?.graph;
             if (graphData) {
               const directed = graphData.directed !== undefined ? graphData.directed : true;
               console.log(`[Agent] Auto-creating graph: ${graphData.nodes?.length} nodes, directed=${directed}`);
