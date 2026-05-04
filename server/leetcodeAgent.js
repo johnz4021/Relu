@@ -3,17 +3,26 @@ import { ALGORITHMS } from './algorithms/registry.js';
 
 const client = new Anthropic();
 
-// poly_reduction is a CS theory visualization not present on LeetCode; exclude from LC classification
-const VALID_ALGORITHM_KEYS = Object.keys(ALGORITHMS).filter(k => k !== 'poly_reduction');
+// poly_reduction is a CS theory visualization not present on LeetCode; exclude from LC classification.
+// `broken: true` algos are filtered out so users never land on a silently-empty viz panel —
+// the LC classifier returns null for these problems and the agent falls back to text-only tutor mode.
+// See `broken` field doc comment in algorithms/registry.js for how to clear an entry.
+const VALID_ALGORITHMS = Object.fromEntries(
+  Object.entries(ALGORITHMS).filter(([k, v]) => k !== 'poly_reduction' && !v.broken)
+);
+const VALID_ALGORITHM_KEYS = Object.keys(VALID_ALGORITHMS);
 
 /**
  * Auto-generate the INPUT FORMAT EXAMPLES block from the algorithm registry.
  * Each algorithm's defaultInput is serialized as the format hint for haiku.
  * Hand-authored Use-for/disambiguation rules live separately in EXTRACTION_SYSTEM_PROMPT.
+ *
+ * Caller is expected to pass an already-filtered algorithm map (no poly_reduction,
+ * no broken entries). This function preserves that filter contract as a backstop.
  */
 export function generateInputFormats(algorithms) {
   return Object.entries(algorithms)
-    .filter(([key, entry]) => key !== 'poly_reduction' && entry.defaultInput != null)
+    .filter(([key, entry]) => key !== 'poly_reduction' && !entry.broken && entry.defaultInput != null)
     .map(([key, entry]) => {
       const formatted = JSON.stringify(entry.defaultInput, null, 2)
         .split('\n').map(l => '  ' + l).join('\n');
@@ -73,7 +82,7 @@ const EXTRACTION_SYSTEM_PROMPT = `You are an algorithm classifier for a LeetCode
 
 ALGORITHM KEY → INPUT FORMAT EXAMPLES:
 
-${generateInputFormats(ALGORITHMS)}
+${generateInputFormats(VALID_ALGORITHMS)}
 DISAMBIGUATION RULES:
 - interval_merge vs interval_scheduling: "merge" = combine overlapping ranges → interval_merge; "select max non-overlapping" → interval_scheduling
 - topological_sort vs bfs/dfs: when problem explicitly involves dependency ordering or cycle detection in directed graph → topological_sort

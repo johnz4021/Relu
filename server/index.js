@@ -44,6 +44,30 @@ app.post('/api/session-feedback', (req, res) => {
   res.json({ ok: true });
 });
 
+// Viz request endpoint — fired from the "no viz available" fallback when a user
+// pastes a LeetCode problem we don't classify (or we classify into a `broken: true`
+// algo). Lets us prioritize which deferred algos to fix based on real demand.
+//
+// Reasons:
+//   "no_match"      — classifier returned null algorithm_key
+//   "low_confidence"— classifier returned algo but confidence < 0.7
+//   "broken_algo"   — classifier picked an algo flagged broken in registry
+//   "user_request"  — user clicked "Request a visualization" button explicitly
+app.post('/api/viz-request', (req, res) => {
+  const { email, problem_text, classified_algo, classification_confidence, reason } = req.body;
+  console.log(`[VizRequest] reason=${reason} classified=${classified_algo || 'null'} from=${email || 'anonymous'}`);
+  saveFeedback('viz_request', {
+    email,
+    message: problem_text || '',
+    meta: {
+      classified_algo: classified_algo || null,
+      classification_confidence: classification_confidence ?? null,
+      reason: reason || 'user_request',
+    },
+  });
+  res.json({ ok: true });
+});
+
 const authEnabled = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
 
 // Use noServer so we handle the upgrade ourselves — avoids Vite proxy ECONNRESET noise

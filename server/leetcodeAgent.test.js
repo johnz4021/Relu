@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { generateInputFormats } from './leetcodeAgent.js';
 import { ALGORITHMS } from './algorithms/registry.js';
 
-const VALID_ALGORITHM_KEYS = Object.keys(ALGORITHMS).filter(k => k !== 'poly_reduction');
+// Mirror the LC classifier filter: exclude poly_reduction (CS theory, not on LC)
+// and `broken: true` algos (renderer mounts but never paints — kept out of
+// classification so users don't land on a silently-empty viz).
+const VALID_ALGORITHM_KEYS = Object.keys(ALGORITHMS).filter(
+  k => k !== 'poly_reduction' && !ALGORITHMS[k].broken
+);
 
 describe('generateInputFormats', () => {
   it('produces format block from registry defaultInput', () => {

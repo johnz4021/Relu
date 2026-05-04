@@ -25,6 +25,17 @@ import { slidingWindowMax, DEFAULT_SLIDING_WINDOW_MAX_INPUT, jumpGame, DEFAULT_J
  * - category: grouping for the UI
  * - defaultInput: sample data for demos
  */
+// `broken: true` → renderer mounts but never paints (the renderer's
+// "Waiting for X data..." empty-state guard never clears because the
+// runner doesn't emit a structural action like set_tree / init_grid /
+// set_list with values / set_jobs). Filtered out of the LC classifier in
+// leetcodeAgent.js so users never land on a silently-empty viz.
+//
+// Drain to zero. When fixing one of these:
+//   1. Remove `broken: true` from this entry
+//   2. Remove the algo from WIP_NO_STRUCTURAL_ACTION in
+//      server/algorithms/pipeline.coverage.test.js
+//   3. Verify visually with `/qa` or by re-running the LC problem in browser
 export const ALGORITHMS = {
   dijkstra: {
     run: (input) => dijkstra(input.graph, input.source),
@@ -499,6 +510,7 @@ export const ALGORITHMS = {
     renderer: 'tree', category: 'Dynamic Programming',
     defaultInput: DEFAULT_TREE_DP_INPUT,
     capabilities: {},
+    broken: true,
   },
   house_robber: {
     run: (input) => houseRobber(input),
@@ -545,18 +557,21 @@ export const ALGORITHMS = {
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_TOP_K_HEAP_INPUT,
     capabilities: {},
+    broken: true,
   },
   median_finder: {
     run: (input) => medianFinder(input),
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_MEDIAN_FINDER_INPUT,
     capabilities: {},
+    broken: true,
   },
   k_closest_points: {
     run: (input) => kClosestPoints(input),
     renderer: 'tree', category: 'Algorithms',
     defaultInput: DEFAULT_K_CLOSEST_POINTS_INPUT,
     capabilities: {},
+    broken: true,
   },
 
   // ── Math patterns (Tier 1) ────────────────────────────────────────────────────
@@ -673,12 +688,14 @@ export const ALGORITHMS = {
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_LINKED_LIST_CYCLE_INPUT,
     capabilities: {},
+    broken: true,
   },
   merge_k_sorted: {
     run: (input) => mergeKSorted(input),
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_MERGE_K_SORTED_INPUT,
     capabilities: {},
+    broken: true,
   },
 };
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyMotion, domAnimation } from 'motion/react';
 import VizLayout from './components/VizLayout';
+import VizRequestBanner from './components/VizRequestBanner';
 import GraphRenderer from './components/renderers/GraphRenderer';
 import Transcript from './components/Transcript';
 import Controls from './components/Controls';
@@ -218,7 +219,9 @@ export default function App() {
         setShowCreditsModal(true);
       }
       if (msg.type === 'lc_parsed') {
-        setLcParsed(msg);
+        // Preserve the original problemText (set at submit time) so the
+        // no-viz fallback banner can include it in /api/viz-request.
+        setLcParsed((prev) => ({ ...msg, problemText: prev?.problemText ?? null }));
       }
       if (msg.type === 'lc_viz_ready') {
         if (msg.tier) setVizTier(msg.tier);
@@ -277,7 +280,7 @@ export default function App() {
       sessionStartRef.current = Date.now();
 
       track('leetcode_started', {});
-      setLcParsed({ loading: true });
+      setLcParsed({ loading: true, problemText: data.problemText });
       send({ type: 'start_leetcode', problemText: data.problemText });
     },
     [send, reset, audioPlayer]
@@ -573,6 +576,17 @@ export default function App() {
         ) : transcriptOnly ? (
           <div className="flex-1 flex flex-col items-center overflow-hidden">
             <div className="w-full max-w-2xl flex flex-col flex-1 overflow-hidden">
+              {/* No-viz fallback: classifier returned null OR a broken algo.
+                  Tutor still runs (text-only); offer a way to request the missing viz. */}
+              {lcParsed && !lcParsed.has_viz && lcParsed.problemText && (
+                <VizRequestBanner
+                  problemText={lcParsed.problemText}
+                  classifiedAlgo={lcParsed.algorithm_key}
+                  classificationConfidence={lcParsed.confidence}
+                  userEmail={user?.email}
+                  fallbackReason={lcParsed.fallback_reason}
+                />
+              )}
               <div className="flex-1 overflow-hidden">
                 <Transcript segments={state.segments} agentStatus={state.agentStatus} centered />
               </div>

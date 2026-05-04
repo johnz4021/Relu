@@ -317,20 +317,14 @@ describe('pipeline coverage — full server-side flow per algorithm', () => {
       string: ['set_string'],
     };
 
-    // Algos with the bug whose fix is deferred (need a runner refactor that
-    // ships separately). Each: runner emits non-structural render-only actions,
-    // so the renderer's "Waiting for X data..." empty state never clears in
-    // production. Fix path: emit the wire-format structure on init or on the
-    // first mutating step. lca_tree/validate_bst were fixed in the same commit
-    // that introduced this test. Drive WIP_NO_STRUCTURAL_ACTION to empty.
-    const WIP_NO_STRUCTURAL_ACTION = new Set([
-      'tree_dp',
-      'top_k_heap',
-      'median_finder',
-      'k_closest_points',
-      'linked_list_cycle',
-      'merge_k_sorted',
-    ]);
+    // Algos with the bug whose fix is deferred. Source of truth is the
+    // `broken: true` field on each registry entry. The LC classifier filters
+    // these out so users never land on them. The test continues to allow them
+    // here so the gate stays green while we drain. When you fix one, remove
+    // `broken: true` from registry.js — this set updates automatically.
+    const WIP_NO_STRUCTURAL_ACTION = new Set(
+      Object.entries(ALGORITHMS).filter(([_, v]) => v.broken).map(([k]) => k)
+    );
 
     for (const algoId of allAlgos) {
       const algoInfo = ALGORITHMS[algoId];
