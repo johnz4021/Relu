@@ -439,6 +439,12 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             );
             if (existingGraphEntry) {
               session._rendererPanelId = existingGraphEntry[0];
+            } else {
+              // No custom panel: mirror the client's create_graph effect by registering
+              // 'graph' server-side too. Without this, panel-id validation strips
+              // legitimate viz_actions targeting the graph and emit_segment can't
+              // verify routing.
+              registerPanels(session, [{ id: 'graph', renderer: 'graph' }], []);
             }
             // Send context panels via create_visualization
             if (contextPanels.length > 0) {
