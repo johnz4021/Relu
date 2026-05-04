@@ -641,13 +641,31 @@ Auto-configured per algorithm from `server/contextPanelDefaults.js`. Five panel 
 | `expression` | Structured label + text lines | Recurrences, LP formulations, D&C structure |
 | `pseudocode` | Highlighted code lines | Algorithm pseudocode with active line tracking |
 
-Algorithms with pseudocode panels: dijkstra, bfs, kruskal, maxflow, knapsack, bellman_ford, dag_shortest, huffman, quickselect.
+Algorithms with pseudocode panels: dijkstra, bfs, kruskal, maxflow, knapsack,
+bellman_ford, dag_shortest, huffman, quickselect, number_of_islands, topological_sort,
+multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops,
+lca_tree, validate_bst.
 
 Context panels are updated via `emit_segment` viz_actions:
 ```js
 { renderer: "context", action: "update", params: { panel_id: "distances", entries: [...] } }
 { renderer: "context", action: "append_log", params: { panel_id: "aug_paths", entries: [...] } }
 ```
+
+### Critical constraints
+
+**Panel registry closes at `run_algorithm` time.** Panels listed in
+`getDefaultContextPanels(algorithmId)` are registered when `run_algorithm` executes.
+After that the registry is frozen — the agent can update registered panels but cannot
+create new ones mid-session. If a panel ID is not in `contextPanelDefaults.js` before
+the algorithm runs, `update_context_panel` calls targeting it are silently dropped by
+the frontend.
+
+**Panel IDs must match `viz_actions` exactly.** Context-renderer algorithms (hashing,
+math patterns) hardcode `panel_id: 'algorithm_state'` inside their `ctxUpdate()` helper.
+The entry in `contextPanelDefaults.js` for those algorithms must use `id: 'algorithm_state'`
+or the updates never reach the panel. Only the `title` field is safe to change for
+context-renderer algorithms — never the `id`.
 
 ---
 
