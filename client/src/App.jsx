@@ -3,6 +3,7 @@ import { LazyMotion, domAnimation } from 'motion/react';
 import VizLayout from './components/VizLayout';
 import VizRequestBanner from './components/VizRequestBanner';
 import VizErrorToast from './components/VizErrorToast';
+import VizTierToast from './components/VizTierToast';
 import GraphRenderer from './components/renderers/GraphRenderer';
 import Transcript from './components/Transcript';
 import Controls from './components/Controls';
@@ -497,14 +498,6 @@ export default function App() {
               {state.algorithm.charAt(0).toUpperCase() + state.algorithm.slice(1)}
             </span>
           )}
-          {vizTier === 2 && !showSelector && (
-            <span
-              title="No built-in visualization for this problem — ReLU generated one on the fly. Quality may vary."
-              className="text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded-full"
-            >
-              On-the-fly visualization
-            </span>
-          )}
         </div>
         <div className="flex items-center gap-3">
           {!showSelector && (
@@ -780,6 +773,7 @@ export default function App() {
       </div>
     )}
     <VizErrorToast algorithmKey={state.algorithm} />
+    <VizTierToast vizTier={vizTier} algorithmKey={state.algorithm} />
     </>
     </LazyMotion>
   );
