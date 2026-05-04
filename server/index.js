@@ -44,6 +44,28 @@ app.post('/api/session-feedback', (req, res) => {
   res.json({ ok: true });
 });
 
+// Viz error endpoint — fired from VizErrorToast when a user clicks "Report"
+// after a renderer crash or never-mounted timeout. Logs to feedback table
+// with category='viz_error'. Lets us prioritize fixes from real signal.
+//
+// Kinds:
+//   "apply_failed"  — renderer.apply threw (undefined param, etc.)
+//   "never_mounted" — actions buffered for >5s with no renderer registration
+app.post('/api/viz-error', (req, res) => {
+  const { algorithm, renderer, kind, action, message } = req.body;
+  console.log(`[VizError] kind=${kind} algo=${algorithm} renderer=${renderer} action=${action}: ${message}`);
+  saveFeedback('viz_error', {
+    message: message || '',
+    meta: {
+      algorithm: algorithm || null,
+      renderer: renderer || null,
+      kind: kind || null,
+      action: action || null,
+    },
+  });
+  res.json({ ok: true });
+});
+
 // Viz request endpoint — fired from the "no viz available" fallback when a user
 // pastes a LeetCode problem we don't classify (or we classify into a `broken: true`
 // algo). Lets us prioritize which deferred algos to fix based on real demand.

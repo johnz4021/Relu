@@ -12,19 +12,44 @@ import gsap from 'gsap';
 
 const renderers = {};
 const pendingActions = {}; // renderer name -> queued actions
+const pendingTimers = {};  // renderer name -> timeout id (cleared when renderer mounts)
 
 let activeTimeline = null;
 let timelineSpeed = 1;
+
+// Subscribers for viz errors. App registers a listener to surface a toast.
+// Error shape: { kind: 'apply_failed'|'never_mounted', renderer, action?, message }
+const errorListeners = new Set();
+export function onVizError(fn) {
+  errorListeners.add(fn);
+  return () => errorListeners.delete(fn);
+}
+function reportVizError(err) {
+  for (const fn of errorListeners) {
+    try { fn(err); } catch { /* ignore */ }
+  }
+}
 
 export function registerRenderer(name, handler) {
   console.log(`[Registry] Registering renderer: ${name}`);
   renderers[name] = handler;
 
+  // Cancel any "never mounted" timer — renderer is here now.
+  if (pendingTimers[name]) {
+    clearTimeout(pendingTimers[name]);
+    delete pendingTimers[name];
+  }
+
   // Flush any buffered actions
   if (pendingActions[name]?.length > 0) {
     console.log(`[Registry] Flushing ${pendingActions[name].length} buffered actions for: ${name}`);
     for (const { action, params } of pendingActions[name]) {
-      handler.apply(action, params);
+      try {
+        handler.apply(action, params);
+      } catch (err) {
+        console.error(`[Registry] Buffered action threw for '${name}':`, action, err);
+        reportVizError({ kind: 'apply_failed', renderer: name, action, message: err?.message || String(err) });
+      }
     }
     delete pendingActions[name];
   }
@@ -44,10 +69,32 @@ export function applyAction(action) {
     }
     pendingActions[rendererName].push({ action: actionType, params });
     console.log(`[Registry] Buffered action for unregistered renderer '${rendererName}': ${actionType}`, params);
+    // Arm a "never mounted" timer once per renderer. If the renderer hasn't
+    // registered within 5s, surface a viz-error so the user knows something's
+    // off (vs silently buffering forever).
+    if (!pendingTimers[rendererName]) {
+      pendingTimers[rendererName] = setTimeout(() => {
+        if (!renderers[rendererName] && pendingActions[rendererName]?.length > 0) {
+          console.warn(`[Registry] Renderer '${rendererName}' never mounted after 5s — ${pendingActions[rendererName].length} actions buffered.`);
+          reportVizError({
+            kind: 'never_mounted',
+            renderer: rendererName,
+            action: actionType,
+            message: `Renderer '${rendererName}' never mounted (${pendingActions[rendererName]?.length || 0} actions buffered).`,
+          });
+        }
+        delete pendingTimers[rendererName];
+      }, 5000);
+    }
     return;
   }
   console.log(`[Registry] Applying action to '${rendererName}': ${actionType}`, params);
-  renderer.apply(actionType, params);
+  try {
+    renderer.apply(actionType, params);
+  } catch (err) {
+    console.error(`[Registry] Action threw for '${rendererName}':`, actionType, err);
+    reportVizError({ kind: 'apply_failed', renderer: rendererName, action: actionType, message: err?.message || String(err) });
+  }
 }
 
 export function applyActions(actions) {

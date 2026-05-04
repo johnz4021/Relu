@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyMotion, domAnimation } from 'motion/react';
 import VizLayout from './components/VizLayout';
 import VizRequestBanner from './components/VizRequestBanner';
+import VizErrorToast from './components/VizErrorToast';
 import GraphRenderer from './components/renderers/GraphRenderer';
 import Transcript from './components/Transcript';
 import Controls from './components/Controls';
@@ -498,10 +499,10 @@ export default function App() {
           )}
           {vizTier === 2 && !showSelector && (
             <span
-              title="This problem type doesn't have a hand-written trace, so ReLU generated one on-the-fly using AI. It may be less polished than built-in visualizations."
-              className="text-[10px] font-medium text-amber-600/80 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400/80 border border-amber-200 dark:border-amber-800/40 px-1.5 py-0.5 rounded-full cursor-help"
+              title="No built-in visualization for this problem — ReLU generated one on the fly. Quality may vary."
+              className="text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded-full"
             >
-              live viz
+              On-the-fly visualization
             </span>
           )}
         </div>
@@ -778,6 +779,7 @@ export default function App() {
         {ttsToast}
       </div>
     )}
+    <VizErrorToast algorithmKey={state.algorithm} />
     </>
     </LazyMotion>
   );
