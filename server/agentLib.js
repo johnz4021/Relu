@@ -388,6 +388,11 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           session.currentRenderer = result.renderer;
           session.currentAlgorithm = algo;
           session.mapperState = {};
+          // Clear any stale renderer panel id from a prior algorithm run.
+          // The graph/context branches below may not set this, so leaving a
+          // stale value would cause emit_segment to rewrite this run's
+          // viz_action renderers to the previous algorithm's panel id.
+          session._rendererPanelId = null;
           // Multi-graph: also store trace/mapper keyed by graph_id
           if (graphId) {
             if (!session.traces) session.traces = {};

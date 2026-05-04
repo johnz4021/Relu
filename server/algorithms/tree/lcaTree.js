@@ -34,6 +34,7 @@ export function lcaTree(input) {
     description: `LCA of nodes p=${p} and q=${q} in binary tree. Post-order DFS: bubble up when p or q found.`,
     node: '0',
     parent: null,
+    pseudocode_line: 0,
   });
 
   let lca = null;
@@ -50,7 +51,6 @@ export function lcaTree(input) {
       ? (isTarget ? i : (left !== null ? left : right))
       : null;
 
-    // Check if this is the LCA (left and right both found, or this node is one target and subtree has other)
     const isLCA = (left !== null && right !== null) ||
                   (isTarget && (left !== null || right !== null));
 
@@ -60,6 +60,7 @@ export function lcaTree(input) {
         `${isTarget ? `, this is p/q` : ''}${isLCA ? ` → LCA found!` : ''}`,
       node: String(i),
       parent: node.parent !== null ? String(node.parent) : null,
+      pseudocode_line: isLCA ? 6 : (isTarget ? 4 : 7),
     });
 
     if (isLCA && lca === null) {
@@ -77,6 +78,7 @@ export function lcaTree(input) {
     node: '0',
     parent: null,
     output: String(lca),
+    pseudocode_line: 6,
   });
 
   return trace;
@@ -99,6 +101,7 @@ export function validateBst(input) {
     description: `Validate BST: DFS with min/max bounds. Each node must be strictly within (min, max).`,
     node: '0',
     parent: null,
+    pseudocode_line: 0,
   });
 
   let isValid = true;
@@ -115,6 +118,7 @@ export function validateBst(input) {
       description: `Node[${i}]=${val}: bounds (${min === -Infinity ? '-∞' : min}, ${max === Infinity ? '+∞' : max}) → ${inRange ? 'valid ✓' : 'VIOLATION ✗'}`,
       node: String(i),
       parent: node.parent !== null ? String(node.parent) : null,
+      pseudocode_line: inRange ? 6 : 3,
     });
 
     if (!inRange) { isValid = false; return false; }
@@ -130,6 +134,7 @@ export function validateBst(input) {
     node: '0',
     parent: null,
     output: String(isValid),
+    pseudocode_line: 6,
   });
 
   return trace;

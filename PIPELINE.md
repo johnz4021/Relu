@@ -444,7 +444,7 @@ For all modes, `applyClassification()` (`guidedAgent.js`) overrides the registry
 
 ### Stage 4: Trace → Viz Actions (vizMapper)
 
-**File:** `server/vizMapper.js`  
+**File:** `server/vizMapper.js`
 **Entry point:** `mapTraceStep(algorithm, rendererType, step, state)`
 
 The agent specifies `trace_step_indices: [3, 4]` in `emit_segment`. The server-side handler in `agentLib.js` calls `mapTraceStep()` for each referenced index and appends the generated viz_actions + context panel updates to the segment.
@@ -464,6 +464,52 @@ trace step: { type: 'relax', from: 'A', to: 'C', weight: 3, distances: { A: 0, B
 ```
 
 The agent can still pass **manual `viz_actions`** for things the trace can't express (highlighting specific cut edges for max-flow proofs, showing ghost alternative paths, etc.). Manual actions are appended after auto-generated ones.
+
+#### Outer renderer dispatch
+
+`mapTraceStep` switches on `rendererType` and delegates to a per-renderer mapper:
+
+| `rendererType` | Mapper function |
+|---|---|
+| `graph` | `mapGraphStep` |
+| `array` | `mapArrayStep` |
+| `table` | `mapTableStep` |
+| `tree` | `mapTreeStep` |
+| `linked` | `mapLinkedStep` |
+| `interval` | `mapIntervalStep` |
+| `string` | `mapStringStep` |
+| `context` | `mapContextStep` |
+
+Any other renderer type returns `{ viz: [], ctx: [] }`. The `context` mapper exists to satisfy the outer switch for context-renderer algorithms (hashing, math_patterns, etc.) — those algorithms embed their `viz_actions` directly in each trace step, so `agentLib.js`'s `emit_segment` short-circuits the mapper for them. `mapContextStep` only runs as a fallback when a step lacks embedded viz_actions; it surfaces `step.description` on the `algorithm_state` panel so the panel never sits blank.
+
+#### Generic post-processing
+
+After the per-renderer mapper returns, `mapTraceStep` appends one universal action: if `step.pseudocode_line !== undefined`, push `ctx('update', { panel_id: 'pseudocode', current_line: <N> })`. This is why every algorithm with a `pseudocode.js` entry must set `pseudocode_line` on each `trace.push` — without it the pseudocode panel never advances.
+
+#### Helpers
+
+`distancesEntries(distances, statusFn)` (top of `vizMapper.js`) builds entries for any distances-style `key_value` panel. Handles common value sentinels: `-1 → 'wall'`, `Infinity` / `'∞' → '∞'`. Used by dijkstra, bellman_ford, dag_shortest, multi_source_bfs, floyd_warshall, dijkstra_k_stops. Pass `statusFn = (key, value) => 'highlight'|'updated'|'default'` to mark per-entry status.
+
+#### Coverage contract & test gate
+
+**Test:** `server/algorithms/mapper.coverage.test.js`. Registry-driven, runs every algorithm with `defaultInput`, asserts:
+
+1. `mapTraceStep` returns ≥1 viz/ctx action for every non-narration step (skips steps that embed their own `viz_actions`).
+2. Every produced `step.type` has a matching `case` block in `vizMapper.js` (static reconciliation).
+3. Every algorithm whose registry renderer is referenced has a case in the outer switch.
+4. Every trace step on algorithms that have a pseudocode entry sets `pseudocode_line`.
+
+**Snapshot semantics:** the test pins the current state via four `WIP_*` sets (`WIP_MAPPER_GAPS`, `WIP_PSEUDOCODE_GAPS`, `WIP_MISSING_CASE_TYPES`, `WIP_RENDERER_GAPS`). Algorithms in those sets are allowed to fail the corresponding check; everything outside the sets must pass. The test fails on **either direction** — a regression (passing → failing) AND an improvement that wasn't reflected (failing → passing). The latter forces contributors to remove an entry from the WIP set when they fix it, preventing the lists from drifting.
+
+**`KNOWN_NARRATION_ONLY`** lists step types where empty mapper output is correct (`error` only, today).
+
+**Adding a new algorithm.** When you add a new entry to `ALGORITHMS` in `registry.js`, the coverage test runs against it. To pass:
+- Every `step.type` your trace producer emits must have a `case` block in the appropriate per-renderer mapper, OR be added to `WIP_MISSING_CASE_TYPES` with reason.
+- Each step must produce ≥1 viz/ctx action (or embed its own `viz_actions`, common for context-renderer algos).
+- If the algorithm has a `pseudocode.js` entry, every `trace.push` must include `pseudocode_line: <N>`.
+- The algorithm's `renderer` must have a `case` in `mapTraceStep`'s outer switch.
+
+**Adding a new step type.** If you introduce a `step.type` string that no existing case handles, add a new `case 'X':` block in the right per-renderer mapper. Generic step types (`fill`, `compute`, `update`, `build`, `mark`, `reverse`, `traverse`, `record`, `choose`, `backtrack`, `push`, `pop`, `dequeue`, `window_max`) already have shared fallback handlers in `mapArrayStep` and `mapTreeStep` that surface `step.description` and any `step.array`/`step.indices` data — so a minimal new algorithm reusing those step types may need no mapper changes at all.
 
 ---
 
@@ -605,6 +651,21 @@ ALGORITHMS = {
 
 **`runAlgorithmWithFallback(id, input, context)`** — Tier 1 + Tier 2 fallback. Returns `{ trace, renderer, input, tier: 1|2 }`.
 
+#### Trace step contract
+
+Every Tier 1 algorithm's `run()` produces a `trace[]` array. Each trace step is an object with at minimum:
+
+| Field | Required | Notes |
+|---|---|---|
+| `type` | Yes | String key. Drives `mapTraceStep` dispatch. Must match a `case` block in the appropriate per-renderer mapper (enforced by `mapper.coverage.test.js`). |
+| `description` | Recommended | Plain-English explanation surfaced on fallback paths and used by the agent for narration. |
+| `pseudocode_line` | If pseudocode exists | Index into `PSEUDOCODE[algorithmId]` from `server/pseudocode.js`. The generic post-processing in `mapTraceStep` updates the pseudocode panel from this field. Algorithms with no `pseudocode.js` entry are listed in `WIP_PSEUDOCODE_GAPS` in `mapper.coverage.test.js`. |
+| renderer-specific | Varies | e.g. `step.distances` for graph distance updates, `step.row`/`step.col`/`step.value` for table cell fills, `step.array`/`step.indices` for array highlights. |
+| `viz_actions` | Optional | Embedded action list — bypasses `mapTraceStep` entirely when present. Used by context-renderer algorithms (hashing, math_patterns, lru_cache, etc.) where the algorithm itself owns the panel update logic. |
+| `output` | On `result` step | Plain-string answer. Used by `cache.js`'s `outputMatchesExpected` correctness gate for Tier 2. |
+
+The mapper coverage test (`server/algorithms/mapper.coverage.test.js`) enforces this contract on every algorithm in the registry. See [Stage 4 → Coverage contract](#stage-4-trace--viz-actions-vizmapper) for details.
+
 Algorithm categories (all Tier 1):
 
 | Category | Algorithms |
@@ -641,10 +702,16 @@ Auto-configured per algorithm from `server/contextPanelDefaults.js`. Five panel 
 | `expression` | Structured label + text lines | Recurrences, LP formulations, D&C structure |
 | `pseudocode` | Highlighted code lines | Algorithm pseudocode with active line tracking |
 
-Algorithms with pseudocode panels: dijkstra, bfs, kruskal, maxflow, knapsack,
-bellman_ford, dag_shortest, huffman, quickselect, number_of_islands, topological_sort,
-multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops,
-lca_tree, validate_bst.
+Algorithms with pseudocode panels: bellman_ford, bfs, binary_search,
+bipartite_check, dag_shortest, dijkstra, dijkstra_k_stops, floyd_warshall,
+huffman, knapsack, kruskal, lca_tree, maxflow, multi_source_bfs,
+number_of_islands, quickselect, tarjan_bridges, topological_sort, validate_bst.
+
+Pseudocode source: `server/pseudocode.js`. Each algorithm exports an array of
+strings; trace steps reference lines by 0-indexed `pseudocode_line` field.
+Algorithms not in the list above don't have a pseudocode panel — they're listed
+in `WIP_PSEUDOCODE_GAPS` in `mapper.coverage.test.js` so the test treats their
+absence of `pseudocode_line` as expected.
 
 Context panels are updated via `emit_segment` viz_actions:
 ```js
@@ -666,6 +733,17 @@ math patterns) hardcode `panel_id: 'algorithm_state'` inside their `ctxUpdate()`
 The entry in `contextPanelDefaults.js` for those algorithms must use `id: 'algorithm_state'`
 or the updates never reach the panel. Only the `title` field is safe to change for
 context-renderer algorithms — never the `id`.
+
+**`session._rendererPanelId` must be cleared on every `run_algorithm`.** When a
+prior algorithm in the same session set this field (set inside the non-graph branch
+of `run_algorithm` at `agentLib.js:449` — used to retarget mapper-emitted
+`renderer: '<type>'` actions to a custom-named panel like `'string_main'`), the
+field must be reset before the next algorithm runs. Otherwise the rewrite at
+`agentLib.js:561-567` mistargets the new algorithm's viz_actions to the previous
+algorithm's panel id (e.g. mapper emits `renderer: 'graph'`, gets rewritten to
+`renderer: 'table'` from a leftover knapsack run, and the client buffers the
+action against an unmounted renderer). The `run_algorithm` handler clears the
+field at entry: `session._rendererPanelId = null;` (`agentLib.js:391`).
 
 ---
 
@@ -702,6 +780,7 @@ Captured at `guidedAgent.js:1895` before any interrupt handling begins:
 | `trace` | `session.currentTrace` | Trace array for deterministic step replay |
 | `algorithm` | `session.currentAlgorithm` | Algorithm ID for `mapTraceStep()` |
 | `renderer` | `session.currentRenderer` | Which renderer to remount |
+| `rendererPanelId` | `session._rendererPanelId` | Custom panel id (e.g. `'string_main'`) for retargeting mapper-emitted renderer types when restoring |
 | `mapperState` | `session.mapperState` (shallow copy) | Incremental mapper state before interrupt |
 | `emittedTraceSteps[]` | `session._emittedTraceSteps` (copy) | Which trace indices have already been played |
 | `lastVizMessage` | `session._lastVizMessage` | The `create_graph` or `create_visualization` message used to mount the renderer |
@@ -1088,6 +1167,7 @@ Student pastes problem
 | `server/sandbox.js` | Sandboxed execution for Tier 2 generated code |
 | `server/algorithms/cache.js` | Tier 2 code cache — compound keys, correctness gate (`outputMatchesExpected`), L1+L2 storage |
 | `server/vizMapper.js` | Trace step → viz_actions + context panel updates |
+| `server/algorithms/mapper.coverage.test.js` | Registry-driven exhaustiveness gate for vizMapper. WIP snapshots track what's allowed to be incomplete. New algorithms added to the registry must pass or be added to a WIP set. |
 | `server/contextPanelDefaults.js` | Default context panels per algorithm + per reasoning mode |
 | `server/rendererManifest.js` | Renderer documentation (action schemas, examples) |
 | `server/leetcodeAgent.js` | LeetCode problem classifier (algorithm_key + test_case + expected_output extraction) |

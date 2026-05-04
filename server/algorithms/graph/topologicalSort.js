@@ -18,6 +18,7 @@ export function topologicalSort(graphInput) {
     type: 'init',
     description: `Topological sort of ${nodeIds.length}-node DAG using Kahn's algorithm`,
     in_degrees: { ...inDegree },
+    pseudocode_line: 0,
   });
 
   // Enqueue all zero-in-degree nodes
@@ -26,6 +27,7 @@ export function topologicalSort(graphInput) {
     type: 'enqueue_zero_in_degree',
     nodes: [...queue],
     description: `Enqueue zero-in-degree nodes: [${queue.join(', ')}]`,
+    pseudocode_line: 1,
   });
 
   const sorted = [];
@@ -41,6 +43,7 @@ export function topologicalSort(graphInput) {
       node,
       sorted: [...sorted],
       description: `Process node ${node} → sorted order so far: [${sorted.join(', ')}]`,
+      pseudocode_line: 4,
     });
 
     for (const neighbor of adj[node]) {
@@ -51,6 +54,7 @@ export function topologicalSort(graphInput) {
         new_in_degree: inDegree[neighbor],
         from: node,
         description: `Reduce in-degree of ${neighbor} to ${inDegree[neighbor]}`,
+        pseudocode_line: 6,
       });
 
       if (inDegree[neighbor] === 0) {
@@ -59,6 +63,7 @@ export function topologicalSort(graphInput) {
           type: 'enqueue_neighbor',
           node: neighbor,
           description: `In-degree of ${neighbor} reached 0 — enqueue`,
+          pseudocode_line: 7,
         });
       }
     }
@@ -72,6 +77,7 @@ export function topologicalSort(graphInput) {
       unprocessed_nodes: unprocessed,
       processed_nodes: sorted,
       description: `Cycle detected — ${unprocessed.length} nodes unreachable: [${unprocessed.join(', ')}]`,
+      pseudocode_line: 8,
     });
   } else {
     trace.push({
@@ -79,6 +85,7 @@ export function topologicalSort(graphInput) {
       cycle_detected: false,
       sorted,
       description: `Topological order: [${sorted.join(', ')}]`,
+      pseudocode_line: 9,
     });
   }
 

@@ -31,6 +31,7 @@ export function multiSourceBfs(input) {
     nodes, edges,
     source: queue.map(([r,c]) => `${r},${c}`).join(','),
     distances: Object.fromEntries(nodes.map(n => [n.id, dist[+n.id.split(',')[0]][+n.id.split(',')[1]]])),
+    pseudocode_line: 1,
   });
 
   let time = 0;
@@ -60,6 +61,7 @@ export function multiSourceBfs(input) {
               return [n.id, d === Infinity ? '∞' : d === -1 ? 'wall' : d];
             })
           ),
+          pseudocode_line: 6,
         });
       }
     }
@@ -72,7 +74,15 @@ export function multiSourceBfs(input) {
     type: 'result',
     description: hasUnreachable ? 'Some oranges unreachable — answer: -1' : `All oranges rotten by t=${answer}`,
     nodes, edges,
+    distances: Object.fromEntries(
+      nodes.map(n => {
+        const [ro, co] = n.id.split(',').map(Number);
+        const d = dist[ro][co];
+        return [n.id, d === Infinity ? '∞' : d === -1 ? 'wall' : d];
+      })
+    ),
     output: String(answer),
+    pseudocode_line: 8,
   });
 
   return trace;
@@ -122,6 +132,7 @@ export function floydWarshall(input) {
     description: `Floyd-Warshall: all-pairs shortest paths for ${n} nodes`,
     nodes: graph.nodes, edges: graph.edges,
     distances: flatDist(),
+    pseudocode_line: 0,
   });
 
   for (let k = 0; k < n; k++) {
@@ -140,6 +151,7 @@ export function floydWarshall(input) {
       description: `Via node ${via}: ${updated} path(s) improved`,
       node: via,
       distances: flatDist(),
+      pseudocode_line: 5,
     });
   }
 
@@ -155,6 +167,7 @@ export function floydWarshall(input) {
     edges: graph.edges,
     distances: flatDist(),
     output: negCycle ? 'negative_cycle' : String(dist[0][n - 1]),
+    pseudocode_line: 6,
   });
 
   return trace;
@@ -205,6 +218,7 @@ export function tarjanBridges(input) {
     description: `Tarjan bridge-finding on ${nodeIds.length} nodes. disc[]=discovery time, low[]=lowest reachable.`,
     nodes: graph.nodes, edges: graph.edges,
     visited: {},
+    pseudocode_line: 9,
   });
 
   function dfs(u, parent) {
@@ -216,6 +230,7 @@ export function tarjanBridges(input) {
       description: `Visit ${u}: disc[${u}]=${disc[u]}, low[${u}]=${low[u]}`,
       node: u, parent,
       visited: { ...visited },
+      pseudocode_line: 1,
     });
 
     for (const v of adj[u]) {
@@ -230,6 +245,7 @@ export function tarjanBridges(input) {
             description: `Bridge found: ${u}↔${v} (low[${v}]=${low[v]} > disc[${u}]=${disc[u]})`,
             from: u, to: v,
             visited: { ...visited },
+            pseudocode_line: 6,
           });
         } else {
           trace.push({
@@ -237,6 +253,7 @@ export function tarjanBridges(input) {
             description: `${u}↔${v}: low[${v}]=${low[v]} ≤ disc[${u}]=${disc[u]} — not a bridge`,
             from: u, to: v,
             visited: { ...visited },
+            pseudocode_line: 5,
           });
         }
       } else if (v !== parent) {
@@ -256,6 +273,7 @@ export function tarjanBridges(input) {
       : 'No bridges found — graph is 2-edge-connected',
     nodes: graph.nodes, edges: graph.edges,
     output: JSON.stringify(bridges),
+    pseudocode_line: 9,
   });
 
   return trace;
@@ -302,6 +320,7 @@ export function bipartiteCheck(input) {
     description: `Check bipartiteness: try 2-coloring graph (Red/Blue). Conflict = not bipartite.`,
     nodes: graph.nodes, edges: graph.edges,
     visited: {},
+    pseudocode_line: 0,
   });
 
   let bipartite = true;
@@ -318,6 +337,7 @@ export function bipartiteCheck(input) {
         description: `Color node ${u} as ${color[u] === 0 ? 'RED' : 'BLUE'}`,
         node: u,
         visited: { ...color },
+        pseudocode_line: 3,
       });
 
       for (const v of adj[u]) {
@@ -331,6 +351,7 @@ export function bipartiteCheck(input) {
             description: `Conflict: ${u} and ${v} both ${color[u] === 0 ? 'RED' : 'BLUE'} — NOT bipartite`,
             from: u, to: v,
             visited: { ...color },
+            pseudocode_line: 8,
           });
           return;
         } else {
@@ -339,6 +360,7 @@ export function bipartiteCheck(input) {
             description: `${u}(${color[u]===0?'R':'B'}) → ${v}(${color[v]===0?'R':'B'}): different colors ✓`,
             from: u, to: v,
             visited: { ...color },
+            pseudocode_line: 6,
           });
         }
       }
@@ -356,6 +378,7 @@ export function bipartiteCheck(input) {
       : 'Graph is NOT bipartite — odd cycle detected',
     nodes: graph.nodes, edges: graph.edges,
     output: String(bipartite),
+    pseudocode_line: 9,
   });
 
   return trace;
@@ -394,6 +417,7 @@ export function dijkstraKStops(input) {
     nodes: Array.from({ length: n }, (_, i) => ({ id: String(i) })),
     edges: flights.map(([s, d, w]) => ({ source: String(s), target: String(d), weight: w })),
     distances: Object.fromEntries(prev.map((c, i) => [String(i), c === INF ? '∞' : c])),
+    pseudocode_line: 0,
   });
 
   for (let stop = 0; stop <= k; stop++) {
@@ -406,6 +430,7 @@ export function dijkstraKStops(input) {
           description: `Stop ${stop}: flight ${u}→${v} cost ${w}, total ${prev[u]+w} < ${prev[v] === INF ? '∞' : prev[v]}`,
           from: String(u), to: String(v), weight: w,
           distances: Object.fromEntries(cur.map((c, i) => [String(i), c === INF ? '∞' : c])),
+          pseudocode_line: 5,
         });
       }
     }
@@ -422,6 +447,7 @@ export function dijkstraKStops(input) {
     edges: flights.map(([s, d, w]) => ({ source: String(s), target: String(d), weight: w })),
     distances: Object.fromEntries(prev.map((c, i) => [String(i), c === INF ? '∞' : c])),
     output: String(answer),
+    pseudocode_line: 7,
   });
 
   return trace;

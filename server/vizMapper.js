@@ -25,6 +25,23 @@ function ctxLog(panelId, text, type = 'info') {
 }
 
 /**
+ * Build entries for a distances-style key_value panel from a `step.distances`
+ * map. Handles common value sentinels: -1 → 'wall', Infinity / '∞' → '∞'.
+ *
+ * @param distances  {Object<string, number|string>}
+ * @param statusFn   {(key, value) => 'default'|'highlight'|'updated'}
+ */
+function distancesEntries(distances, statusFn = () => 'default') {
+  return Object.entries(distances).map(([k, d]) => {
+    let value;
+    if (d === -1) value = 'wall';
+    else if (d === Infinity || d === '∞') value = '∞';
+    else value = d;
+    return { key: k, value, status: statusFn(k, d) };
+  });
+}
+
+/**
  * Build a tree structure from a heap array for the tree renderer.
  */
 function heapToTree(heap) {
@@ -89,6 +106,7 @@ export function mapTraceStep(algorithm, rendererType, step, state) {
     case 'linked':   result = mapLinkedStep(algorithm, step, state); break;
     case 'interval': result = mapIntervalStep(algorithm, step, state); break;
     case 'string':   result = mapStringStep(algorithm, step, state); break;
+    case 'context':  result = mapContextStep(algorithm, step, state); break;
     default:         result = { viz: [], ctx: [] };
   }
 
@@ -234,6 +252,40 @@ function mapGraphStep(algo, step, state) {
             key: k, value: p, status: 'default',
           })),
         }));
+      } else if (algo === 'multi_source_bfs') {
+        // Sources start rotten — paint them as a persistent trail
+        const sources = (step.source || '').split(',').filter(Boolean);
+        for (const s of sources) {
+          v.push(viz('graph', 'highlight_node', { node: s, className: 'visited' }));
+        }
+        if (step.distances) {
+          c.push(ctxUpdate('distances', {
+            entries: distancesEntries(step.distances, (k) => sources.includes(k) ? 'highlight' : 'default'),
+          }));
+        }
+      } else if (algo === 'floyd_warshall' && step.distances) {
+        c.push(ctxUpdate('distances', { entries: distancesEntries(step.distances) }));
+      } else if (algo === 'dijkstra_k_stops' && step.distances) {
+        c.push(ctxUpdate('distances', { entries: distancesEntries(step.distances) }));
+      } else if (algo === 'tarjan_bridges') {
+        c.push(ctxUpdate('disc_low', { entries: [
+          { key: 'Status', value: 'Initialized — DFS root pending' },
+        ] }));
+      } else if (algo === 'bipartite_check') {
+        c.push(ctxUpdate('coloring', { entries: [
+          { key: 'Status', value: 'Starting 2-coloring' },
+        ] }));
+      } else if (algo === 'number_of_islands') {
+        c.push(ctxUpdate('island_count', { entries: [
+          { key: 'Islands', value: 0, status: 'default' },
+        ] }));
+      } else if (algo === 'prim') {
+        // Visible bootstrap so prim's init isn't empty
+        c.push(ctxUpdate('mst_weight', { entries: [{ key: 'Total weight', value: 0 }] }));
+      } else if (algo === 'trie') {
+        c.push(ctxUpdate('trie_state', {
+          entries: [{ key: 'Status', value: step.description || 'Trie initialized', status: 'default' }],
+        }));
       }
       break;
     }
@@ -298,6 +350,48 @@ function mapGraphStep(algo, step, state) {
             { key: 'At cell', value: `(${step.node}) = '${step.char}'`, status: 'highlight' },
           ],
         }));
+      } else if (algo === 'multi_source_bfs') {
+        // Persistent trail — accumulate rotten cells as the wavefront expands.
+        // mark_current (above) shows the active tip; highlight_node leaves the trail.
+        v.push(viz('graph', 'highlight_node', { node: step.node, className: 'visited' }));
+        if (step.from) {
+          v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.node, className: 'highlighted' }));
+        }
+        if (step.distances) {
+          c.push(ctxUpdate('distances', {
+            entries: distancesEntries(step.distances, (k) => k === step.node ? 'updated' : 'default'),
+          }));
+        }
+      } else if (algo === 'tarjan_bridges') {
+        // Cumulative visited trail; show disc/low values
+        v.push(viz('graph', 'highlight_node', { node: step.node, className: 'visited' }));
+        const visitedNodes = step.visited ? Object.keys(step.visited) : [];
+        c.push(ctxUpdate('disc_low', { entries: [
+          { key: 'Visited count', value: String(visitedNodes.length), status: 'default' },
+          { key: 'Current', value: step.node, status: 'highlight' },
+        ] }));
+      } else if (algo === 'bipartite_check') {
+        // visited holds the color map (0/1)
+        v.push(viz('graph', 'highlight_node', { node: step.node, className: 'visited' }));
+        if (step.visited) {
+          c.push(ctxUpdate('coloring', {
+            entries: Object.entries(step.visited).map(([k, v]) => ({
+              key: k, value: v === 0 ? 'RED' : 'BLUE',
+              status: k === step.node ? 'highlight' : 'default',
+            })),
+          }));
+        }
+      } else if (algo === 'number_of_islands') {
+        // Cumulative visited cells (flood-fill); track island count from step
+        v.push(viz('graph', 'highlight_node', { node: step.node, className: 'visited' }));
+        if (step.from) {
+          v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.node, className: 'highlighted' }));
+        }
+        if (step.island_count !== undefined) {
+          c.push(ctxUpdate('island_count', { entries: [
+            { key: 'Islands', value: step.island_count, status: 'highlight' },
+          ] }));
+        }
       }
       break;
     }
@@ -523,6 +617,60 @@ function mapGraphStep(algo, step, state) {
           entries: [
             { key: 'Word', value: step.word },
             { key: 'Result', value: step.found ? 'FOUND' : 'NOT FOUND', status: step.found ? 'updated' : 'highlight' },
+          ],
+        }));
+      }
+      if (algo === 'multi_source_bfs' && step.distances) {
+        c.push(ctxUpdate('distances', {
+          entries: distancesEntries(step.distances, () => 'updated'),
+        }));
+      }
+      if ((algo === 'floyd_warshall' || algo === 'dijkstra_k_stops') && step.distances) {
+        c.push(ctxUpdate('distances', {
+          entries: distancesEntries(step.distances, () => 'updated'),
+        }));
+      }
+      if (algo === 'tarjan_bridges') {
+        const bridges = step.output ? JSON.parse(step.output) : [];
+        for (const [u, w] of bridges) {
+          v.push(viz('graph', 'highlight_edge', { from: u, to: w, className: 'highlighted' }));
+        }
+        c.push(ctxUpdate('disc_low', { entries: [
+          { key: 'Bridges found', value: String(bridges.length), status: 'updated' },
+        ] }));
+      }
+      if (algo === 'bipartite_check') {
+        c.push(ctxUpdate('coloring', { entries: [
+          { key: 'Result', value: step.output === 'true' ? 'Bipartite ✓' : 'NOT bipartite', status: 'updated' },
+        ] }));
+      }
+      if (algo === 'number_of_islands') {
+        c.push(ctxUpdate('island_count', { entries: [
+          { key: 'Islands', value: step.output ?? 0, status: 'updated' },
+        ] }));
+      }
+      if (algo === 'dfs' || algo === 'prim' || algo === 'trie') {
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [{ key: 'Result', value: step.description || step.output || 'Complete', status: 'updated' }],
+        }));
+      }
+      break;
+    }
+
+    // ── Trie operations (graph renderer) ─────────────────────────────────
+    case 'insert_start':
+    case 'insert_step':
+    case 'insert_done':
+    case 'search_start':
+    case 'search_step':
+    case 'search_done': {
+      if (algo === 'trie') {
+        if (step.node_id) {
+          v.push(viz('graph', 'mark_current', { node: String(step.node_id) }));
+        }
+        c.push(ctxUpdate('trie_state', {
+          entries: [
+            { key: step.word ? `"${step.word}"` : step.type, value: step.description || '', status: 'highlight' },
           ],
         }));
       }
@@ -1480,8 +1628,41 @@ function mapArrayStep(algo, step, state) {
             indices: step.array.map((_, i) => i),
           }));
         }
+      } else {
+        // Generic fallback: surface description on algorithm_state
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [{ key: 'Result', value: step.description || step.output || '?', status: 'updated' }],
+        }));
       }
       break;
+
+    // Generic step types used by various array-renderer algos. Each surfaces a
+    // minimal panel update; specialized rendering is added per-algo as needed.
+    case 'fill':
+    case 'compute':
+    case 'update':
+    case 'build':
+    case 'mark':
+    case 'reverse':
+    case 'traverse':
+    case 'record':
+    case 'choose':
+    case 'backtrack':
+    case 'push':
+    case 'pop':
+    case 'dequeue':
+    case 'window_max': {
+      if (step.array) {
+        v.push(viz('array', 'set_data', { values: step.array }));
+      }
+      if (Array.isArray(step.indices) && step.indices.length > 0) {
+        v.push(viz('array', 'highlight', { indices: step.indices, className: 'current' }));
+      }
+      c.push(ctxUpdate('algorithm_state', {
+        entries: [{ key: step.type, value: step.description || '', status: 'highlight' }],
+      }));
+      break;
+    }
   }
 
   return { viz: v, ctx: c };
@@ -1580,6 +1761,10 @@ function mapTableStep(algo, step, state) {
       } else if (algo === 'min_path_sum') {
         c.push(ctxUpdate('expression', {
           expression: 'dp[i][j] = min(dp[i-1][j], dp[i][j-1]) + grid[i][j]',
+        }));
+      } else if (algo === 'interval_dp' || algo === 'palindrome_dp' || algo === 'bitmask_dp') {
+        c.push(ctxUpdate('expression', {
+          expression: step.description || `${algo} initialized`,
         }));
       }
       break;
@@ -1791,7 +1976,23 @@ function mapTableStep(algo, step, state) {
           result: step.min_cost,
         }));
         c.push(ctxLog('decisions', `Minimum path cost: ${step.min_cost}`, 'result'));
+      } else {
+        // Generic fallback for any table-renderer algo: surface description + output
+        c.push(ctxUpdate('expression', {
+          expression: step.description || `Result: ${step.output ?? '?'}`,
+          result: step.output,
+        }));
+        c.push(ctxLog('decisions', step.description || `Result: ${step.output ?? '?'}`, 'result'));
       }
+      break;
+    }
+
+    case 'init': {
+      // Some table algos (stock_dp) use 'init' instead of 'init_table'.
+      // Generic fallback: surface description on the expression panel.
+      c.push(ctxUpdate('expression', {
+        expression: step.description || 'Initialized',
+      }));
       break;
     }
   }
@@ -1844,6 +2045,26 @@ function mapTreeStep(algo, step, state) {
             { key: 'Path', value: '—' },
           ],
         }));
+      } else if (algo === 'heap_ops' || algo === 'top_k_heap' || algo === 'k_closest_points' || algo === 'median_finder') {
+        if (step.tree) v.push(viz('tree', 'set_tree', step.tree));
+        c.push(ctxUpdate('heap_state', {
+          entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
+        }));
+      } else if (algo === 'tree_dp' || algo === 'lca_tree' || algo === 'validate_bst') {
+        if (step.tree) v.push(viz('tree', 'set_tree', step.tree));
+        c.push(ctxUpdate('tree_state', {
+          entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
+        }));
+      } else if (algo === 'linked_list_cycle' || algo === 'merge_k_sorted') {
+        if (step.tree) v.push(viz('tree', 'set_tree', step.tree));
+        c.push(ctxUpdate('pointer_state', {
+          entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
+        }));
+      } else {
+        // Generic fallback: surface description so the panel isn't blank
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [{ key: 'Status', value: step.description || step.type, status: 'default' }],
+        }));
       }
       break;
     }
@@ -1854,6 +2075,46 @@ function mapTreeStep(algo, step, state) {
           entries: [
             { key: 'Inserting', value: step.value, status: 'highlight' },
           ],
+        }));
+      } else if (algo === 'heap_ops' || algo === 'top_k_heap' || algo === 'k_closest_points' || algo === 'median_finder') {
+        c.push(ctxUpdate('heap_state', {
+          entries: [{ key: 'Inserting', value: step.value ?? step.description ?? '?', status: 'highlight' }],
+        }));
+      }
+      break;
+    }
+
+    case 'traverse': {
+      if (step.node_id || step.node) {
+        v.push(viz('tree', 'highlight_node', { id: step.node_id || step.node, className: 'visited' }));
+      }
+      c.push(ctxUpdate('tree_state', {
+        entries: [{ key: 'Visiting', value: step.description || step.node_id || step.node || '?', status: 'highlight' }],
+      }));
+      break;
+    }
+
+    case 'extract_min': {
+      c.push(ctxUpdate('heap_state', {
+        entries: [{ key: 'Extracted', value: step.value ?? step.description ?? '?', status: 'updated' }],
+      }));
+      break;
+    }
+
+    case 'found': {
+      if (algo === 'linked_list_cycle') {
+        c.push(ctxUpdate('pointer_state', {
+          entries: [{ key: 'Cycle', value: step.description || 'detected', status: 'updated' }],
+        }));
+      }
+      break;
+    }
+
+    case 'pop':
+    case 'push': {
+      if (algo === 'merge_k_sorted') {
+        c.push(ctxUpdate('pointer_state', {
+          entries: [{ key: step.type, value: step.description || step.value || '', status: 'highlight' }],
         }));
       }
       break;
@@ -2643,12 +2904,64 @@ function mapStringStep(algo, step, state) {
           const m = step.pattern?.length ?? 1;
           s('set_char_state', { start: idx, end: idx + m - 1, state: 'match' });
         }
+      } else {
+        // Generic fallback: surface description
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [{ key: 'Result', value: step.description || step.output || 'Complete', status: 'updated' }],
+        }));
+      }
+      break;
+    }
+
+    case 'transform': {
+      if (algo === 'manacher' && step.transformed) {
+        s('set_string', { s: step.transformed });
+      }
+      c.push(ctxUpdate('palindrome_state', {
+        entries: [{ key: 'Transformed', value: step.transformed || step.description || '', status: 'highlight' }],
+      }));
+      break;
+    }
+
+    case 'hash':
+    case 'roll': {
+      if (algo === 'rabin_karp') {
+        if (step.window_start !== undefined && step.window_end !== undefined) {
+          s('set_window', { start: step.window_start, end: step.window_end, windowClass: 'active' });
+        }
+        c.push(ctxUpdate('hash_state', {
+          entries: [{ key: step.type, value: step.description || step.hash || '', status: 'highlight' }],
+        }));
       }
       break;
     }
 
     case 'error':
       break;
+  }
+
+  return { viz: v, ctx: c };
+}
+
+// ─── CONTEXT mapper ──────────────────────────────────────────────────────────
+// Context-renderer algorithms (hashing, math_patterns, etc.) embed `viz_actions`
+// directly in each trace step. agentLib's emit_segment short-circuits the mapper
+// for those steps and forwards the embedded actions verbatim. This mapper exists
+// only to satisfy the outer switch and to handle the rare case where a context
+// algorithm step lacks embedded viz_actions — in which case we synthesize a
+// minimal description-only update so the algorithm_state panel isn't blank.
+function mapContextStep(algo, step, _state) {
+  const v = [];
+  const c = [];
+
+  // If the step embeds viz_actions, the caller skips the mapper entirely; this
+  // function is invoked only when nothing was embedded. Surface step.description
+  // (or step.type) on the algorithm_state panel as a fallback so the panel never
+  // sits empty.
+  if (step.description || step.type) {
+    c.push(ctxUpdate('algorithm_state', {
+      entries: [{ key: step.type || 'state', value: step.description || '', status: 'default' }],
+    }));
   }
 
   return { viz: v, ctx: c };

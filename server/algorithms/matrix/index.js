@@ -29,6 +29,8 @@ export function numberOfIslands(input) {
       const [r, c] = n.id.split(',').map(Number);
       return [n.id, grid[r][c] === 1 ? 'land' : 'water'];
     })),
+    island_count: 0,
+    pseudocode_line: 0,
   });
 
   const visited = Array.from({ length: rows }, () => new Array(cols).fill(false));
@@ -53,6 +55,8 @@ export function numberOfIslands(input) {
             if (visited[nr][nc]) return [n.id, `island-${count}`];
             return [n.id, grid[nr][nc] === 1 ? 'land' : 'water'];
           })),
+          island_count: count,
+          pseudocode_line: 3,
         });
 
         while (front < queue.length) {
@@ -74,6 +78,8 @@ export function numberOfIslands(input) {
                 if (visited[r2][c2]) return [n.id, `island-${count}`];
                 return [n.id, grid[r2][c2] === 1 ? 'land' : 'water'];
               })),
+              island_count: count,
+              pseudocode_line: 13,
             });
           }
         }
@@ -86,6 +92,7 @@ export function numberOfIslands(input) {
     description: `Found ${count} island(s) in ${rows}×${cols} grid`,
     nodes, edges,
     output: String(count),
+    pseudocode_line: 1,
   });
 
   return trace;
