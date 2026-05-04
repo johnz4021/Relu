@@ -172,7 +172,7 @@ const PANEL_DEFAULTS = {
     { id: 'search_log', type: 'log', title: 'Search Log' },
   ],
 
-  // --- Tier 2 synthetic algorithms (context renderer) ---
+  // --- Hashing / HashMap patterns ---
   hash_map_grouping: [
     { id: 'algorithm_state', type: 'key_value', title: 'Hash Map State' },
   ],
@@ -185,23 +185,81 @@ const PANEL_DEFAULTS = {
   string_hash: [
     { id: 'algorithm_state', type: 'key_value', title: 'Char Map' },
   ],
-  greedy_choice: [
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
-  ],
   set_operations: [
     { id: 'algorithm_state', type: 'key_value', title: 'Set State' },
   ],
   bit_ops: [
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'algorithm_state', type: 'key_value', title: 'Bit State' },
   ],
   math_simulation: [
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
+    { id: 'algorithm_state', type: 'key_value', title: 'Simulation State' },
+  ],
+  greedy_choice: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Greedy State' },
+  ],
+  jump_game_ii: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Jump State' },
+  ],
+  valid_parentheses: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Stack State' },
+  ],
+  task_scheduler: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Scheduler State' },
+  ],
+  lru_cache: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Cache State' },
   ],
 
-  // --- Tier 2 synthetic algorithms (array/table renderer) ---
-  prefix_sum: [
-    { id: 'algorithm_state', type: 'key_value', title: 'Prefix Sums' },
+  // --- Math patterns ---
+  fast_power: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Power State' },
   ],
+  gcd_algorithm: [
+    { id: 'algorithm_state', type: 'key_value', title: 'GCD State' },
+  ],
+  majority_vote: [
+    { id: 'algorithm_state', type: 'key_value', title: 'Vote State' },
+  ],
+
+  // --- Array/table/string renderer patterns (no context panels needed) ---
+  prefix_sum: [],
+  difference_array: [],
+  lis: [],
+  stock_dp: [],
+  interval_dp: [],
+  palindrome_dp: [],
+  bitmask_dp: [],
+  house_robber: [],
+  sieve_primes: [],
+  spiral_matrix: [],
+  rotate_matrix: [],
+  combination_sum: [],
+  subsets: [],
+  permutations: [],
+  sliding_window_max: [],
+  jump_game: [],
+  rabin_karp: [],
+  manacher: [],
+
+  // --- Graph renderer patterns ---
+  multi_source_bfs: [],
+  floyd_warshall: [],
+  tarjan_bridges: [],
+  bipartite_check: [],
+  dijkstra_k_stops: [],
+  number_of_islands: [],
+
+  // --- Tree renderer patterns ---
+  top_k_heap: [],
+  median_finder: [],
+  k_closest_points: [],
+  tree_dp: [],
+  lca_tree: [],
+  validate_bst: [],
+  linked_list_cycle: [],
+  merge_k_sorted: [],
+
+  // --- Legacy fallback entries ---
   matrix_dp: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],

@@ -68,6 +68,13 @@ export function validateTraceStructure(trace, renderer) {
     console.warn(`[Sandbox] Trace does not end with result-type step (got: ${lastType})`);
   }
 
+  // Per-renderer minimum step counts (init + at least 2 algorithm steps + result)
+  const MIN_STEPS = { context: 4, array: 4, table: 4, graph: 4, tree: 3, string: 4 };
+  const minSteps = MIN_STEPS[renderer] || 3;
+  if (trace.length < minSteps) {
+    throw new Error(`Trace too thin: ${trace.length} steps (minimum ${minSteps} required for "${renderer}" renderer)`);
+  }
+
   // Renderer-specific field checks
   switch (renderer) {
     case 'graph': {
@@ -102,6 +109,19 @@ export function validateTraceStructure(trace, renderer) {
         throw new Error(
           `Context trace has ${stepsWithoutViz.length} step(s) missing viz_actions[algorithm_state]: ${stepsWithoutViz.map(s => s.type).join(', ')}`
         );
+      }
+      // Every non-init step must have at least one entry with actual data
+      const hasData = trace.some(s =>
+        !s.type.includes('init') &&
+        s.viz_actions?.some(a =>
+          a.renderer === 'context' &&
+          a.params?.panel_id === 'algorithm_state' &&
+          Array.isArray(a.params?.entries) &&
+          a.params.entries.length > 0
+        )
+      );
+      if (!hasData) {
+        throw new Error('Context trace has no non-init steps with non-empty entries — panel will be blank');
       }
       break;
     }

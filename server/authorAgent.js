@@ -30,6 +30,8 @@ For renderer 'array':
   Steps should include: init, compare, swap, partition, mark_sorted, result
   Each step should have: { indices?, values?, array? (snapshot) }
   Input: { array: number[] }
+  IMPORTANT: Do NOT add viz_actions to array renderer steps. viz_actions are for context renderer ONLY.
+  The array renderer visualizes the 'array' field automatically.
 
 For renderer 'table':
   Steps should include: init_table, fill_cell, skip_cell, traceback, result
@@ -65,9 +67,12 @@ For renderer 'context':
   Rules for viz_actions:
   - Each step must emit ALL current state entries (not just the changed one), so the panel shows the full state
   - Use status: "updated" for newly added/changed entries, status: "default" for unchanged ones
-  - The init step should emit an empty entries array or the initial state
+  - The init step may emit entries: [] (empty) to represent the initial empty state
+  - Every step AFTER init MUST emit at least one entry with real data — never emit empty entries after init
   - The result step should show the final complete state
   - Make values human-readable (use JSON.stringify for objects, join arrays with ", ")
+  CRITICAL: A trace where all non-init steps emit empty entries is INVALID. The panel will be blank.
+  You MUST have data in entries for every algorithm step after initialization.
 
   Example for hash_map_grouping (Group Anagrams):
   Input: { "words": ["eat", "tea", "tan", "ate", "nat", "bat"] }

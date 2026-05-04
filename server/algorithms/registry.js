@@ -4,8 +4,19 @@ import { knapsack, editDistance, lcs, coinChange, maxSubarray, DEFAULT_MAX_SUBAR
 import { polyReduction, DEFAULT_REDUCTION_FORMULA } from './complexity/index.js';
 import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT, rotateArray, DEFAULT_ROTATE_ARRAY_INPUT } from './searching/index.js';
 import { huffman } from './compression/index.js';
-import { heapOperations, trie, DEFAULT_TRIE_INPUT, bstInsert, treeDfs, DEFAULT_TREE_DFS_INPUT, treeLevelOrder, DEFAULT_TREE_LEVEL_ORDER_INPUT, treePath, DEFAULT_TREE_PATH_INPUT } from './tree/index.js';
-import { linkedListReversal, stackOperations, queueOperations } from './linked/index.js';
+import { heapOperations, trie, DEFAULT_TRIE_INPUT, bstInsert, treeDfs, DEFAULT_TREE_DFS_INPUT, treeLevelOrder, DEFAULT_TREE_LEVEL_ORDER_INPUT, treePath, DEFAULT_TREE_PATH_INPUT, lcaTree, DEFAULT_LCA_TREE_INPUT, validateBst, DEFAULT_VALIDATE_BST_INPUT } from './tree/index.js';
+import { linkedListReversal, stackOperations, queueOperations, linkedListCycle, DEFAULT_LINKED_LIST_CYCLE_INPUT, mergeKSorted, DEFAULT_MERGE_K_SORTED_INPUT } from './linked/index.js';
+// Tier 1 pattern modules
+import { hashMapGrouping, DEFAULT_HASH_MAP_GROUPING_INPUT, frequencyCount, DEFAULT_FREQUENCY_COUNT_INPUT, twoSumHash, DEFAULT_TWO_SUM_HASH_INPUT, stringHash, DEFAULT_STRING_HASH_INPUT, setOperations, DEFAULT_SET_OPERATIONS_INPUT, bitOps, DEFAULT_BIT_OPS_INPUT, mathSimulation, DEFAULT_MATH_SIMULATION_INPUT, greedyChoice, DEFAULT_GREEDY_CHOICE_INPUT, jumpGameII, DEFAULT_JUMP_GAME_II_INPUT, validParentheses, DEFAULT_VALID_PARENTHESES_INPUT, taskScheduler, DEFAULT_TASK_SCHEDULER_INPUT, lruCache, DEFAULT_LRU_CACHE_INPUT } from './hashing/index.js';
+import { prefixSum, DEFAULT_PREFIX_SUM_INPUT, differenceArray, DEFAULT_DIFFERENCE_ARRAY_INPUT } from './prefix/index.js';
+import { lis, DEFAULT_LIS_INPUT, stockDp, DEFAULT_STOCK_DP_INPUT, intervalDp, DEFAULT_INTERVAL_DP_INPUT, palindromeDp, DEFAULT_PALINDROME_DP_INPUT, bitmaskDp, DEFAULT_BITMASK_DP_INPUT, treeDP, DEFAULT_TREE_DP_INPUT, houseRobber, DEFAULT_HOUSE_ROBBER_INPUT } from './dp_patterns/index.js';
+import { multiSourceBfs, DEFAULT_MULTI_SOURCE_BFS_INPUT, floydWarshall, DEFAULT_FLOYD_WARSHALL_INPUT, tarjanBridges, DEFAULT_TARJAN_BRIDGES_INPUT, bipartiteCheck, DEFAULT_BIPARTITE_CHECK_INPUT, dijkstraKStops, DEFAULT_DIJKSTRA_K_STOPS_INPUT } from './graph_advanced/index.js';
+import { topKHeap, DEFAULT_TOP_K_HEAP_INPUT, medianFinder, DEFAULT_MEDIAN_FINDER_INPUT, kClosestPoints, DEFAULT_K_CLOSEST_POINTS_INPUT } from './heap_patterns/index.js';
+import { sievePrimes, DEFAULT_SIEVE_PRIMES_INPUT, fastPower, DEFAULT_FAST_POWER_INPUT, gcdAlgorithm, DEFAULT_GCD_ALGORITHM_INPUT, majorityVote, DEFAULT_MAJORITY_VOTE_INPUT } from './math_patterns/index.js';
+import { rabinKarp, DEFAULT_RABIN_KARP_INPUT, manacher, DEFAULT_MANACHER_INPUT } from './string_advanced/index.js';
+import { numberOfIslands, DEFAULT_NUMBER_OF_ISLANDS_INPUT, spiralMatrix, DEFAULT_SPIRAL_MATRIX_INPUT, rotateMatrix, DEFAULT_ROTATE_MATRIX_INPUT } from './matrix/index.js';
+import { combinationSum, DEFAULT_COMBINATION_SUM_INPUT, subsets, DEFAULT_SUBSETS_INPUT, permutations, DEFAULT_PERMUTATIONS_INPUT } from './backtracking_patterns/index.js';
+import { slidingWindowMax, DEFAULT_SLIDING_WINDOW_MAX_INPUT, jumpGame, DEFAULT_JUMP_GAME_INPUT } from './monotonic_deque/index.js';
 
 /**
  * Central algorithm registry. Each entry defines:
@@ -364,51 +375,309 @@ export const ALGORITHMS = {
     capabilities: { max_array_length: 15 },
   },
 
-  // ── Tier 2 synthetic keys (no Tier 1 hand-written trace; generated on demand) ──
-  // run: null marks these as Tier 2-only — runAlgorithmWithFallback skips to Tier 2.
+  // ── Hashing / HashMap patterns (Tier 1) ──────────────────────────────────────
   hash_map_grouping: {
-    run: null, renderer: 'context', category: 'Data Structures', tier: 2,
-    defaultInput: { words: ['eat', 'tea', 'tan', 'ate', 'nat', 'bat'] },
+    run: (input) => hashMapGrouping(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_HASH_MAP_GROUPING_INPUT,
     capabilities: { max_array_length: 12 },
   },
   frequency_count: {
-    run: null, renderer: 'context', category: 'Data Structures', tier: 2,
-    defaultInput: { nums: [1, 1, 1, 2, 2, 3], k: 2 },
+    run: (input) => frequencyCount(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_FREQUENCY_COUNT_INPUT,
     capabilities: { max_array_length: 15 },
   },
   two_sum_hash: {
-    run: null, renderer: 'context', category: 'Data Structures', tier: 2,
-    defaultInput: { nums: [2, 7, 11, 15], target: 9 },
-    capabilities: { max_array_length: 15 },
-  },
-  prefix_sum: {
-    run: null, renderer: 'array', category: 'Algorithms', tier: 2,
-    defaultInput: { nums: [1, 2, 3, 4, 5], target: 9 },
+    run: (input) => twoSumHash(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_TWO_SUM_HASH_INPUT,
     capabilities: { max_array_length: 15 },
   },
   string_hash: {
-    run: null, renderer: 'context', category: 'Data Structures', tier: 2,
-    defaultInput: { s: 'egg', t: 'add' },
-    capabilities: { max_array_length: 15 },
-  },
-  greedy_choice: {
-    run: null, renderer: 'context', category: 'Greedy Algorithms', tier: 2,
-    defaultInput: { nums: [2, 3, 1, 1, 4] },
+    run: (input) => stringHash(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_STRING_HASH_INPUT,
     capabilities: { max_array_length: 15 },
   },
   set_operations: {
-    run: null, renderer: 'context', category: 'Data Structures', tier: 2,
-    defaultInput: { nums: [1, 2, 3, 1] },
+    run: (input) => setOperations(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_SET_OPERATIONS_INPUT,
     capabilities: { max_array_length: 15 },
   },
   bit_ops: {
-    run: null, renderer: 'context', category: 'Algorithms', tier: 2,
-    defaultInput: { nums: [4, 1, 2, 1, 2] },
+    run: (input) => bitOps(input),
+    renderer: 'context', category: 'Algorithms',
+    defaultInput: DEFAULT_BIT_OPS_INPUT,
     capabilities: { max_array_length: 15 },
   },
   math_simulation: {
-    run: null, renderer: 'context', category: 'Algorithms', tier: 2,
-    defaultInput: { n: 19 },
+    run: (input) => mathSimulation(input),
+    renderer: 'context', category: 'Algorithms',
+    defaultInput: DEFAULT_MATH_SIMULATION_INPUT,
+    capabilities: {},
+  },
+  greedy_choice: {
+    run: (input) => greedyChoice(input),
+    renderer: 'context', category: 'Greedy Algorithms',
+    defaultInput: DEFAULT_GREEDY_CHOICE_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+  jump_game_ii: {
+    run: (input) => jumpGameII(input),
+    renderer: 'context', category: 'Greedy Algorithms',
+    defaultInput: DEFAULT_JUMP_GAME_II_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+  valid_parentheses: {
+    run: (input) => validParentheses(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_VALID_PARENTHESES_INPUT,
+    capabilities: {},
+  },
+  task_scheduler: {
+    run: (input) => taskScheduler(input),
+    renderer: 'context', category: 'Greedy Algorithms',
+    defaultInput: DEFAULT_TASK_SCHEDULER_INPUT,
+    capabilities: {},
+  },
+  lru_cache: {
+    run: (input) => lruCache(input),
+    renderer: 'context', category: 'Data Structures',
+    defaultInput: DEFAULT_LRU_CACHE_INPUT,
+    capabilities: {},
+  },
+
+  // ── Prefix Sum patterns (Tier 1) ──────────────────────────────────────────────
+  prefix_sum: {
+    run: (input) => prefixSum(input),
+    renderer: 'array', category: 'Algorithms',
+    defaultInput: DEFAULT_PREFIX_SUM_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+  difference_array: {
+    run: (input) => differenceArray(input),
+    renderer: 'array', category: 'Algorithms',
+    defaultInput: DEFAULT_DIFFERENCE_ARRAY_INPUT,
+    capabilities: { max_array_length: 12 },
+  },
+
+  // ── DP Patterns (Tier 1) ──────────────────────────────────────────────────────
+  lis: {
+    run: (input) => lis(input),
+    renderer: 'array', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_LIS_INPUT,
+    capabilities: { max_array_length: 12 },
+  },
+  stock_dp: {
+    run: (input) => stockDp(input),
+    renderer: 'table', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_STOCK_DP_INPUT,
+    capabilities: { max_table_cols: 10 },
+  },
+  interval_dp: {
+    run: (input) => intervalDp(input),
+    renderer: 'table', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_INTERVAL_DP_INPUT,
+    capabilities: { max_table_rows: 8, max_table_cols: 8 },
+  },
+  palindrome_dp: {
+    run: (input) => palindromeDp(input),
+    renderer: 'table', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_PALINDROME_DP_INPUT,
+    capabilities: { max_table_rows: 8, max_table_cols: 8 },
+  },
+  bitmask_dp: {
+    run: (input) => bitmaskDp(input),
+    renderer: 'table', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_BITMASK_DP_INPUT,
+    capabilities: { max_table_rows: 16, max_table_cols: 4 },
+  },
+  tree_dp: {
+    run: (input) => treeDP(input),
+    renderer: 'tree', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_TREE_DP_INPUT,
+    capabilities: {},
+  },
+  house_robber: {
+    run: (input) => houseRobber(input),
+    renderer: 'array', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_HOUSE_ROBBER_INPUT,
+    capabilities: { max_array_length: 12 },
+  },
+
+  // ── Advanced Graph patterns (Tier 1) ─────────────────────────────────────────
+  multi_source_bfs: {
+    run: (input) => multiSourceBfs(input),
+    renderer: 'graph', category: 'Graph Algorithms',
+    defaultInput: DEFAULT_MULTI_SOURCE_BFS_INPUT,
+    capabilities: { max_nodes: 20, max_edges: 40 },
+  },
+  floyd_warshall: {
+    run: (input) => floydWarshall(input),
+    renderer: 'graph', category: 'Graph Algorithms',
+    defaultInput: DEFAULT_FLOYD_WARSHALL_INPUT,
+    capabilities: { supports_directed: true, max_nodes: 8, max_edges: 20 },
+  },
+  tarjan_bridges: {
+    run: (input) => tarjanBridges(input),
+    renderer: 'graph', category: 'Graph Algorithms',
+    defaultInput: DEFAULT_TARJAN_BRIDGES_INPUT,
+    capabilities: { supports_directed: false, max_nodes: 12, max_edges: 20 },
+  },
+  bipartite_check: {
+    run: (input) => bipartiteCheck(input),
+    renderer: 'graph', category: 'Graph Algorithms',
+    defaultInput: DEFAULT_BIPARTITE_CHECK_INPUT,
+    capabilities: { supports_directed: false, max_nodes: 12, max_edges: 20 },
+  },
+  dijkstra_k_stops: {
+    run: (input) => dijkstraKStops(input),
+    renderer: 'graph', category: 'Graph Algorithms',
+    defaultInput: DEFAULT_DIJKSTRA_K_STOPS_INPUT,
+    capabilities: { supports_directed: true, max_nodes: 12, max_edges: 20 },
+  },
+
+  // ── Heap patterns (Tier 1) ────────────────────────────────────────────────────
+  top_k_heap: {
+    run: (input) => topKHeap(input),
+    renderer: 'tree', category: 'Data Structures',
+    defaultInput: DEFAULT_TOP_K_HEAP_INPUT,
+    capabilities: {},
+  },
+  median_finder: {
+    run: (input) => medianFinder(input),
+    renderer: 'tree', category: 'Data Structures',
+    defaultInput: DEFAULT_MEDIAN_FINDER_INPUT,
+    capabilities: {},
+  },
+  k_closest_points: {
+    run: (input) => kClosestPoints(input),
+    renderer: 'tree', category: 'Algorithms',
+    defaultInput: DEFAULT_K_CLOSEST_POINTS_INPUT,
+    capabilities: {},
+  },
+
+  // ── Math patterns (Tier 1) ────────────────────────────────────────────────────
+  sieve_primes: {
+    run: (input) => sievePrimes(input),
+    renderer: 'array', category: 'Algorithms',
+    defaultInput: DEFAULT_SIEVE_PRIMES_INPUT,
+    capabilities: { max_array_length: 31 },
+  },
+  fast_power: {
+    run: (input) => fastPower(input),
+    renderer: 'context', category: 'Algorithms',
+    defaultInput: DEFAULT_FAST_POWER_INPUT,
+    capabilities: {},
+  },
+  gcd_algorithm: {
+    run: (input) => gcdAlgorithm(input),
+    renderer: 'context', category: 'Algorithms',
+    defaultInput: DEFAULT_GCD_ALGORITHM_INPUT,
+    capabilities: {},
+  },
+  majority_vote: {
+    run: (input) => majorityVote(input),
+    renderer: 'context', category: 'Algorithms',
+    defaultInput: DEFAULT_MAJORITY_VOTE_INPUT,
+    capabilities: { max_array_length: 12 },
+  },
+
+  // ── String Advanced (Tier 1) ──────────────────────────────────────────────────
+  rabin_karp: {
+    run: (input) => rabinKarp(input),
+    renderer: 'string', category: 'String Algorithms',
+    defaultInput: DEFAULT_RABIN_KARP_INPUT,
+    capabilities: {},
+  },
+  manacher: {
+    run: (input) => manacher(input),
+    renderer: 'string', category: 'String Algorithms',
+    defaultInput: DEFAULT_MANACHER_INPUT,
+    capabilities: {},
+  },
+
+  // ── Matrix patterns (Tier 1) ──────────────────────────────────────────────────
+  number_of_islands: {
+    run: (input) => numberOfIslands(input),
+    renderer: 'graph', category: 'Graph Algorithms',
+    defaultInput: DEFAULT_NUMBER_OF_ISLANDS_INPUT,
+    capabilities: { max_nodes: 25, max_edges: 40 },
+  },
+  spiral_matrix: {
+    run: (input) => spiralMatrix(input),
+    renderer: 'array', category: 'Algorithms',
+    defaultInput: DEFAULT_SPIRAL_MATRIX_INPUT,
+    capabilities: { max_array_length: 20 },
+  },
+  rotate_matrix: {
+    run: (input) => rotateMatrix(input),
+    renderer: 'array', category: 'Algorithms',
+    defaultInput: DEFAULT_ROTATE_MATRIX_INPUT,
+    capabilities: { max_array_length: 20 },
+  },
+
+  // ── Backtracking patterns (Tier 1) ────────────────────────────────────────────
+  combination_sum: {
+    run: (input) => combinationSum(input),
+    renderer: 'array', category: 'Backtracking',
+    defaultInput: DEFAULT_COMBINATION_SUM_INPUT,
+    capabilities: { max_array_length: 10 },
+  },
+  subsets: {
+    run: (input) => subsets(input),
+    renderer: 'array', category: 'Backtracking',
+    defaultInput: DEFAULT_SUBSETS_INPUT,
+    capabilities: { max_array_length: 8 },
+  },
+  permutations: {
+    run: (input) => permutations(input),
+    renderer: 'array', category: 'Backtracking',
+    defaultInput: DEFAULT_PERMUTATIONS_INPUT,
+    capabilities: { max_array_length: 6 },
+  },
+
+  // ── Monotonic Deque patterns (Tier 1) ─────────────────────────────────────────
+  sliding_window_max: {
+    run: (input) => slidingWindowMax(input),
+    renderer: 'array', category: 'Algorithms',
+    defaultInput: DEFAULT_SLIDING_WINDOW_MAX_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+  jump_game: {
+    run: (input) => jumpGame(input),
+    renderer: 'array', category: 'Greedy Algorithms',
+    defaultInput: DEFAULT_JUMP_GAME_INPUT,
+    capabilities: { max_array_length: 12 },
+  },
+
+  // ── Tree Advanced (Tier 1) ────────────────────────────────────────────────────
+  lca_tree: {
+    run: (input) => lcaTree(input),
+    renderer: 'tree', category: 'Tree Algorithms',
+    defaultInput: DEFAULT_LCA_TREE_INPUT,
+    capabilities: {},
+  },
+  validate_bst: {
+    run: (input) => validateBst(input),
+    renderer: 'tree', category: 'Tree Algorithms',
+    defaultInput: DEFAULT_VALIDATE_BST_INPUT,
+    capabilities: {},
+  },
+
+  // ── Linked List / Pointer patterns (Tier 1) ────────────────────────────────────
+  linked_list_cycle: {
+    run: (input) => linkedListCycle(input),
+    renderer: 'tree', category: 'Data Structures',
+    defaultInput: DEFAULT_LINKED_LIST_CYCLE_INPUT,
+    capabilities: {},
+  },
+  merge_k_sorted: {
+    run: (input) => mergeKSorted(input),
+    renderer: 'tree', category: 'Data Structures',
+    defaultInput: DEFAULT_MERGE_K_SORTED_INPUT,
     capabilities: {},
   },
 };
@@ -459,10 +728,27 @@ export async function runAlgorithmWithFallback(algorithmId, input, context) {
     return { trace, renderer: cached.renderer, input: actualInput, tier: 2 };
   }
 
-  // Generate new trace generator — pass description so the LLM gets the actual problem name
+  // Generate new trace generator with up to 3 attempts.
+  // On retry, the validation error message is fed back to the LLM as failureReason.
   const { generateTraceGenerator } = await import('../authorAgent.js');
-  const code = await generateTraceGenerator(algorithmId, renderer, description, context);
-  const trace = executeTraceInSandbox(code, actualInput, 5000, renderer);
+  let code, trace, lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const attemptContext = attempt > 1
+        ? { ...context, failureReason: lastError.message }
+        : context;
+      code = await generateTraceGenerator(algorithmId, renderer, description, attemptContext);
+      trace = executeTraceInSandbox(code, actualInput, 5000, renderer);
+      if (attempt > 1) {
+        console.log(`[Registry] Attempt ${attempt}/3 succeeded for ${algorithmId}`);
+      }
+      break;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[Registry] Attempt ${attempt}/3 failed for ${algorithmId}: ${err.message}`);
+      if (attempt === 3) throw err;
+    }
+  }
 
   // Validate node IDs in trace exist in input graph (for graph algorithms)
   if (renderer === 'graph' && actualInput?.graph?.nodes) {
