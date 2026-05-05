@@ -97,7 +97,7 @@ const wss = new WebSocketServer({ noServer: true });
 
 const PORT = process.env.PORT || 3001;
 
-const FREE_SESSION_LIMIT = 30;
+const FREE_SESSION_LIMIT = 10;
 
 const sessions = new Map();
 const sessionsByUserId = new Map();
@@ -406,11 +406,30 @@ function attachHandlers(ws, session) {
 
         case 'register_interest': {
           if (!session.userId) return;
+          // Auth-tied "would pay" intent → user_settings (existing schema).
+          // Comments column kept populated with wedge_other for backward-compat
+          // with anything reading it; full structured payload also goes to
+          // feedback table for queryable analysis.
           await saveUserSettings(session.userId, {
             would_pay: true,
             would_pay_amount: msg.amount || null,
             other_classes: msg.otherClasses || null,
-            comments: msg.comments || null,
+            comments: msg.wedgeOther || msg.comments || null,
+          });
+          // Survey signal → feedback table with category='gate_survey'. Lets
+          // us run group-by queries on which wedge selections drive intent
+          // without polluting user_settings with N more columns per question.
+          saveFeedback('gate_survey', {
+            email: session.userEmail || null,
+            message: msg.problemContext || '',
+            meta: {
+              amount: msg.amount || null,
+              other_classes: msg.otherClasses || null,
+              wedge_selections: Array.isArray(msg.wedgeSelections) ? msg.wedgeSelections : [],
+              wedge_other: msg.wedgeOther || null,
+              nps_score: typeof msg.npsScore === 'number' ? msg.npsScore : null,
+              had_problem_context: !!(msg.problemContext && msg.problemContext.trim()),
+            },
           });
           ws.send(JSON.stringify({ type: 'interest_registered' }));
           break;

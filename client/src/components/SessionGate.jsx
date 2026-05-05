@@ -5,7 +5,18 @@ const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 const AMOUNTS = ['$5/mo', '$10/mo', '$15/mo', '$20+/mo'];
 
-export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyResult }) {
+// Wedge question: what would unlock paying. Structured > free-form so we can
+// group/count and prioritize the roadmap from real signal instead of vibes.
+const WEDGE_OPTIONS = [
+  { id: 'more_sessions',     label: 'More sessions per month' },
+  { id: 'better_explanations', label: 'Better / deeper explanations' },
+  { id: 'more_algorithms',   label: 'More LeetCode problems supported' },
+  { id: 'save_replay',       label: 'Save and replay past sessions' },
+  { id: 'mobile',            label: 'Mobile / responsive' },
+  { id: 'team_license',      label: 'Team or class license' },
+];
+
+export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyResult, lastProblemText }) {
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -24,12 +35,25 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
   }, [apiKeyResult, onKeySuccess]);
   const [selectedAmount, setSelectedAmount] = useState(null);
   const [otherClasses, setOtherClasses] = useState('');
-  const [comments, setComments] = useState('');
+  // Auto-fill last problem text so we know which content was load-bearing
+  // when the user hit the cap. Editable in case they want to clarify.
+  const [problemContext, setProblemContext] = useState(lastProblemText || '');
+  const [wedgeSelections, setWedgeSelections] = useState(new Set());
+  const [wedgeOther, setWedgeOther] = useState('');
+  const [npsScore, setNpsScore] = useState(null);
   const [interestSent, setInterestSent] = useState(false);
 
   useEffect(() => {
     track('gate_viewed', { count, limit });
   }, [count, limit]);
+
+  const toggleWedge = (id) => {
+    setWedgeSelections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const handleSaveKey = () => {
     if (!apiKey.trim()) return;
@@ -40,8 +64,26 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
 
   const handleInterestSubmit = () => {
     if (!selectedAmount) return;
-    send({ type: 'register_interest', amount: selectedAmount, otherClasses: otherClasses.trim(), comments: comments.trim() });
-    track('would_pay_clicked', { amount: selectedAmount, other_classes: otherClasses.trim(), comments: comments.trim() });
+    const wedgeArr = Array.from(wedgeSelections);
+    const payload = {
+      type: 'register_interest',
+      amount: selectedAmount,
+      otherClasses: otherClasses.trim(),
+      // Structured signal replacing the old "any other comments" textarea.
+      problemContext: problemContext.trim(),
+      wedgeSelections: wedgeArr,
+      wedgeOther: wedgeOther.trim(),
+      npsScore: npsScore,
+    };
+    send(payload);
+    track('would_pay_clicked', {
+      amount: selectedAmount,
+      other_classes: otherClasses.trim(),
+      wedge_selections: wedgeArr,
+      wedge_other: wedgeOther.trim(),
+      nps_score: npsScore,
+      had_problem_context: !!problemContext.trim(),
+    });
     setInterestSent(true);
   };
 
@@ -142,21 +184,73 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
                 className="w-full px-3 py-2 text-sm bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40 mb-4"
               />
 
-              <p className="text-xs text-text-tertiary mb-2">Any other comments or suggestions?</p>
-              <textarea
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="What would make this more useful for you?"
-                rows={2}
-                className="w-full px-3 py-2 text-sm bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40 mb-4 resize-none"
+              {/* Wedge question — replaces the open "comments" textarea.
+                  Structured selections give us countable prioritization signal. */}
+              <p className="text-xs text-text-tertiary mb-2">What would unlock paying for this? (pick any)</p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {WEDGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => toggleWedge(opt.id)}
+                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                      wedgeSelections.has(opt.id)
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-surface-0 border-border text-text-secondary hover:border-text-tertiary'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={wedgeOther}
+                onChange={(e) => setWedgeOther(e.target.value)}
+                placeholder="Other (optional)"
+                className="w-full px-3 py-2 text-sm bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40 mb-4"
               />
+
+              {/* Auto-filled from the last LC problem the user pasted before
+                  hitting the cap. Editable so they can clarify or replace it. */}
+              {(problemContext || lastProblemText) && (
+                <>
+                  <p className="text-xs text-text-tertiary mb-2">Last problem you were working on (helps us prioritize what to support next):</p>
+                  <textarea
+                    value={problemContext}
+                    onChange={(e) => setProblemContext(e.target.value)}
+                    rows={2}
+                    placeholder="Paste or describe the LeetCode problem..."
+                    className="w-full px-3 py-2 text-sm bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40 mb-4 resize-none"
+                  />
+                </>
+              )}
+
+              {/* NPS at the cap — peak engagement moment, single best signal. */}
+              <p className="text-xs text-text-tertiary mb-2">How likely are you to recommend ReLU to a friend? (1 = not at all, 10 = definitely)</p>
+              <div className="flex gap-1 mb-4">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setNpsScore(n)}
+                    className={`flex-1 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                      npsScore === n
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-surface-0 border-border text-text-secondary hover:border-text-tertiary'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
 
               <button
                 onClick={handleInterestSubmit}
                 disabled={!selectedAmount}
                 className="w-full px-4 py-2 text-sm font-medium bg-surface-2 text-text-primary border border-border rounded-lg hover:bg-surface-3 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Submit
+                Request {limit} more sessions
               </button>
             </>
           )}

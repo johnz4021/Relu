@@ -542,6 +542,7 @@ export default function App() {
                 send={send}
                 apiKeyResult={apiKeyResult}
                 onKeySuccess={() => setGateStatus((prev) => ({ ...prev, allowed: true, hasByok: true }))}
+                lastProblemText={lcParsed?.problemText || null}
               />
             ) : (
               <LandingTabs
@@ -752,6 +753,7 @@ export default function App() {
             limit={0}
             send={send}
             apiKeyResult={apiKeyResult}
+            lastProblemText={lcParsed?.problemText || null}
             onKeySuccess={() => {
               setShowCreditsModal(false);
               setApiKeyResult(null);
