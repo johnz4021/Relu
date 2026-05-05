@@ -4,6 +4,7 @@ import VizLayout from './components/VizLayout';
 import VizRequestBanner from './components/VizRequestBanner';
 import VizErrorToast from './components/VizErrorToast';
 import VizTierToast from './components/VizTierToast';
+import ReportBugButton from './components/ReportBugButton';
 import GraphRenderer from './components/renderers/GraphRenderer';
 import Transcript from './components/Transcript';
 import Controls from './components/Controls';
@@ -500,6 +501,13 @@ export default function App() {
           )}
         </div>
         <div className="flex items-center gap-3">
+          {!showSelector && (
+            <ReportBugButton
+              algorithmKey={state.algorithm}
+              problemText={lcParsed?.problemText || null}
+              userEmail={user?.email}
+            />
+          )}
           {!showSelector && (
             <button
               onClick={() => setShowExitConfirm(true)}

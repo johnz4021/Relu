@@ -44,6 +44,28 @@ app.post('/api/session-feedback', (req, res) => {
   res.json({ ok: true });
 });
 
+// Bug report endpoint — fired from the always-available "Report bug" button
+// in the lesson-page header. Catches everything VizErrorToast can't auto-detect:
+// wrong tutor hints, weird animations, "this looks off", confusion, suggestions.
+// Severity values: broken | confusing | suggestion.
+app.post('/api/bug-report', (req, res) => {
+  const { email, algorithm, problem_text, severity, description, user_agent, viewport, url_path } = req.body;
+  console.log(`[BugReport] sev=${severity} algo=${algorithm} from=${email || 'anonymous'}: ${(description || '').slice(0, 200)}`);
+  saveFeedback('bug_report', {
+    email,
+    message: description || '',
+    meta: {
+      severity: severity || 'unknown',
+      algorithm: algorithm || null,
+      problem_text: problem_text || null,
+      user_agent: user_agent || null,
+      viewport: viewport || null,
+      url_path: url_path || null,
+    },
+  });
+  res.json({ ok: true });
+});
+
 // Viz error endpoint — fired from VizErrorToast when a user clicks "Report"
 // after a renderer crash or never-mounted timeout. Logs to feedback table
 // with category='viz_error'. Lets us prioritize fixes from real signal.
