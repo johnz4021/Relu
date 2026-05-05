@@ -63,7 +63,7 @@ export default function AuthModal() {
           </div>
 
           <p className="text-xs text-text-tertiary font-body mt-8">
-            30 free sessions · No credit card
+            10 free sessions · No credit card
           </p>
         </div>
 

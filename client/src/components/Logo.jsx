@@ -7,7 +7,7 @@ export default function Logo({ size = 'md' }) {
   const html = useMemo(() => {
     try {
       return katex.renderToString(
-        String.raw`\operatorname{ReLU}_{\theta}`,
+        String.raw`\operatorname{relu}_{\theta}`,
         { throwOnError: false, displayMode: false }
       );
     } catch {
@@ -16,7 +16,7 @@ export default function Logo({ size = 'md' }) {
   }, []);
 
   if (!html) {
-    return <span className={`${scale} text-text-primary`}>ReLU</span>;
+    return <span className={`${scale} text-text-primary`}>relu</span>;
   }
 
   return (

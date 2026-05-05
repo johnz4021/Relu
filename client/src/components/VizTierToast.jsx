@@ -28,7 +28,6 @@ export default function VizTierToast({ vizTier, algorithmKey }) {
 
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg shadow-lg bg-amber-900/95 border border-amber-700 text-amber-50 text-sm px-4 py-3 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-      <span className="text-base leading-none mt-0.5">✨</span>
       <div className="flex-1 min-w-0">
         <div className="font-medium">On-the-fly visualization</div>
         <div className="text-xs text-amber-200/90 mt-0.5">
