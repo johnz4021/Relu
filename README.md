@@ -43,8 +43,8 @@ Run your own instance in four steps.
 
 **1. Clone the repo**
 ```bash
-git clone https://github.com/johnz4021/ReLU.git
-cd ReLU
+git clone https://github.com/johnz4021/Relu.git
+cd Relu
 ```
 
 **2. Create your accounts**

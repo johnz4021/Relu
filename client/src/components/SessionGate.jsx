@@ -108,7 +108,7 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
           <p className="text-xs text-text-tertiary mb-3">
             Your key is AES-256 encrypted and never logged.{' '}
             <a
-              href="https://github.com/johnz4021/ReLU/blob/main/server/index.js#L455"
+              href="https://github.com/johnz4021/Relu/blob/main/server/index.js#L421"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline"
