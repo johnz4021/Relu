@@ -400,8 +400,14 @@ export const ALGORITHMS = {
     capabilities: { max_array_length: 15 },
   },
   two_sum_hash: {
+    // Was renderer: 'context'. Switched to 'array' so the input array
+    // renders as bars deterministically via mapArrayStep — previously the
+    // agent's Tier 2 design layer would sometimes design an array_main
+    // panel via build_example_graph but fail to fire set_data, leaving
+    // users stuck on "Waiting for array data...". The mapper-driven path
+    // is now the single source of truth.
     run: (input) => twoSumHash(input),
-    renderer: 'context', category: 'Data Structures',
+    renderer: 'array', category: 'Data Structures',
     defaultInput: DEFAULT_TWO_SUM_HASH_INPUT,
     capabilities: { max_array_length: 15 },
   },

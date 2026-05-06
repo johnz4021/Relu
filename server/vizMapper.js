@@ -1254,6 +1254,13 @@ function mapArrayStep(algo, step, state) {
             { key: 'Phase', value: '0 of 3' },
           ],
         }));
+      } else if (algo === 'two_sum_hash') {
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [
+            { key: 'Target', value: step.target ?? '–' },
+            { key: 'Seen map', value: '(empty)' },
+          ],
+        }));
       } else {
         c.push(ctxUpdate('stats', {
           entries: [
@@ -1433,6 +1440,21 @@ function mapArrayStep(algo, step, state) {
             { key: 'Indices', value: `[${step.left}, ${step.right}]`, status: 'highlight' },
           ],
         }));
+      } else if (algo === 'two_sum_hash') {
+        // Both the complement-bearing index and the current index light up.
+        v.push(viz('array', 'highlight', {
+          indices: [step.foundAt, step.i],
+          className: 'sorted',
+        }));
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [
+            { key: 'Match', value: `[${step.foundAt}, ${step.i}]`, status: 'updated' },
+            ...Object.entries(step.seen || {}).map(([val, idx]) => ({
+              key: `val ${val}`, value: `idx ${idx}`,
+              status: idx === step.foundAt ? 'highlight' : 'default',
+            })),
+          ],
+        }));
       } else if (step.k !== undefined) {
         if (step.index !== undefined) v.push(viz('array', 'mark_sorted', { indices: [step.index] }));
         c.push(ctxUpdate('stats', {
@@ -1447,6 +1469,23 @@ function mapArrayStep(algo, step, state) {
           entries: [
             { key: 'Target', value: step.value },
             { key: 'Found at', value: step.index, status: 'updated' },
+          ],
+        }));
+      }
+      break;
+    }
+
+    // ── Two Sum (hash map) ────────────────────────────────────────────────
+    case 'store': {
+      if (algo === 'two_sum_hash') {
+        v.push(viz('array', 'highlight', { indices: [step.i], className: 'comparing' }));
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [
+            { key: 'Looking for', value: step.complement, status: 'highlight' },
+            ...Object.entries(step.seen || {}).map(([val, idx]) => ({
+              key: `val ${val}`, value: `idx ${idx}`,
+              status: String(val) === String(step.num) ? 'updated' : 'default',
+            })),
           ],
         }));
       }

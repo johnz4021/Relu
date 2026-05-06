@@ -138,13 +138,31 @@ describe('frequency_count (context renderer)', () => {
   });
 });
 
-describe('two_sum_hash (context renderer)', () => {
+describe('two_sum_hash (array renderer)', () => {
   it('[2,7,11,15] target=9 → [0,1]', () => {
     const trace = runDefault('two_sum_hash');
     expect(getResult(trace)?.output).toBe('[0,1]');
   });
-  it('has context updates', () => {
-    expect(hasContextUpdates(runDefault('two_sum_hash'))).toBe(true);
+  it('init step exposes array + target for the mapper', () => {
+    const trace = runDefault('two_sum_hash');
+    const init = trace.find(s => s.type === 'init');
+    expect(Array.isArray(init?.array)).toBe(true);
+    expect(init?.array.length).toBeGreaterThan(0);
+    expect(typeof init?.target).toBe('number');
+  });
+  it('store step exposes seen-snapshot for hash-map context updates', () => {
+    const trace = runDefault('two_sum_hash');
+    const store = trace.find(s => s.type === 'store');
+    expect(store).toBeDefined();
+    expect(typeof store.seen).toBe('object');
+    expect(Object.keys(store.seen).length).toBeGreaterThan(0);
+  });
+  it('found step has both indices for highlight', () => {
+    const trace = runDefault('two_sum_hash');
+    const found = trace.find(s => s.type === 'found');
+    expect(found).toBeDefined();
+    expect(typeof found.foundAt).toBe('number');
+    expect(typeof found.i).toBe('number');
   });
   it('no solution → [-1,-1]', () => {
     const trace = ALGORITHMS.two_sum_hash.run({ nums: [1, 2, 3], target: 100 });

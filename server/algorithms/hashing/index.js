@@ -97,6 +97,11 @@ export function frequencyCount(input) {
 export const DEFAULT_FREQUENCY_COUNT_INPUT = { nums: [1, 1, 1, 2, 2, 3], k: 2 };
 
 // ── two_sum_hash — Two Sum ────────────────────────────────────────────────────
+// Trace shape is mapper-driven (no embedded viz_actions). The algorithm
+// renderer is 'array', the canonical Two Sum visualization is bars across
+// the top with the current scan index highlighted, plus a hash-map context
+// panel ('algorithm_state') ticking as values are seen. mapArrayStep handles
+// init / store / found / result — see vizMapper.js.
 export function twoSumHash(input) {
   const nums = input.nums || [];
   const target = input.target ?? 0;
@@ -106,51 +111,45 @@ export function twoSumHash(input) {
   trace.push({
     type: 'init',
     description: `Find two indices in [${nums.join(', ')}] that sum to ${target}`,
-    viz_actions: ctxUpdate([]),
+    array: [...nums],
+    target,
   });
 
   for (let i = 0; i < nums.length; i++) {
     const num = nums[i];
     const complement = target - num;
-    const baseEntries = Object.entries(seen).map(([v, idx]) =>
-      entry(`val ${v}`, `idx ${idx}`)
-    );
 
     if (seen[complement] !== undefined) {
-      const entries = [...baseEntries, entry(`val ${num}`, `idx ${i}`, true)];
       trace.push({
         type: 'found',
         description: `nums[${i}]=${num}, complement ${complement} is at index ${seen[complement]} → answer [${seen[complement]}, ${i}]`,
-        num, complement, i, foundAt: seen[complement],
-        viz_actions: ctxUpdate(entries),
+        i, num, complement, foundAt: seen[complement],
+        seen: { ...seen },
       });
       trace.push({
         type: 'result',
         description: `Pair found at indices [${seen[complement]}, ${i}]`,
         output: `[${seen[complement]},${i}]`,
-        viz_actions: ctxUpdate(entries),
+        i, foundAt: seen[complement],
+        seen: { ...seen },
       });
       return trace;
     }
 
     seen[num] = i;
-    const entries = Object.entries(seen).map(([v, idx]) =>
-      entry(`val ${v}`, `idx ${idx}`, String(v) === String(num))
-    );
     trace.push({
       type: 'store',
       description: `nums[${i}]=${num}, complement ${complement} not seen — store {${num}: ${i}}`,
-      num, complement, i,
-      viz_actions: ctxUpdate(entries),
+      i, num, complement,
+      seen: { ...seen },
     });
   }
 
-  const finalEntries = Object.entries(seen).map(([v, idx]) => entry(`val ${v}`, `idx ${idx}`));
   trace.push({
     type: 'result',
     description: 'No solution found',
     output: '[-1,-1]',
-    viz_actions: ctxUpdate(finalEntries),
+    seen: { ...seen },
   });
   return trace;
 }

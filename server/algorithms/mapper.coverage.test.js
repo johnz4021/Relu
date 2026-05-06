@@ -131,7 +131,7 @@ const WIP_MISSING_CASE_TYPES = new Set([
   'add', 'analyze', 'cancel', 'count', 'duplicate_found',
   'evict', 'get_hit', 'get_miss', 'hash_insert',
   'jump', 'map', 'multiply', 'new_candidate',
-  'put', 'reinforce', 'scan', 'square', 'store',
+  'put', 'reinforce', 'scan', 'square',
   'xor',
 ]);
 
