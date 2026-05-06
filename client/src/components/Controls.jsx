@@ -138,7 +138,15 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
         />
       )}
       {(guidedPrompt || (guidedOptions && guidedOptions.mode === 'open_ended')) && !(guidedOptions && guidedOptions.mode !== 'open_ended') && (
-        <div className="text-sm text-text-secondary italic px-1">
+        // Truncated echo of the current Socratic question — the full text
+        // already lives in the transcript above. This is a 1-line "you're
+        // answering this →" reminder that reads when the user has scrolled
+        // away from the latest message. Hover shows the full prompt via
+        // the native title tooltip so nothing is hidden, just compressed.
+        <div
+          className="text-sm text-text-secondary italic px-1 truncate"
+          title={guidedOptions?.prompt || guidedPrompt}
+        >
           <MathText>{guidedOptions?.prompt || guidedPrompt}</MathText>
         </div>
       )}
