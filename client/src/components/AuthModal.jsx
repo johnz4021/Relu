@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import Logo from './Logo';
 
@@ -9,6 +9,21 @@ export default function AuthModal() {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Reset transient state when the page is restored from bfcache (back-forward cache).
+  // Without this, hitting back from the Google OAuth screen leaves `loading: true`
+  // because the in-flight signInWithOAuth never resolves on this page.
+  useEffect(() => {
+    const handlePageShow = (e) => {
+      if (e.persisted) {
+        setLoading(false);
+        setError(null);
+        setMessage(null);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
