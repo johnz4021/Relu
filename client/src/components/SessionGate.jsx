@@ -91,8 +91,8 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
   // The parent (App.jsx) will call onKeySuccess when the WS response arrives
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6">
-      <div className="w-full max-w-lg bg-surface-1 border border-border rounded-2xl p-8 shadow-lg">
+    <div className="absolute inset-0 overflow-y-auto p-6">
+      <div className="w-full max-w-lg mx-auto bg-surface-1 border border-border rounded-2xl p-8 shadow-lg">
         <div className="text-center mb-6">
           <div className="text-2xl font-semibold text-text-primary mb-2">
             You've used all {limit} free sessions

@@ -426,6 +426,18 @@ function attachHandlers(ws, session) {
           break;
         }
 
+        case 'delete_api_key': {
+          if (!session.userId) {
+            ws.send(JSON.stringify({ type: 'api_key_result', success: false, action: 'deleted', error: 'Not authenticated' }));
+            return;
+          }
+          await saveUserSettings(session.userId, { anthropic_api_key_encrypted: null });
+          // Drop the active client so the next session falls back to the server key (or the paywall)
+          session.anthropicClient = null;
+          ws.send(JSON.stringify({ type: 'api_key_result', success: true, action: 'deleted' }));
+          break;
+        }
+
         case 'register_interest': {
           if (!session.userId) return;
           // Auth-tied "would pay" intent → user_settings (existing schema).

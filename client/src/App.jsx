@@ -12,6 +12,7 @@ import LandingTabs from './components/LandingTabs';
 import AuthModal from './components/AuthModal';
 import SessionFeedback from './components/SessionFeedback';
 import SessionGate from './components/SessionGate';
+import SettingsModal from './components/SettingsModal';
 import ContextPanelHost from './components/context/ContextPanelHost';
 import ContextOverlay from './components/context/ContextOverlay';
 import PseudocodePanel from './components/context/PseudocodePanel';
@@ -38,6 +39,8 @@ export default function App() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [gateStatus, setGateStatus] = useState(null);
   const [apiKeyResult, setApiKeyResult] = useState(null);
+  const [keyDeletionResult, setKeyDeletionResult] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [ttsToast, setTtsToast] = useState(null);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [lcParsed, setLcParsed] = useState(null);
@@ -193,11 +196,18 @@ export default function App() {
         reset();
       }
       if (msg.type === 'api_key_result') {
-        setApiKeyResult(msg);
-        if (msg.success) {
-          track('byok_key_submitted', { success: true });
+        if (msg.action === 'deleted') {
+          setKeyDeletionResult(msg);
+          if (msg.success) {
+            track('byok_key_deleted', {});
+            sendRef.current?.({ type: 'check_session_status' });
+          }
         } else {
-          track('byok_key_submitted', { success: false });
+          setApiKeyResult(msg);
+          track('byok_key_submitted', { success: !!msg.success });
+          if (msg.success) {
+            sendRef.current?.({ type: 'check_session_status' });
+          }
         }
       }
       if (msg.type === 'interest_registered') {
@@ -525,6 +535,14 @@ export default function App() {
               <span className="text-xs text-text-tertiary">{user.email}</span>
               <span className="text-text-tertiary">·</span>
               <button
+                onClick={() => setShowSettings(true)}
+                className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+                title="Settings"
+              >
+                Settings
+              </button>
+              <span className="text-text-tertiary">·</span>
+              <button
                 onClick={signOut}
                 className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
               >
@@ -782,6 +800,14 @@ export default function App() {
         {ttsToast}
       </div>
     )}
+    <SettingsModal
+      open={showSettings}
+      onClose={() => setShowSettings(false)}
+      send={send}
+      hasByok={!!gateStatus?.hasByok}
+      deletionResult={keyDeletionResult}
+      onKeyDeleted={() => setKeyDeletionResult(null)}
+    />
     <VizErrorToast algorithmKey={state.algorithm} />
     <VizTierToast vizTier={vizTier} algorithmKey={state.algorithm} />
     </>
