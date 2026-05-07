@@ -4,7 +4,7 @@
 
 ReLU is the only tool that combines live algorithm animation with adaptive AI tutoring.
 
-**[→ Try it live](https://relu.app)** &nbsp;·&nbsp; 10 free sessions, no credit card
+**[→ Try it live](https://www.relu.run)** &nbsp;·&nbsp; 10 free sessions, no credit card
 
 ---
 
