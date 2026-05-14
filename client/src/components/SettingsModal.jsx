@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 
-export default function SettingsModal({ open, onClose, send, hasByok, deletionResult, onKeyDeleted }) {
+export default function SettingsModal({ open, onClose, send, hasByok, deletionResult, onKeyDeleted, saveResult, onKeySaved }) {
   const [confirming, setConfirming] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState(null);
   const [justDeleted, setJustDeleted] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     if (!deletionResult || !working) return;
@@ -18,11 +21,29 @@ export default function SettingsModal({ open, onClose, send, hasByok, deletionRe
     }
   }, [deletionResult, working, onKeyDeleted]);
 
+  // React to api_key_result for saves. Keyed only on saveResult identity (not
+  // on `saving`) so it fires once per genuine server response — never re-runs
+  // for a stale result when the user clicks Save again after a failure.
+  useEffect(() => {
+    if (!saveResult) return;
+    setSaving(false);
+    if (saveResult.success) {
+      setApiKey('');
+      setJustSaved(true);
+      onKeySaved?.();
+    } else {
+      setError(saveResult.error || 'Failed to save API key');
+    }
+  }, [saveResult, onKeySaved]);
+
   useEffect(() => {
     if (!open) {
       setConfirming(false);
       setError(null);
       setJustDeleted(false);
+      setApiKey('');
+      setSaving(false);
+      setJustSaved(false);
     }
   }, [open]);
 
@@ -32,6 +53,13 @@ export default function SettingsModal({ open, onClose, send, hasByok, deletionRe
     setError(null);
     setWorking(true);
     send({ type: 'delete_api_key' });
+  };
+
+  const handleSaveKey = () => {
+    if (!apiKey.trim()) return;
+    setError(null);
+    setSaving(true);
+    send({ type: 'save_api_key', apiKey: apiKey.trim() });
   };
 
   return (
@@ -58,48 +86,88 @@ export default function SettingsModal({ open, onClose, send, hasByok, deletionRe
 
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-1">Anthropic API key (BYOK)</h3>
-          <p className="text-xs text-text-tertiary mb-3">
-            {hasByok
-              ? 'A key is on file, AES-256 encrypted at rest. Remove it any time.'
-              : "No key on file. You're on the free-tier session allowance."}
-          </p>
 
-          {hasByok && !confirming && (
-            <button
-              onClick={() => setConfirming(true)}
-              className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 bg-surface-2 hover:bg-surface-3 border border-border rounded-lg transition-colors"
-            >
-              Remove key
-            </button>
-          )}
+          {hasByok ? (
+            <>
+              <p className="text-xs text-text-tertiary mb-3">
+                A key is on file, AES-256 encrypted at rest. Remove it any time.
+              </p>
 
-          {hasByok && confirming && (
-            <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <p className="text-xs text-text-secondary mb-3">
-                Remove your API key? You'll go back to the free-tier allowance and hit the cap at 10 sessions.
+              {!confirming && (
+                <button
+                  onClick={() => setConfirming(true)}
+                  className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 bg-surface-2 hover:bg-surface-3 border border-border rounded-lg transition-colors"
+                >
+                  Remove key
+                </button>
+              )}
+
+              {confirming && (
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <p className="text-xs text-text-secondary mb-3">
+                    Remove your API key? You'll go back to the free-tier allowance and hit the cap at 10 sessions.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleRemove}
+                      disabled={working}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-red-500/80 hover:bg-red-500 rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      {working ? 'Removing...' : 'Yes, remove'}
+                    </button>
+                    <button
+                      onClick={() => { setConfirming(false); setError(null); }}
+                      disabled={working}
+                      className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-3 hover:bg-surface-2 rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-text-tertiary mb-3">
+                No key on file — you're on the free-tier session allowance. Add your own
+                key any time to skip the cap. It's AES-256 encrypted at rest and never
+                logged. Get a key at{' '}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  console.anthropic.com
+                </a>
+                .
               </p>
               <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-ant-..."
+                  className="flex-1 px-3 py-2 text-sm bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  disabled={saving}
+                />
                 <button
-                  onClick={handleRemove}
-                  disabled={working}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-red-500/80 hover:bg-red-500 rounded-lg disabled:opacity-50 transition-colors"
+                  onClick={handleSaveKey}
+                  disabled={saving || !apiKey.trim()}
+                  className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {working ? 'Removing...' : 'Yes, remove'}
-                </button>
-                <button
-                  onClick={() => { setConfirming(false); setError(null); }}
-                  disabled={working}
-                  className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-3 hover:bg-surface-2 rounded-lg disabled:opacity-50 transition-colors"
-                >
-                  Cancel
+                  {saving ? 'Validating...' : 'Save Key'}
                 </button>
               </div>
               {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-            </div>
-          )}
-
-          {justDeleted && !hasByok && (
-            <p className="text-xs text-green-400">Key removed.</p>
+              {justSaved && !error && (
+                <p className="mt-2 text-xs text-green-400">API key saved. The cap no longer applies.</p>
+              )}
+              {justDeleted && !justSaved && !error && (
+                <p className="mt-2 text-xs text-green-400">Key removed.</p>
+              )}
+            </>
           )}
         </div>
       </div>

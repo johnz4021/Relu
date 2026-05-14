@@ -807,6 +807,8 @@ export default function App() {
       hasByok={!!gateStatus?.hasByok}
       deletionResult={keyDeletionResult}
       onKeyDeleted={() => setKeyDeletionResult(null)}
+      saveResult={apiKeyResult}
+      onKeySaved={() => setApiKeyResult(null)}
     />
     <VizErrorToast algorithmKey={state.algorithm} />
     <VizTierToast vizTier={vizTier} algorithmKey={state.algorithm} />
