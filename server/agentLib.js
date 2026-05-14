@@ -441,10 +441,26 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               || trace0Graph;
             if (graphData) {
               const directed = graphData.directed !== undefined ? graphData.directed : true;
-              console.log(`[Agent] Auto-creating graph: ${graphData.nodes?.length} nodes, directed=${directed}`);
-              const autoGraphMsg = { type: 'create_graph', graph: { ...graphData, directed } };
+              // Synthesize node positions when the trace didn't supply them. The
+              // client's cytoscape uses a 'preset' layout — it never auto-lays-out —
+              // so a graph with no positions collapses every node onto (0,0) and
+              // renders as a single stacked blob. Mirror the create_graph /
+              // update_graph / create_visualization tool paths, which all autoLayout.
+              let positions = graphData.positions;
+              if (!positions || Object.keys(positions).length === 0) {
+                // Seed from any per-node coords (e.g. backtracking's node.position);
+                // autoLayout fills in whatever ids are still missing.
+                const seed = {};
+                for (const n of graphData.nodes || []) {
+                  if (n.position) seed[n.id] = n.position;
+                }
+                positions = autoLayout(graphData.nodes || [], graphData.edges || [], seed);
+              }
+              const finalGraph = { ...graphData, positions, directed };
+              console.log(`[Agent] Auto-creating graph: ${finalGraph.nodes?.length} nodes, directed=${directed}`);
+              const autoGraphMsg = { type: 'create_graph', graph: finalGraph };
               sendJSON(ws, autoGraphMsg);
-              session.currentGraph = graphData;
+              session.currentGraph = finalGraph;
               session._lastVizMessage = autoGraphMsg;
             }
             // If the agent pre-registered a custom-named graph panel (e.g. 'graph_main'

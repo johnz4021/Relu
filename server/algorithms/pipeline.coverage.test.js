@@ -353,4 +353,43 @@ describe('pipeline coverage — full server-side flow per algorithm', () => {
       });
     }
   });
+
+  // The graph renderer is positioned by cytoscape's 'preset' layout — it never
+  // computes coordinates itself. If run_algorithm sends a create_graph whose
+  // graph has no `positions` (or positions missing some node ids), every
+  // unpositioned node collapses onto (0,0) and the graph renders as a single
+  // stacked blob. The runner-trace-synthesized graph path in agentLib.js must
+  // autoLayout, same as the create_graph / update_graph / create_visualization
+  // tool paths. The 'renderer initial-state' gate above can't catch this — it
+  // skips the graph renderer (graphs init via the create_graph message, not a
+  // set_data-style viz_action).
+  describe('graph renderer: create_graph carries positions for every node', () => {
+    const graphAlgos = allAlgos.filter((id) => ALGORITHMS[id].renderer === 'graph');
+
+    for (const algoId of graphAlgos) {
+      it(`${algoId}: create_graph positions every node (no (0,0) collapse)`, async () => {
+        const { sent } = await runPipeline(algoId, 'bare');
+        const createGraph = sent.find((m) => m.type === 'create_graph');
+        // Some graph algos build their graph lazily via emit_segment add_node
+        // actions instead of an upfront create_graph — out of scope for this
+        // gate (those carry per-node `position` on each add_node).
+        if (!createGraph) return;
+        const nodes = createGraph.graph?.nodes || [];
+        if (nodes.length < 2) return;
+        const positions = createGraph.graph?.positions || {};
+        const missing = nodes.filter((n) => !positions[n.id]);
+        expect(
+          missing.length,
+          `${algoId}: ${missing.length}/${nodes.length} node(s) have no position in create_graph — ` +
+          `cytoscape's preset layout collapses them onto (0,0).`
+        ).toBe(0);
+        // Guard the degenerate "all positions identical" case.
+        const distinct = new Set(nodes.map((n) => `${positions[n.id].x},${positions[n.id].y}`));
+        expect(
+          distinct.size,
+          `${algoId}: all ${nodes.length} nodes share one coordinate — graph renders as a stacked blob.`
+        ).toBeGreaterThan(1);
+      });
+    }
+  });
 });
