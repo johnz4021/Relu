@@ -9,6 +9,7 @@ const CELL_BG_COLORS = {
   current: 'rgba(37, 99, 235, 1)',       // blue-600
   highlighted: 'rgba(234, 179, 8, 0.6)', // yellow-500/60
   optimal: 'rgba(22, 163, 74, 0.7)',     // green-600/70
+  conflict: 'rgba(220, 38, 38, 0.7)',    // red-600/70 (Sudoku duplicate marker)
   'dep-skip': 'rgba(249, 115, 22, 0.4)', // orange-500/40
   'dep-take': 'rgba(6, 182, 212, 0.4)',  // cyan-500/40
 };
@@ -19,6 +20,7 @@ const CELL_TEXT_COLORS = {
   current: 'text-white',
   highlighted: 'text-white',
   optimal: 'text-white',
+  conflict: 'text-white',
   'dep-skip': 'text-white',
   'dep-take': 'text-white',
 };
@@ -127,6 +129,23 @@ export default function TableRenderer({
           for (let i = 0; i < next.length; i++) {
             if (next[i] && (next[i][col] === 'empty' || next[i][col] === 'filled')) {
               next[i][col] = 'highlighted';
+            }
+          }
+          return next;
+        });
+        break;
+      }
+      // Multi-cell highlighter — generic over which cells form the group. Used
+      // by Valid Sudoku for 3×3 box highlighting; reusable for N-Queens diagonals
+      // or any future algorithm that needs a non-axis-aligned group highlight.
+      case 'highlight_cells': {
+        const cells = params.cells || [];
+        const cls = params.className || 'highlighted';
+        setCellClasses((prev) => {
+          const next = prev.map((r) => [...r]);
+          for (const { row, col } of cells) {
+            if (next[row] && (next[row][col] === 'empty' || next[row][col] === 'filled')) {
+              next[row][col] = cls;
             }
           }
           return next;

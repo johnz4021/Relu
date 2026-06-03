@@ -15,6 +15,7 @@ import { topKHeap, DEFAULT_TOP_K_HEAP_INPUT, medianFinder, DEFAULT_MEDIAN_FINDER
 import { sievePrimes, DEFAULT_SIEVE_PRIMES_INPUT, fastPower, DEFAULT_FAST_POWER_INPUT, gcdAlgorithm, DEFAULT_GCD_ALGORITHM_INPUT, majorityVote, DEFAULT_MAJORITY_VOTE_INPUT } from './math_patterns/index.js';
 import { rabinKarp, DEFAULT_RABIN_KARP_INPUT, manacher, DEFAULT_MANACHER_INPUT } from './string_advanced/index.js';
 import { numberOfIslands, DEFAULT_NUMBER_OF_ISLANDS_INPUT, spiralMatrix, DEFAULT_SPIRAL_MATRIX_INPUT, rotateMatrix, DEFAULT_ROTATE_MATRIX_INPUT } from './matrix/index.js';
+import { validSudoku, DEFAULT_VALID_SUDOKU_INPUT } from './matrix/validSudoku.js';
 import { combinationSum, DEFAULT_COMBINATION_SUM_INPUT, subsets, DEFAULT_SUBSETS_INPUT, permutations, DEFAULT_PERMUTATIONS_INPUT } from './backtracking_patterns/index.js';
 import { slidingWindowMax, DEFAULT_SLIDING_WINDOW_MAX_INPUT, jumpGame, DEFAULT_JUMP_GAME_INPUT } from './monotonic_deque/index.js';
 
@@ -621,6 +622,12 @@ export const ALGORITHMS = {
   },
 
   // ── Matrix patterns (Tier 1) ──────────────────────────────────────────────────
+  valid_sudoku: {
+    run: (input) => validSudoku(input),
+    renderer: 'table', category: 'Hashing',
+    defaultInput: DEFAULT_VALID_SUDOKU_INPUT,
+    capabilities: {},  // LC always sends 9x9 — no limits to enforce
+  },
   number_of_islands: {
     run: (input) => numberOfIslands(input),
     renderer: 'graph', category: 'Graph Algorithms',
