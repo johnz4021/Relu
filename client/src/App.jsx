@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyMotion, domAnimation } from 'motion/react';
 import VizLayout from './components/VizLayout';
-import VizRequestBanner from './components/VizRequestBanner';
+import VizRequestToast from './components/VizRequestToast';
 import VizErrorToast from './components/VizErrorToast';
 import VizTierToast from './components/VizTierToast';
 import ReportBugButton from './components/ReportBugButton';
@@ -255,7 +255,11 @@ export default function App() {
         // context renderer: no main viz panel needed — panels are set up when agent calls run_algorithm
       }
       if (msg.type === 'guided_start') {
-        setLcParsed(null);
+        // Preserve lcParsed for no-viz LC sessions so VizRequestBanner can mount.
+        // Without this guard, the banner gate (App.jsx:602) sees lcParsed === null
+        // and never renders the "Request a visualization" CTA — capturing zero
+        // demand signal for problems in the orphaned-classifier set (Sudoku, etc.).
+        setLcParsed((prev) => (prev && prev.has_viz === false ? prev : null));
       }
       if (msg.type === 'lc_sessions_listed') {
         setLcSessions(msg.sessions || []);
@@ -598,16 +602,9 @@ export default function App() {
           <div className="flex-1 flex flex-col items-center overflow-hidden">
             <div className="w-full max-w-2xl flex flex-col flex-1 overflow-hidden">
               {/* No-viz fallback: classifier returned null OR a broken algo.
-                  Tutor still runs (text-only); offer a way to request the missing viz. */}
-              {lcParsed && !lcParsed.has_viz && lcParsed.problemText && (
-                <VizRequestBanner
-                  problemText={lcParsed.problemText}
-                  classifiedAlgo={lcParsed.algorithm_key}
-                  classificationConfidence={lcParsed.confidence}
-                  userEmail={user?.email}
-                  fallbackReason={lcParsed.fallback_reason}
-                />
-              )}
+                  Tutor still runs (text-only). The CTA moved from a permanent
+                  banner here to VizRequestToast mounted at App level — same
+                  demand-signal capture, no layout coupling, no transcript clutter. */}
               <div className="flex-1 overflow-hidden">
                 <Transcript segments={state.segments} agentStatus={state.agentStatus} centered />
               </div>
@@ -812,6 +809,7 @@ export default function App() {
     />
     <VizErrorToast algorithmKey={state.algorithm} />
     <VizTierToast vizTier={vizTier} algorithmKey={state.algorithm} />
+    <VizRequestToast lcParsed={lcParsed} userEmail={user?.email} />
     </>
     </LazyMotion>
   );
