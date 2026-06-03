@@ -118,6 +118,17 @@ export const PSEUDOCODE = {
     'assign codes: traverse tree (left=0, right=1)',// 9
   ],
 
+  valid_sudoku: [
+    'rows, cols, boxes ← 9 empty sets each',         // 0
+    'for each non-empty cell (r, c) with value v:',  // 1
+    '  if v in rows[r]:    return false',            // 2
+    '  if v in cols[c]:    return false',            // 3
+    '  if v in boxes[b]:   return false  // b = r/3*3 + c/3',  // 4
+    '  // conflict found → stop',                    // 5
+    '  rows[r].add(v); cols[c].add(v); boxes[b].add(v)',  // 6
+    'return true',                                   // 7
+  ],
+
   number_of_islands: [
     'islands ← 0',                                  // 0
     'for each cell (r, c) in grid:',               // 1

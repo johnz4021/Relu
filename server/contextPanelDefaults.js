@@ -354,6 +354,15 @@ const PANEL_DEFAULTS = {
     { id: 'island_count', type: 'key_value', title: 'Islands' },
   ],
 
+  // Single collapsed panel showing the three active constraint sets at once
+  // (Row, Col, Box). Other 24 sets aren't visible — we only surface what's
+  // load-bearing for the cell currently being scanned.
+  valid_sudoku: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.valid_sudoku } },
+    { id: 'constraint_state', type: 'key_value', title: 'Constraint state' },
+  ],
+
   // --- Tree renderer patterns ---
   top_k_heap: [
     { id: 'heap_contents', type: 'collection', title: 'Heap (Top-K)' },

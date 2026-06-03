@@ -1807,6 +1807,29 @@ function mapTableStep(algo, step, state) {
         c.push(ctxUpdate('expression', {
           expression: step.description || `${algo} initialized`,
         }));
+      } else if (algo === 'valid_sudoku') {
+        // Pre-fill the board with starting digits. Empty cells stay 'empty';
+        // pre-filled cells display the digit on a 'filled' background so they
+        // visually distinguish from cells still being scanned.
+        if (Array.isArray(step.board)) {
+          for (let r = 0; r < step.board.length; r++) {
+            for (let cl = 0; cl < step.board[r].length; cl++) {
+              const val = step.board[r][cl];
+              if (val !== '.' && val != null && val !== '') {
+                v.push(viz('table', 'fill_cell', { row: r, col: cl, value: val, className: 'filled' }));
+              }
+            }
+          }
+        }
+        // Initialize the collapsed constraint-state panel with placeholder content
+        // so it shows up immediately rather than waiting for the first cell scan.
+        c.push(ctxUpdate('constraint_state', {
+          entries: [
+            { key: 'Row',  value: 'awaiting scan' },
+            { key: 'Col',  value: 'awaiting scan' },
+            { key: 'Box',  value: 'awaiting scan' },
+          ],
+        }));
       }
       break;
     }
@@ -2017,6 +2040,15 @@ function mapTableStep(algo, step, state) {
           result: step.min_cost,
         }));
         c.push(ctxLog('decisions', `Minimum path cost: ${step.min_cost}`, 'result'));
+      } else if (algo === 'valid_sudoku') {
+        // No expression/decisions panels registered for this algo. Surface the
+        // verdict on the constraint_state panel (replaces the live set view).
+        // Pseudocode line auto-advances via the generic step.pseudocode_line path.
+        c.push(ctxUpdate('constraint_state', {
+          entries: [
+            { key: 'Result', value: step.valid ? 'VALID ✓' : 'INVALID ✗', status: step.valid ? 'success' : 'error' },
+          ],
+        }));
       } else {
         // Generic fallback for any table-renderer algo: surface description + output
         c.push(ctxUpdate('expression', {
@@ -2034,6 +2066,52 @@ function mapTableStep(algo, step, state) {
       c.push(ctxUpdate('expression', {
         expression: step.description || 'Initialized',
       }));
+      break;
+    }
+
+    // ── Valid Sudoku (LC 36) — bespoke trace shape ──────────────────────────
+    // Sudoku's trace steps don't generalize to other algorithms (rows/cols/boxes
+    // are a constraint-validation shape). The cases below translate the runner's
+    // step.type vocabulary into the table renderer's generic action vocabulary.
+    // Note: pseudocode line updates are auto-emitted by mapTraceStep (line ~114)
+    // for any step that carries `pseudocode_line`. The cases below don't need
+    // to push pseudocode ctxUpdates explicitly.
+    case 'scan_cell': {
+      v.push(viz('table', 'highlight_cell', { row: step.r, col: step.c, className: 'current' }));
+      break;
+    }
+
+    case 'check_constraint': {
+      // Highlight the group being checked (row / col / 3x3 box).
+      if (step.constraint === 'row') {
+        v.push(viz('table', 'highlight_row', { row: step.constraint_index }));
+      } else if (step.constraint === 'col') {
+        v.push(viz('table', 'highlight_col', { col: step.constraint_index }));
+      } else if (step.constraint === 'box') {
+        v.push(viz('table', 'highlight_cells', {
+          cells: step.cells_in_group || [],
+          className: 'highlighted',
+        }));
+      }
+      // Re-highlight the focus cell on top of the group so the student can see
+      // which cell triggered the constraint check.
+      v.push(viz('table', 'highlight_cell', { row: step.r, col: step.c, className: 'current' }));
+      // Surface the three active sets in the collapsed Constraint state panel.
+      if (Array.isArray(step.set_state)) {
+        c.push(ctxUpdate('constraint_state', { entries: step.set_state }));
+      }
+      break;
+    }
+
+    case 'conflict': {
+      v.push(viz('table', 'highlight_cell', { row: step.r, col: step.c, className: 'conflict' }));
+      break;
+    }
+
+    case 'cell_done': {
+      // Reset the cell back to neutral filled so the highlight doesn't linger
+      // and obscure later constraint checks elsewhere on the board.
+      v.push(viz('table', 'highlight_cell', { row: step.r, col: step.c, className: 'filled' }));
       break;
     }
   }
