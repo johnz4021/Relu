@@ -21,6 +21,39 @@ function buildAlgorithmList() {
 
 const MAX_API_CALLS_PER_SESSION = 100;
 
+// True when an LC session reached the guided loop with no viz capability. Covers
+// both shapes: classifier returned null deliberately (Sudoku/N-Queens/etc. per the
+// leetcodeAgent.js disambiguation rules) AND classifier picked an unregistered or
+// low-confidence key (Haiku improvises a name; algoEntry resolves to undefined;
+// hasViz is set false at server/index.js:537). In either state no viz can be built —
+// viz tools must be hard-filtered, otherwise the agent improvises empty create_graph
+// calls + phantom narration referencing state that never reaches the canvas.
+export const isOutOfScopeSession = (session) =>
+  session.mode === 'leetcode' && session.hasViz === false;
+
+// Tools that create or mutate visualization state. Filtered when isOutOfScopeSession
+// is true so the agent literally cannot improvise a viz with no algorithm backing.
+// build_example_graph is included because it's the head of the viz pipeline — leaving
+// it available with the downstream tools filtered would strand the agent mid-plan.
+const VIZ_PIPELINE_TOOLS = new Set([
+  'create_graph',
+  'create_visualization',
+  'update_graph',
+  'run_algorithm',
+  'build_example_graph',
+]);
+
+// Pure helper exported for tests: derives the API-facing tool list from session state.
+// The earlier soft-filter (removing create_visualization when hasViz===false) became
+// redundant once isOutOfScopeSession started gating on hasViz directly — non-LC paths
+// never set hasViz so they never hit the soft branch in practice anyway.
+export function computeActiveTools(session, allTools) {
+  if (isOutOfScopeSession(session)) {
+    return allTools.filter((t) => !VIZ_PIPELINE_TOOLS.has(t.name));
+  }
+  return allTools;
+}
+
 const GUIDED_SYSTEM_PROMPT = `You are ReLU, an expert algorithm tutor. A student has pasted a problem and you will guide them through solving it via conversation.
 
 YOUR ROLE: Have a natural back-and-forth dialogue with the student, then teach them the algorithm using Socratic method and interactive visualization.
@@ -1006,12 +1039,20 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
     : 'See the attached image for the problem the student wants to solve.';
 
   let lcContext = '';
-  if (session._leetcodeAlgorithmKey) {
+  if (isOutOfScopeSession(session)) {
+    // Classifier intentionally returned null (see leetcodeAgent.js disambiguation:
+    // "REMOVED → null" rules for problems whose old umbrella algos were retired).
+    // Viz tools are filtered from the API call; this block tells the agent why and
+    // what to do instead so it doesn't try to narrate around a missing viz.
+    lcContext = '\n\n[LEETCODE MODE — OUT OF SCOPE] This problem does not match any registered algorithm — no visualization is available for it. Visualization tools (create_graph, create_visualization, run_algorithm, build_example_graph) are unavailable in this session. Walk the student through the problem conceptually in text only. Do not narrate as if a visualization exists — none will appear. Begin your first spoken message with: "I don\'t have a visualization for this one, but let\'s walk through it together."';
+  } else if (session._leetcodeAlgorithmKey) {
+    // Reached only when hasViz === true (truly out-of-scope keys are caught by
+    // isOutOfScopeSession above). The previous `if (session.hasViz === false)`
+    // branch here invited viz creation even when no algorithm backing existed —
+    // that's the [NO PRE-BUILT TRACE] case, now subsumed by isOutOfScopeSession.
     const conf = session._leetcodeConfidence != null ? ` (confidence: ${session._leetcodeConfidence.toFixed(2)})` : '';
     lcContext = `\n\n[LEETCODE MODE] Primary algorithm identified: ${session._leetcodeAlgorithmKey}${conf}. The student pasted this LeetCode problem to learn through interactive tutoring.`;
-    if (session.hasViz === false) {
-      lcContext += '\n\n[NO PRE-BUILT TRACE] This problem has no pre-computed interactive trace. Begin your first spoken message with: "For this problem, I\'ll guide you through the concepts step by step — we\'ll work through the ideas together." You may still create visualizations (tables, key-value panels, graphs) to illustrate state as the student works through it — call create_visualization when it would help.';
-    } else if (session._leetcodeTier === 1) {
+    if (session._leetcodeTier === 1) {
       const trace = session._leetcodeTrace;
       const traceLen = trace ? trace.length : 0;
       const renderer = session._leetcodeRenderer || 'graph';
@@ -1119,9 +1160,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
         model: 'claude-opus-4-6',
         max_tokens: 4096,
         system: systemPrompt,
-        tools: (session.hasViz === false && (!session.reasoningMode || session.reasoningMode === 'algorithm_execution'))
-          ? guidedTools.filter(t => t.name !== 'create_visualization')
-          : guidedTools,
+        tools: computeActiveTools(session, guidedTools),
         messages,
       });
     } catch (err) {
