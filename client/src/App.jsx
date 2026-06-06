@@ -642,6 +642,12 @@ export default function App() {
                 onKeySuccess={() => setGateStatus((prev) => ({ ...prev, allowed: true, hasByok: true }))}
                 lastProblemText={lcParsed?.problemText || null}
               />
+            ) : embedMode ? (
+              // Embed mode: never show the landing — the problem auto-starts.
+              // Show a clean loading state until the lesson kicks out of idle.
+              <div className="h-full flex items-center justify-center bg-surface-0">
+                <div className="text-text-tertiary text-sm font-body">Loading your problem…</div>
+              </div>
             ) : (
               <LandingTabs
                 onSelect={handleSelectAlgorithm}

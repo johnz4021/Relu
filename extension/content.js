@@ -228,7 +228,10 @@
     if (problem && problem.text) {
       readyHandler = (e) => {
         if (e.origin !== RELU_ORIGIN) return;
-        if (e.source !== iframe.contentWindow) return;
+        // NOTE: do NOT check e.source === iframe.contentWindow here. In a
+        // content-script isolated world, cross-origin contentWindow identity is
+        // unreliable and this check silently dropped the handshake. The origin
+        // check above is the real boundary (only our relu.run frame can match).
         if (!e.data || e.data.type !== 'relu_embed_ready') return;
         log('embed app ready → sending problem');
         iframe.contentWindow.postMessage(
