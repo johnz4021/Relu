@@ -304,22 +304,30 @@ export default function App() {
   );
 
   // --- EMBED MODE (Chrome extension overlay spike, step 2) ---------------
-  // When the app is loaded as `/?embed=1#n=NONCE` inside the leetcode
-  // extension iframe:
-  //   1. announce readiness to the parent once the WS is connected (authed),
-  //   2. accept the extracted problem via postMessage (origin + source + nonce
-  //      validated), then auto-start the lesson via handleSelectAlgorithm.
-  // No-op outside embed mode.
+  // Loaded as `/?embed=1#n=NONCE` inside the leetcode extension iframe.
+  // Timing-robust handshake:
+  //   - announce `relu_embed_ready` to the parent on mount AND on every
+  //     connection change, so the content script hears it regardless of auth,
+  //   - accept the extracted problem via postMessage (origin + source + nonce),
+  //     stash it, and auto-start the lesson the moment the WS is connected
+  //     (i.e. right after the user signs in inside the frame).
+  // Full no-op outside embed mode.
   //
   // NOTE (hardening, not done here): the nonce travels in the iframe URL
   // fragment, which leetcode page-world scripts CAN read off the iframe's
-  // src attribute. The problem text isn't secret so this is fine for the
-  // spike, but the production token channel must use a transferred
-  // MessagePort, not a fragment nonce.
+  // src attribute. Fine for the spike (problem text isn't secret); the
+  // production TOKEN channel must use a transferred MessagePort instead.
   const embedMode = new URLSearchParams(window.location.search).get('embed') === '1';
   const embedNonce = (window.location.hash.match(/[#&]n=([^&]+)/) || [])[1] || null;
   const embedStartedRef = useRef(false);
+  const embedPendingProblemRef = useRef(null);
+  const [embedTick, setEmbedTick] = useState(0);
 
+  useEffect(() => {
+    if (embedMode) console.log('[ReLU embed] embed mode ACTIVE, nonce=', embedNonce);
+  }, [embedMode, embedNonce]);
+
+  // Receive the problem from the parent (any time, before or after auth).
   useEffect(() => {
     if (!embedMode) return;
     const ALLOWED_PARENT_ORIGINS = ['https://leetcode.com', 'http://localhost:5173'];
@@ -332,26 +340,36 @@ export default function App() {
         console.warn('[ReLU embed] nonce mismatch — ignoring message');
         return;
       }
-      if (embedStartedRef.current) return;
       if (!d.problemText || typeof d.problemText !== 'string') return;
-      embedStartedRef.current = true;
-      console.log('[ReLU embed] received problem, starting lesson');
-      handleSelectAlgorithm(null, { problemText: d.problemText });
+      console.log('[ReLU embed] problem received (connected=' + connected + ')');
+      embedPendingProblemRef.current = d.problemText;
+      setEmbedTick((t) => t + 1); // re-trigger the start effect below
     }
     window.addEventListener('message', onParentMessage);
     return () => window.removeEventListener('message', onParentMessage);
-  }, [embedMode, embedNonce, handleSelectAlgorithm]);
+  }, [embedMode, embedNonce, connected]);
 
+  // Announce readiness on mount and whenever the connection flips. Ready ping
+  // carries NO nonce (parent page-world scripts could read it); the parent
+  // replies with the problem + nonce targeted at our origin.
   useEffect(() => {
-    if (!embedMode || !connected) return;
-    // Ready ping carries NO nonce (page-world scripts in the parent could read
-    // it). The parent replies with the problem + nonce, targeted at our origin.
+    if (!embedMode) return;
     try {
       window.parent.postMessage({ type: 'relu_embed_ready' }, '*');
+      console.log('[ReLU embed] sent ready ping (connected=' + connected + ')');
     } catch {
       /* not framed */
     }
   }, [embedMode, connected]);
+
+  // Start the lesson once we have BOTH a pending problem AND a live connection.
+  useEffect(() => {
+    if (!embedMode || embedStartedRef.current) return;
+    if (!connected || !embedPendingProblemRef.current) return;
+    embedStartedRef.current = true;
+    console.log('[ReLU embed] starting lesson');
+    handleSelectAlgorithm(null, { problemText: embedPendingProblemRef.current });
+  }, [embedMode, connected, embedTick, handleSelectAlgorithm]);
 
   const handleResumeConversation = useCallback(
     (conversationId) => {

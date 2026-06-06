@@ -205,7 +205,7 @@
     const iframe = document.createElement('iframe');
     // ?embed=1 is a hint for step 2 (the app ignores it today).
     // #n=NONCE shares the nonce with the future /embed via the URL fragment.
-    iframe.src = `${RELU_ORIGIN}/?embed=1#n=${NONCE}`;
+    iframe.src = `${RELU_ORIGIN}/?embed=1&t=${Date.now()}#n=${NONCE}`;
     Object.assign(iframe.style, { border: 'none', flex: '1', width: '100%' });
 
     // FRAMING KILL-SWITCH DETECTION:
