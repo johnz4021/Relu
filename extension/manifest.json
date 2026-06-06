@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "ReLU — Stuck Helper (spike)",
+  "version": "0.0.1",
+  "description": "Dev spike: on a LeetCode problem you're stuck on, inject a ReLU viz+tutor overlay. Throwaway, load-unpacked only. Not for the Web Store.",
+  "permissions": ["storage", "declarativeNetRequest"],
+  "host_permissions": ["https://leetcode.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ReLU Stuck Helper"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://leetcode.com/problems/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "relax_leetcode_csp",
+        "enabled": false,
+        "path": "rules.json"
+      }
+    ]
+  }
+}

@@ -5,3 +5,6 @@ dist/
 .DS_Store
 .specstory
 .gstack/
+
+# Chrome-generated when loading the unpacked extension
+extension/_metadata/

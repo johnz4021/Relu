@@ -9,7 +9,7 @@ Prerequisite order matters — items marked with [REQUIRES] must follow their de
 - [ ] **Company tags on problems** — tag LeetCode problems by company (Google, Meta, etc.). [REQUIRES: curated problem catalog]
 - [ ] **Shareable trace links** — UUID trace snapshot in Supabase → shareable URL. [REQUIRES: lc_sessions table from progress tracking]
 - [ ] **Curated problem catalog (Approach B)** — 100-problem DB with guaranteed viz. Replaces LLM extraction for known problems. [REQUIRES: extraction accuracy validated from production data]
-- [ ] **Browser extension** — distribution funnel. Auto-detect LeetCode problem in active tab, offer Argmax solve. [REQUIRES: core leetcode mode validated with external users]
+- [~] **Browser extension** — IN PROGRESS (chrome-extension branch, /plan-eng-review 2026-06-04). NOTE: original [REQUIRES: core leetcode mode validated with external users] gate was overridden by founder conviction in /office-hours 2026-06-04. Architecture: iframe-embed of relu.run/embed on leetcode.com (see ## Chrome Extension — Eng Review Decisions below).
 - [ ] **Mock interview mode** — timed practice sessions with problem sets. [REQUIRES: problem catalog]
 - [ ] **Personalized study plan / spaced repetition** — based on lc_sessions history. [REQUIRES: progress tracking + 2+ weeks of user data]
 
@@ -35,6 +35,15 @@ Prerequisite order matters — items marked with [REQUIRES] must follow their de
 - [ ] **Extraction accuracy validation** — manually test 20 LeetCode medium problems against parseLeetcodeProblem() before launch. Target: 80% correct routing. Known misses from /qa 2026-04-30: LC53 (Maximum Subarray → should hit array_manipulation, hits dc_design fallback), LC70 (Climbing Stairs → should hit recursion_memoization, hits dp_design fallback). Add few-shot examples for these in parseLeetcodeProblem() extraction prompt.
 - [ ] **ISSUE-002: LC53 routing** — Maximum Subarray does not match `array_manipulation` key. Add few-shot example to extraction prompt: `{"problem":"Maximum Subarray","algorithm_key":"array_manipulation","confidence":0.85}`. The Kadane's algorithm pattern (running max, reset on negative) is the Tier 2 trace to show.
 - [ ] **ISSUE-003: LC70 routing** — Climbing Stairs does not match `recursion_memoization` key. Add few-shot example to extraction prompt. The fib-style DP memo table is the Tier 2 trace to show.
+
+## Chrome Extension — Eng Review Decisions (from /plan-eng-review 2026-06-04, branch: chrome-extension)
+
+Architecture decided: **iframe-embed** (extension injects `<iframe src="relu.run/embed">` overlay on leetcode.com, reuses the existing React client). Full decision log in the design doc: `~/.gstack/projects/johnz4021-ReLU/johnzhang-chrome-extension-design-20260604-152639.md`.
+
+Deferred items:
+- [ ] **Interactive trace step/scrub in /embed** — let the user manually step/scrub the deterministic animation (beyond v1's auto-play during the solver gap). What: play/step/scrub controls over the already-loaded trace. Why: deepens the viz-first engagement during the ~12s Opus solver wait. Context: v1 ships auto-play of the trace (decided D12); this is the richer interactive version. Depends on: /embed shipped. [REQUIRES: v1 overlay validated]
+- [ ] **Live-leetcode extraction canary** — scheduled test that loads a REAL leetcode problem and asserts extraction (slug→GraphQL/__NEXT_DATA__→DOM) still works; alerts on breakage. Why: pinned-fixture Playwright passes even after leetcode redeploys and breaks the extractor — false confidence. Context: leetcode's DOM/data is the most fragile dependency. Depends on: extension shipped + an alerting destination. [REQUIRES: extension shipped]
+- [ ] **Socratic opener eval (recognition-vs-reproduction)** — the new guidedAgent opener (replacing "what have you tried?") is a prompt change and a design-doc hard gate. Needs an eval comparing branch correctness + opener quality against the current baseline before it ships. Why: prompt changes need an eval; this one gates activation. Context: separate workstream from the extension architecture — touches server/guidedAgent.js, not the extension. Depends on: eval harness (none exists yet). [REQUIRES: opener implemented]
 
 ## Infrastructure
 - [ ] **lc_sessions Supabase migration** — create table + RLS rules (user_id = auth.uid()) before deploy. Include outcome columns: `solver_succeeded bool`, `viz_rendered bool`, `session_completed bool` (added 2026-05-01 arch review — bundle into same migration, not a separate one).

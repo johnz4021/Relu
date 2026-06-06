@@ -303,6 +303,56 @@ export default function App() {
     [send, reset, audioPlayer]
   );
 
+  // --- EMBED MODE (Chrome extension overlay spike, step 2) ---------------
+  // When the app is loaded as `/?embed=1#n=NONCE` inside the leetcode
+  // extension iframe:
+  //   1. announce readiness to the parent once the WS is connected (authed),
+  //   2. accept the extracted problem via postMessage (origin + source + nonce
+  //      validated), then auto-start the lesson via handleSelectAlgorithm.
+  // No-op outside embed mode.
+  //
+  // NOTE (hardening, not done here): the nonce travels in the iframe URL
+  // fragment, which leetcode page-world scripts CAN read off the iframe's
+  // src attribute. The problem text isn't secret so this is fine for the
+  // spike, but the production token channel must use a transferred
+  // MessagePort, not a fragment nonce.
+  const embedMode = new URLSearchParams(window.location.search).get('embed') === '1';
+  const embedNonce = (window.location.hash.match(/[#&]n=([^&]+)/) || [])[1] || null;
+  const embedStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!embedMode) return;
+    const ALLOWED_PARENT_ORIGINS = ['https://leetcode.com', 'http://localhost:5173'];
+    function onParentMessage(e) {
+      if (!ALLOWED_PARENT_ORIGINS.includes(e.origin)) return;
+      if (e.source !== window.parent) return;
+      const d = e.data;
+      if (!d || d.type !== 'relu_problem') return;
+      if (embedNonce && d.nonce !== embedNonce) {
+        console.warn('[ReLU embed] nonce mismatch — ignoring message');
+        return;
+      }
+      if (embedStartedRef.current) return;
+      if (!d.problemText || typeof d.problemText !== 'string') return;
+      embedStartedRef.current = true;
+      console.log('[ReLU embed] received problem, starting lesson');
+      handleSelectAlgorithm(null, { problemText: d.problemText });
+    }
+    window.addEventListener('message', onParentMessage);
+    return () => window.removeEventListener('message', onParentMessage);
+  }, [embedMode, embedNonce, handleSelectAlgorithm]);
+
+  useEffect(() => {
+    if (!embedMode || !connected) return;
+    // Ready ping carries NO nonce (page-world scripts in the parent could read
+    // it). The parent replies with the problem + nonce, targeted at our origin.
+    try {
+      window.parent.postMessage({ type: 'relu_embed_ready' }, '*');
+    } catch {
+      /* not framed */
+    }
+  }, [embedMode, connected]);
+
   const handleResumeConversation = useCallback(
     (conversationId) => {
       audioPlayer.init(); // Must be from user gesture to unlock AudioContext
