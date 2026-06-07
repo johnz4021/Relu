@@ -185,22 +185,46 @@
     if (overlayEl) { overlayEl.remove(); overlayEl = null; }
     clearReadyHandler();
 
+    const SIDEBAR_WIDTH = 'min(520px, 90vw)';
     const wrap = document.createElement('div');
     wrap.id = 'relu-overlay';
     Object.assign(wrap.style, {
-      position: 'fixed', top: '0', right: '0', height: '100vh', width: 'min(520px, 90vw)',
+      position: 'fixed', top: '0', right: '0', height: '100vh', width: SIDEBAR_WIDTH,
       zIndex: '2147483647', boxShadow: '-8px 0 24px rgba(0,0,0,.3)', background: '#fff',
       display: 'flex', flexDirection: 'column',
+      transition: 'width 0.2s ease', // D2: hybrid sidebar <-> fullscreen
     });
 
     const bar = document.createElement('div');
     Object.assign(bar.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111', color: '#fff', font: '600 13px system-ui' });
     bar.innerHTML = '<span>ReLU (spike)</span>';
+
+    const btnGroup = document.createElement('div');
+    Object.assign(btnGroup.style, { display: 'flex', alignItems: 'center', gap: '6px' });
+
+    // D2: expand-to-fullscreen toggle. Sidebar default (stay on the problem),
+    // pop to full screen for dense viz, collapse back.
+    let expanded = false;
+    const expandBtn = document.createElement('button');
+    expandBtn.textContent = '⤢';
+    expandBtn.title = 'Expand to full screen';
+    Object.assign(expandBtn.style, { background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '16px', lineHeight: '1' });
+    expandBtn.addEventListener('click', () => {
+      expanded = !expanded;
+      wrap.style.width = expanded ? '100vw' : SIDEBAR_WIDTH;
+      expandBtn.textContent = expanded ? '⤡' : '⤢';
+      expandBtn.title = expanded ? 'Collapse to sidebar' : 'Expand to full screen';
+      log(expanded ? 'expanded to fullscreen' : 'collapsed to sidebar');
+    });
+
     const close = document.createElement('button');
     close.textContent = '✕';
-    Object.assign(close.style, { background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '16px' });
+    Object.assign(close.style, { background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '16px', lineHeight: '1' });
     close.addEventListener('click', () => { wrap.remove(); overlayEl = null; clearReadyHandler(); });
-    bar.appendChild(close);
+
+    btnGroup.appendChild(expandBtn);
+    btnGroup.appendChild(close);
+    bar.appendChild(btnGroup);
 
     const iframe = document.createElement('iframe');
     // ?embed=1 is a hint for step 2 (the app ignores it today).
