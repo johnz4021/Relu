@@ -204,3 +204,19 @@ Please dont stop and keep moving
 >Said Recursion was particularly challenging for him, got better by mainly just repetition and repeating questions. Would try to understand it level by level, but didn’t really rely on any resource to get better. 
 
 >On an ideal tool said that it would be nice to see all his solved problems across his excel sheet and see visualizations for each of them.
+
+#### Matthew
+
+Casually mentioned that with leetcode, if he’s seen the problem before he can do it, but there’s no way he would arrive at that solution from scratch. Can do them with nudges from interviewer etc but not from scratch 
+
+Crammed his leetcode, did around 10 questions but got lucky for the technical interview where they gave him a DFS one he’d seen. Is now doing 1 a week. 
+
+Thought process is usually goes through problems, has a set of concepts in mind and checks each of them, Ie is this DFS or not, is this x or not, etc…
+
+#### Neil
+
+Biggest 2 challenges are knowing where to get started, and speaking out loud when programming. Explicitly said pattern recognition is the hardest part
+
+For prep, started out with algomap doing topic by topic questions. Didn’t have a good answer for how to start problems, just said he would try to match it with patterns he’s seen before. Believes the best way is just to do a lot of problems until you get it 
+
+got lucky w credera interview, oa just used gpt

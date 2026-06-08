@@ -22,6 +22,7 @@ import Logo from './components/Logo';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useAuth } from './hooks/useAuth';
+import { useLessonSession } from './hooks/useLessonSession';
 import { useTutorState, normalizeVizActions } from './hooks/useTutorState';
 import { applyActions, applyAction, applyActionsSequenced, killActiveTimeline, flushActiveTimeline, loadGraphImmediate } from './lib/rendererRegistry';
 import { initContextManager, destroyContextManager } from './lib/contextManager';
@@ -46,7 +47,6 @@ export default function App() {
   const [lcParsed, setLcParsed] = useState(null);
   const [lcSessions, setLcSessions] = useState([]);
   const [vizTier, setVizTier] = useState(null);
-  const sessionStartRef = useRef(null);
   const insertRefHolder = useRef(null);
   const sendRef = useRef(null);
 
@@ -284,6 +284,10 @@ export default function App() {
   const { send, connected } = useWebSocket(onMessage, onBinary, wsEnabled);
   sendRef.current = send;
 
+  // Shared start/resume lifecycle for both the web app and the leetcode overlay
+  // (eng D6). companionMode threads through startLesson into the one server prompt.
+  const { startLesson, resumeLesson, sessionStartRef } = useLessonSession({ send, reset, audioPlayer });
+
   // Check session gate status on connect
   useEffect(() => {
     if (connected && user) send({ type: 'check_session_status' });
@@ -291,16 +295,13 @@ export default function App() {
 
   const handleSelectAlgorithm = useCallback(
     (algorithm, data) => {
-      audioPlayer.init(); // Must be from user gesture
-      reset();
       setVizTier(null);
-      sessionStartRef.current = Date.now();
-
-      track('leetcode_started', {});
       setLcParsed({ loading: true, problemText: data.problemText });
-      send({ type: 'start_leetcode', problemText: data.problemText });
+      // companionMode comes from the overlay opener intent ("Nudge me" → true);
+      // the web app omits it (false → paste-to-learn walkthrough).
+      startLesson({ problemText: data.problemText, companionMode: data.companionMode });
     },
-    [send, reset, audioPlayer]
+    [startLesson]
   );
 
   // --- EMBED MODE (Chrome extension overlay spike, step 2) ---------------
@@ -373,13 +374,9 @@ export default function App() {
 
   const handleResumeConversation = useCallback(
     (conversationId) => {
-      audioPlayer.init(); // Must be from user gesture to unlock AudioContext
-      reset();
-      sessionStartRef.current = Date.now();
-      track('conversation_resumed', {});
-      send({ type: 'resume_conversation', conversationId });
+      resumeLesson(conversationId);
     },
-    [send, reset, audioPlayer]
+    [resumeLesson]
   );
 
   const handleGuidedResponse = useCallback(
