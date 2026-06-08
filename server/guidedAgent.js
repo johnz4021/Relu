@@ -43,13 +43,24 @@ const VIZ_PIPELINE_TOOLS = new Set([
   'build_example_graph',
 ]);
 
+// The trace-loading rung only. It needs a registered/generated trace, so off-registry
+// it cannot work and is filtered — even in companion mode, where the rest of the viz
+// pipeline stays available for the zero-spoiler STRUCTURE view (eng D3).
+const TRACE_TOOLS = new Set(['run_algorithm']);
+
 // Pure helper exported for tests: derives the API-facing tool list from session state.
 // The earlier soft-filter (removing create_visualization when hasViz===false) became
 // redundant once isOutOfScopeSession started gating on hasViz directly — non-LC paths
 // never set hasViz so they never hit the soft branch in practice anyway.
 export function computeActiveTools(session, allTools) {
   if (isOutOfScopeSession(session)) {
-    return allTools.filter((t) => !VIZ_PIPELINE_TOOLS.has(t.name));
+    // STUCK COMPANION MODE keeps the structure viz off-registry: build_example_graph
+    // + create_visualization render the problem's OWN input (no solving, works on any
+    // problem — eng D3). Only the trace rung is filtered; the solution reveal degrades
+    // to text. The standard walkthrough has no such rung, so it filters the whole
+    // pipeline (the Sudoku empty-create_graph + phantom-narration bug).
+    const filtered = session.companionMode ? TRACE_TOOLS : VIZ_PIPELINE_TOOLS;
+    return allTools.filter((t) => !filtered.has(t.name));
   }
   return allTools;
 }
@@ -74,7 +85,15 @@ export function buildIntakeUserText(session, problemText) {
     : 'See the attached image for the problem the student wants to solve.';
 
   let lcContext = '';
-  if (isOutOfScopeSession(session)) {
+  if (isOutOfScopeSession(session) && session.companionMode) {
+    // Companion mode off-registry (eng D3): the hint ladder needs no registry, and
+    // the zero-spoiler STRUCTURE view still renders from the problem's own input
+    // (build_example_graph + create_visualization are AVAILABLE). Only the animated
+    // SOLUTION TRACE is missing — run_algorithm is filtered — so the terminal reveal
+    // degrades to a text walkthrough (plus the structure view). Never promise an
+    // animated solution that won't appear.
+    lcContext = '\n\n[COMPANION — OFF REGISTRY] This problem has no pre-built solution trace, which is fine: your hints come from your own reasoning and work on any problem, and you can still render the zero-spoiler STRUCTURE view of the problem\'s own input with build_example_graph + create_visualization. What you do NOT have is an animated solution trace (run_algorithm is unavailable). So when the student reaches the terminal reveal, walk the solution in TEXT alongside the structure view — do not narrate as if an animated trace will appear.';
+  } else if (isOutOfScopeSession(session)) {
     // Classifier intentionally returned null (see leetcodeAgent.js disambiguation:
     // "REMOVED → null" rules for problems whose old umbrella algos were retired).
     // Viz tools are filtered from the API call; this block tells the agent why and
@@ -1125,6 +1144,7 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
   session._emittedTraceSteps = [];
   session._savedGraphState = null;
   session._panels = {};
+  session._warmSolver = null;
 
   const ws = liveWs(session);
   sendJSON(ws, { type: 'guided_start', problemText });
@@ -1133,6 +1153,25 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
   session.imageBase64 = imageBase64 || null;
   session.imageMimeType = imageMimeType || null;
   session._problemText = problemText || '';
+
+  // Perf (eng D3): warm the solver in the background on companion-mode open so the
+  // eventual escalation to the SOLUTION rung isn't a cold ~12s wait. Fire-and-forget —
+  // the hint path and the structure viz NEVER await this. run_solver reuses the result
+  // when the student escalates; if the warm solve failed, run_solver falls back to a
+  // fresh solve. The companion doctrine still forbids running it up front for output;
+  // this only pre-computes so the answer is ready the moment it's actually wanted.
+  if (session.companionMode && (problemText || session.imageBase64)) {
+    const warmText = problemText || '';
+    const noop = () => {};
+    const promise = (session._leetcodeAlgorithmKey
+      ? solveLeetcodeProblem(warmText, session._leetcodeAlgorithmKey, noop, session.anthropicClient)
+      : solveProblem(warmText, noop, session.imageBase64, session.imageMimeType, session.anthropicClient)
+    ).catch((err) => {
+      console.warn('[GuidedAgent] warm solver failed (non-fatal):', err.message);
+      return null;
+    });
+    session._warmSolver = { text: warmText, promise };
+  }
 
   const userContent = [];
   if (imageBase64 && imageMimeType) {
@@ -1852,20 +1891,31 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           }
         } else if (block.name === 'run_solver') {
           const statusCb = (label) => sendJSON(ws, { type: 'agent_status', status: 'tool', tool: label });
-          const sr = session._leetcodeAlgorithmKey
-            ? await solveLeetcodeProblem(
-                block.input.subproblem_text,
-                session._leetcodeAlgorithmKey,
-                statusCb,
-                session.anthropicClient
-              )
-            : await solveProblem(
-                block.input.subproblem_text,
-                statusCb,
-                session.imageBase64,
-                session.imageMimeType,
-                session.anthropicClient
-              );
+          // Reuse the background-warmed solve (eng D3) when it covers this exact
+          // sub-problem — the common companion case where the student escalates to
+          // the solution rung. Consume it once; on warm failure (null) solve fresh.
+          let sr = null;
+          if (session._warmSolver && session._warmSolver.text === block.input.subproblem_text) {
+            console.log('[GuidedAgent] run_solver: awaiting warm solve');
+            sr = await session._warmSolver.promise;
+            session._warmSolver = null;
+          }
+          if (!sr) {
+            sr = session._leetcodeAlgorithmKey
+              ? await solveLeetcodeProblem(
+                  block.input.subproblem_text,
+                  session._leetcodeAlgorithmKey,
+                  statusCb,
+                  session.anthropicClient
+                )
+              : await solveProblem(
+                  block.input.subproblem_text,
+                  statusCb,
+                  session.imageBase64,
+                  session.imageMimeType,
+                  session.anthropicClient
+                );
+          }
           console.log(`[GuidedAgent] run_solver completed: success=${sr.success}, approach=${sr.approach || 'N/A'}, mode=${sr.reasoning_mode || 'N/A'}`);
 
           if (!sr.success) {

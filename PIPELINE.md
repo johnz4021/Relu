@@ -1086,6 +1086,46 @@ After the session completes, `createLcSession()` persists the result to the `lc_
 
 **`lc_master_session`** WS message marks an LC session as mastered.
 
+### Stuck Companion Mode (the leetcode overlay)
+
+The Chrome extension overlay on `leetcode.com/problems/*` runs the SAME guided
+session, parameterized by `session.companionMode` (set from `msg.companionMode` on
+`start_leetcode`, chosen by the overlay's two-choice opener: "Nudge me — no spoilers"
+→ `companionMode: true`; "Show me how it works" → `false`, the normal walkthrough).
+
+Companion mode is a **parameterized mode of the ONE guided prompt**, not a second
+agent. The seams (all in `server/guidedAgent.js`):
+
+- **`buildGuidedSystemPrompt(session)`** — appends `COMPANION_MODE_PROMPT` (no-spoiler
+  doctrine: open by asking for the student's read, no solver up front, conversational
+  escalation with no hard gate / no visible tiers, never fight an escalation request,
+  terminal rung is the visualization) to the base prompt when `companionMode`. Every
+  system-prompt construction site routes through this, so the doctrine holds across the
+  whole loop (post-`run_solver`, resume). Non-companion output is byte-identical to the
+  base prompt (regression-pinned in `guidedAgent.test.js`).
+- **`buildIntakeUserText(session, problemText)`** — pure assembly of the first user
+  turn; swaps the closing instruction to the companion opener. Off-registry companion
+  gets a `[COMPANION — OFF REGISTRY]` block (structure viz still works; only the trace
+  rung degrades to text) instead of the standard `[LEETCODE MODE — OUT OF SCOPE]` block.
+- **`computeActiveTools(session, allTools)`** — two-level viz (eng D3). Off-registry
+  companion filters ONLY `run_algorithm` (the trace rung), keeping `build_example_graph`
+  + `create_visualization` so the **zero-spoiler structure view** of the problem's own
+  input renders on ANY problem. The standard walkthrough still filters the whole viz
+  pipeline off-registry (the Sudoku empty-graph + phantom-narration bug).
+- **Solver warming** — on companion open, `startGuidedSession` fires the solve in the
+  background (`session._warmSolver = { text, promise }`, fire-and-forget). The hint path
+  and structure viz never await it; `run_solver` reuses the warmed result when the
+  student escalates (cold ~12s wait avoided), falling back to a fresh solve on warm
+  failure.
+
+**Auth (eng D5):** the overlay iframe is a third-party frame on leetcode.com, so its
+storage is partitioned and the first-party relu.run session is invisible (the
+double-login). The extension **background service worker** durably owns the Supabase
+session in `chrome.storage.local`; on overlay open `content.js` injects it via a direct
+origin-targeted `postMessage` (page-world can't read it), the overlay adopts it with
+`supabase.auth.setSession` (auto-refreshes expired access tokens), and posts rotated
+sessions back over a **transferred MessagePort** (off the page-world message bus).
+
 ---
 
 ## 11. Data Flow Diagram

@@ -76,6 +76,20 @@ describe('computeActiveTools', () => {
     expect(active.has('run_algorithm')).toBe(false);
   });
 
+  // eng D3: companion mode off-registry keeps the zero-spoiler STRUCTURE viz
+  // (build_example_graph renders the problem's own input — no solving) and filters
+  // ONLY the trace rung, which degrades to a text reveal.
+  it('companion off-registry: keeps structure viz, filters only the trace rung', () => {
+    const session = { mode: 'leetcode', hasViz: false, companionMode: true };
+    const active = names(computeActiveTools(session, ALL_TOOLS));
+    expect(active.has('build_example_graph')).toBe(true);
+    expect(active.has('create_visualization')).toBe(true);
+    expect(active.has('create_graph')).toBe(true);
+    expect(active.has('update_graph')).toBe(true);
+    // the solution trace cannot load without a registry entry → degrade to text.
+    expect(active.has('run_algorithm')).toBe(false);
+  });
+
   it('normal LC session with viz: all tools available', () => {
     const session = { mode: 'leetcode', _leetcodeAlgorithmKey: 'dijkstra', hasViz: true };
     const active = names(computeActiveTools(session, ALL_TOOLS));
@@ -126,6 +140,17 @@ describe('buildIntakeUserText', () => {
     expect(text.endsWith(STANDARD_TAIL)).toBe(true);
     // No solution-mode/companion framing leaks into the standard path.
     expect(text).not.toContain('[STUCK COMPANION MODE]');
+  });
+
+  // eng D3: companion off-registry must NOT claim "no viz available" (the standard
+  // out-of-scope text) — the structure viz works; only the trace degrades to text.
+  it('companion off-registry: structure-viz-works framing, not the no-viz block', () => {
+    const text = buildIntakeUserText({ mode: 'leetcode', hasViz: false, companionMode: true }, PROBLEM);
+    expect(text).toContain('[COMPANION — OFF REGISTRY]');
+    expect(text).toContain('build_example_graph');
+    expect(text).toContain('run_algorithm is unavailable');
+    expect(text).not.toContain('[LEETCODE MODE — OUT OF SCOPE]');
+    expect(text).toContain('[STUCK COMPANION MODE]'); // still the companion instruction
   });
 
   it('Tier-1 LC session: emits LEETCODE MODE + TIER 1 TRACE + standard instruction', () => {
