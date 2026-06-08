@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeActiveTools, isOutOfScopeSession, buildIntakeUserText } from './guidedAgent.js';
+import { computeActiveTools, isOutOfScopeSession, buildIntakeUserText, buildGuidedSystemPrompt } from './guidedAgent.js';
 
 // Minimal mock tool list matching the union of tools.js + guidedAgent-specific tools.
 // We only assert membership, never invoke any tool, so a tiny shape is enough.
@@ -167,5 +167,47 @@ describe('buildIntakeUserText', () => {
     expect(text.endsWith(STANDARD_TAIL)).toBe(false);
     // LC context is preserved regardless of mode.
     expect(text).toContain('[TIER 1 TRACE]');
+  });
+});
+
+describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
+  // REGRESSION EVAL (eng D7): non-companion sessions must get the base prompt
+  // byte-for-byte. The companion edit is a *parameterized* append, so existing
+  // web-app teaching is provably unchanged. We pin that the base is a strict
+  // prefix of the companion prompt and carries none of the companion markers.
+  const base = buildGuidedSystemPrompt({ mode: 'guided' });
+  const baseLc = buildGuidedSystemPrompt({ mode: 'leetcode', companionMode: false });
+  const companion = buildGuidedSystemPrompt({ mode: 'leetcode', companionMode: true });
+
+  it('non-companion sessions get an identical base prompt regardless of mode', () => {
+    expect(baseLc).toBe(base);
+    expect(base).not.toContain('[STUCK COMPANION MODE');
+    expect(base).not.toContain('NO SPOILERS');
+  });
+
+  it('companion prompt is exactly the base prompt PLUS the companion doctrine', () => {
+    expect(companion.startsWith(base)).toBe(true);
+    expect(companion.length).toBeGreaterThan(base.length);
+  });
+
+  // BEHAVIOR EVAL (D2), asserted at the controllable layer — the doctrine the
+  // model is told. The three target behaviors map to explicit instructions:
+  it('companion doctrine encodes: open with a nudge, not the solution (turn-1)', () => {
+    expect(companion).toContain('NO SPOILERS');
+    expect(companion).toContain('OPEN BY ASKING FOR THEIR READ');
+    expect(companion).toContain('Your first turn is a question, not a hint');
+    expect(companion).toContain('do NOT run any solver up front');
+  });
+
+  it('companion doctrine encodes: escalate conversationally, on demand, no hard gate', () => {
+    expect(companion).toContain('ESCALATE CONVERSATIONALLY — NO HARD GATE, NO VISIBLE TIERS');
+    expect(companion).toContain('DO NOT FIGHT THE STUDENT');
+    expect(companion).toContain('escalate immediately');
+  });
+
+  it('companion doctrine encodes: terminal rung is the visualization (structure then trace)', () => {
+    expect(companion).toContain('TERMINAL RUNG = THE VISUALIZATION');
+    expect(companion).toContain('build_example_graph');
+    expect(companion).toContain('run_algorithm');
   });
 });

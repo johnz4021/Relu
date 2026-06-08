@@ -707,6 +707,61 @@ SEGMENT BUDGETING:
 - Verification: 1-2 segments
 - Socratic dialogue: 0 segments (uses conversational_reply, not emit_segment)`;
 
+// STUCK COMPANION MODE doctrine (eng D2/D6). Appended to the ONE base prompt above
+// when session.companionMode is set — the in-problem "Nudge me — no spoilers"
+// overlay on leetcode.com. There is no second prompt: this is a parameterized mode,
+// so web-app teaching behavior is provably unchanged when companionMode is false.
+const COMPANION_MODE_PROMPT = `
+
+═══════════════════════════════════════════════════════════════════════
+[STUCK COMPANION MODE — OVERRIDES THE WALKTHROUGH DOCTRINE ABOVE]
+═══════════════════════════════════════════════════════════════════════
+The student is working this problem live on leetcode.com and asked to be
+nudged WITHOUT spoilers. You are an in-problem companion, not a solution
+walkthrough. Wherever this conflicts with the standard flow above, THIS wins.
+
+NO SPOILERS (hard rule). In your opening turns do NOT reveal the solution,
+the optimal approach, the data structure, the time/space target, or the
+algorithm's name. Naming the pattern outright removes the productive struggle
+that is the entire point — a student who just wanted the answer would have
+asked ChatGPT.
+
+OPEN BY ASKING FOR THEIR READ. Your first turn is a question, not a hint —
+e.g. "What's your read on this one so far? Even a rough guess at the approach
+helps." Do not lead with a hint, and do NOT run any solver up front.
+
+ESCALATE CONVERSATIONALLY — NO HARD GATE, NO VISIBLE TIERS. The student never
+sees "levels". Read how stuck they are from what they say and modulate the
+specificity of your help yourself. Start with the lightest useful nudge (a
+thinking question, a reframing, an observation about the input or a tiny
+case). Get more specific only as they ask for more or clearly stay stuck.
+
+DO NOT FIGHT THE STUDENT. If they ask for more, or ask you to just show them,
+HONOR IT and escalate immediately. Never refuse and never withhold behind a
+"try first" wall once they've asked — a hard barrier just sends them back to
+ChatGPT. The moat is hint QUALITY plus the visualization endpoint, not
+withholding.
+
+TERMINAL RUNG = THE VISUALIZATION. When the student is still stuck after a few
+nudges, or explicitly asks to see it, move toward the visualization: first the
+zero-spoiler STRUCTURE view of the problem's own input (build_example_graph),
+then — only if they want the full reveal — the SOLUTION trace (run_solver +
+run_algorithm). The structure view is a hint; the solution trace is the
+reveal. Do not jump straight to the trace unless the student asked to just see
+the answer.
+
+PACING. Short, conversational turns. One idea per turn. This is a back-and-
+forth in a sidebar while they code, not a lecture.`;
+
+// Parameterized assembly of the guided system prompt. ONE base prompt; companion
+// mode appends the no-spoiler doctrine. Non-companion sessions get the base prompt
+// byte-for-byte (pinned by the regression eval), so existing teaching is unchanged.
+export function buildGuidedSystemPrompt(session) {
+  return session?.companionMode
+    ? GUIDED_SYSTEM_PROMPT + COMPANION_MODE_PROMPT
+    : GUIDED_SYSTEM_PROMPT;
+}
+
 // Tools specific to guided mode
 const guidedTools = [
   ...tools,
@@ -1092,7 +1147,7 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
   });
 
   const messages = [{ role: 'user', content: userContent }];
-  await runGuidedLoop(session, messages, GUIDED_SYSTEM_PROMPT, null);
+  await runGuidedLoop(session, messages, buildGuidedSystemPrompt(session), null);
 }
 
 export async function resumeGuidedSession(session, savedMessages, savedSolverResult, savedVizState) {
@@ -1116,8 +1171,8 @@ export async function resumeGuidedSession(session, savedMessages, savedSolverRes
   if (cleanSolverResult) delete cleanSolverResult._batchState;
 
   const systemPrompt = cleanSolverResult?.success
-    ? GUIDED_SYSTEM_PROMPT + buildSolverContext(cleanSolverResult)
-    : GUIDED_SYSTEM_PROMPT;
+    ? buildGuidedSystemPrompt(session) + buildSolverContext(cleanSolverResult)
+    : buildGuidedSystemPrompt(session);
 
   if (savedVizState?.currentGraph) {
     session.currentGraph = savedVizState.currentGraph;
@@ -1818,7 +1873,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           } else {
             solverResult = sr;
             session._solverSucceeded = true;
-            systemPrompt = GUIDED_SYSTEM_PROMPT + buildSolverContext(sr);
+            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(sr);
 
             if (sr.reasoning_mode) {
               const classResult = applyClassification(sr, session, ws, vizState);
@@ -1866,7 +1921,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           } else {
             solverResultsMap = batchResult.solutions;
             solverResult = solverResultsMap[activePart];
-            systemPrompt = GUIDED_SYSTEM_PROMPT + buildSolverContext(solverResult);
+            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(solverResult);
 
             // Apply classification for the first active part
             let classMessage = '';
@@ -1890,7 +1945,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           } else {
             activePart = targetLabel;
             solverResult = solverResultsMap[targetLabel];
-            systemPrompt = GUIDED_SYSTEM_PROMPT + buildSolverContext(solverResult);
+            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(solverResult);
             session.sessionPlan = null; // Reset classification for new part
 
             // Apply classification for the new part
