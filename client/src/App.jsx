@@ -51,6 +51,13 @@ export default function App() {
   const insertRefHolder = useRef(null);
   const sendRef = useRef(null);
 
+  // Companion funnel state (eng D4). The in-overlay rungs flow through the app's
+  // PostHog (already identified by Supabase user id, so they unify with the
+  // background's extension-side events). Refs so the WS message handler — defined
+  // before embedIntent — can read companion state and fire each rung once.
+  const companionActiveRef = useRef(false);
+  const companionFunnelRef = useRef({ nudgeGiven: false, structureShown: false, solutionShown: false });
+
   const contextPanelsRef = useRef(state.contextPanels);
   contextPanelsRef.current = state.contextPanels;
   const vizPanelsRef = useRef(state.vizPanels);
@@ -72,6 +79,7 @@ export default function App() {
       track('session_completed', {
         mode: state.mode, algorithm: state.algorithm,
         segment_count: state.segmentCount, duration_seconds: duration,
+        companion: companionActiveRef.current, // eng D4 "returned" rung tag
       });
     }
   }, [state.status, state.mode, state.algorithm, state.segmentCount]);
@@ -107,6 +115,25 @@ export default function App() {
       }
 
       processMessage(msg);
+
+      // Companion funnel (eng D4): fire each in-overlay rung once. nudge_given and
+      // structure_viz_shown are exact signals; solution_viz_shown is a heuristic —
+      // the first viz-bearing segment after the structure view is set up (the trace
+      // animation; the client segment carries no trace_step_indices to be precise).
+      if (companionActiveRef.current) {
+        const f = companionFunnelRef.current;
+        if (!f.nudgeGiven && (msg.type === 'segment_start' || msg.type === 'conversational_reply')) {
+          f.nudgeGiven = true;
+          track('companion_nudge_given', {});
+        }
+        if (!f.structureShown && (msg.type === 'create_graph' || msg.type === 'create_visualization')) {
+          f.structureShown = true;
+          track('companion_structure_viz_shown', {});
+        } else if (!f.solutionShown && f.structureShown && msg.type === 'segment_start' && msg.viz_actions?.length > 0) {
+          f.solutionShown = true;
+          track('companion_solution_viz_shown', {});
+        }
+      }
 
       // Route all viz actions through the renderer registry.
       // normalizeVizActions wraps legacy (renderer-less) actions as renderer:'graph'.
@@ -343,8 +370,18 @@ export default function App() {
 
   const chooseEmbedIntent = useCallback((intent) => {
     try { localStorage.setItem('relu_embed_intent', intent); } catch { /* storage blocked */ }
+    track('companion_intent_chosen', { intent }); // eng D4 funnel: the activation gate
     setEmbedIntent(intent);
   }, []);
+
+  // Mark the companion funnel active only on the no-spoiler nudge path. Reset the
+  // once-flags so a new problem (fresh overlay) re-arms each rung.
+  useEffect(() => {
+    companionActiveRef.current = embedMode && embedIntent === 'nudge';
+    if (!companionActiveRef.current) {
+      companionFunnelRef.current = { nudgeGiven: false, structureShown: false, solutionShown: false };
+    }
+  }, [embedMode, embedIntent]);
 
   // Latest auth session, mirrored to a ref so the message handler can post the
   // current session the instant the port arrives (no wait for the next render).
@@ -492,6 +529,8 @@ export default function App() {
 
   const handleGuidedMessage = useCallback(
     (text) => {
+      // In the no-spoiler path, a student follow-up is an escalation request (eng D4).
+      if (companionActiveRef.current) track('companion_escalation_requested', {});
       processMessage({ type: 'add_student_message', text });
       flushActiveTimeline();
       audioPlayer.flush();

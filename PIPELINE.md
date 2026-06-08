@@ -1118,6 +1118,18 @@ agent. The seams (all in `server/guidedAgent.js`):
   student escalates (cold ~12s wait avoided), falling back to a fresh solve on warm
   failure.
 
+**Instrumentation (eng D4):** the background worker is the funnel poster. Extension-side
+rungs (`extension_button_shown`, `_button_clicked`, `_extraction`, `_overlay_opened`,
+`_overlay_closed`) are sent `content.js → background → PostHog HTTP capture`, tagged with
+the Supabase user id (decoded from the stored JWT, falling back to a per-install anon id)
+so they unify with the in-overlay app events. In-overlay rungs (`companion_intent_chosen`,
+`_escalation_requested`, `_nudge_given`, `_structure_viz_shown`, `_solution_viz_shown`,
+and the `companion`-tagged `session_completed`) post through the app's existing PostHog,
+already identified by the same user id. All posts are fire-and-forget — an unreachable
+sink drops the event, never breaking the session. (`_solution_viz_shown` is a heuristic:
+the first viz-bearing segment after the structure view, since the client segment carries
+no `trace_step_indices`.)
+
 **Auth (eng D5):** the overlay iframe is a third-party frame on leetcode.com, so its
 storage is partitioned and the first-party relu.run session is invisible (the
 double-login). The extension **background service worker** durably owns the Supabase

@@ -65,6 +65,18 @@
     } catch { /* worker gone; next open re-syncs */ }
   }
 
+  // Funnel event → background → PostHog (eng D4). The background tags it with the
+  // user id, so the extension-side funnel joins the in-overlay app events. Best
+  // effort: a dead worker just means a dropped event, never a broken page.
+  function track(event, props) {
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'relu_track', event, properties: { slug: currentSlug, ...props } },
+        () => void chrome.runtime.lastError,
+      );
+    } catch { /* worker gone */ }
+  }
+
   // ----- 1. slug + extraction ----------------------------------------------
 
   function slugFromUrl() {
@@ -178,14 +190,17 @@
     });
     btn.addEventListener('click', onStuckClick);
     document.body.appendChild(btn);
-    log('button_shown', { slug: currentSlug }); // instrumentation proof
+    log('button_shown', { slug: currentSlug });
+    track('extension_button_shown');
   }
 
   async function onStuckClick() {
     log('button_clicked', { slug: currentSlug });
+    track('extension_button_clicked');
     const problem = await extractProblem(currentSlug);
     if (!problem) {
       warn('extraction FAILED — no problem text. (Premium/locked or selectors rotted.) Fallback = manual paste.');
+      track('extension_extraction', { ok: false });
     } else {
       log('extraction OK', {
         source: problem.source,
@@ -193,7 +208,7 @@
         isPaidOnly: problem.isPaidOnly,
         chars: problem.text.length,
       });
-      log('--- extracted problem text (paste into the frame for the spike) ---\n' + problem.text);
+      track('extension_extraction', { ok: true, source: problem.source, is_paid_only: !!problem.isPaidOnly });
     }
     openOverlay(problem);
   }
@@ -244,7 +259,7 @@
     const close = document.createElement('button');
     close.textContent = '✕';
     Object.assign(close.style, { background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '16px', lineHeight: '1' });
-    close.addEventListener('click', () => { wrap.remove(); overlayEl = null; clearReadyHandler(); });
+    close.addEventListener('click', () => { track('extension_overlay_closed'); wrap.remove(); overlayEl = null; clearReadyHandler(); });
 
     btnGroup.appendChild(expandBtn);
     btnGroup.appendChild(close);
@@ -329,6 +344,7 @@
     window.addEventListener('message', readyHandler);
 
     log('overlay injected, iframe →', iframe.src);
+    track('extension_overlay_opened', { had_problem: !!(problem && problem.text) });
   }
 
   // ----- 4. SPA navigation (leetcode switches problems w/o reload) -----------

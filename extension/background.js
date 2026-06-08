@@ -18,15 +18,78 @@
 
 const SESSION_KEY = 'relu_session';
 
+// ----- instrumentation sink (eng D4) ----------------------------------------
+// The background worker is the funnel poster. Extension-side events (button_shown,
+// opened, closed) were console-only — the D4 gap. We POST them to the PostHog HTTP
+// capture API, tagged by the Supabase user id so they unify with the in-overlay
+// app's PostHog events on one person. PostHog ingestion keys (phc_*) are public
+// browser keys — the same one the web client ships. Fire-and-forget: if the sink is
+// unreachable the event is dropped, never breaking anything (test-plan requirement).
+const POSTHOG_KEY = 'phc_mEQEihXK45TOCLbXsTiFZCYUgjoQqtavJKkEDXw3vB4';
+const POSTHOG_HOST = 'https://us.i.posthog.com';
+
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[ReLU] background installed (D5 background-owned auth).');
+  console.log('[ReLU] background installed (D5 auth + D4 instrumentation).');
 });
+
+// Decode the Supabase JWT's `sub` (the user id) without verifying — we only need it
+// as a distinct_id, and the token came from our own stored session.
+function decodeJwtSub(jwt) {
+  try {
+    const payload = jwt.split('.')[1];
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(json).sub || null;
+  } catch {
+    return null;
+  }
+}
+
+// distinct_id: prefer the Supabase user id (unifies extension + overlay events on one
+// person), else a stable per-install anonymous id so the pre-login funnel still joins up.
+async function getDistinctId() {
+  const { [SESSION_KEY]: session } = await chrome.storage.local.get(SESSION_KEY);
+  const sub = session?.access_token ? decodeJwtSub(session.access_token) : null;
+  if (sub) return sub;
+  const { relu_anon_id } = await chrome.storage.local.get('relu_anon_id');
+  if (relu_anon_id) return relu_anon_id;
+  const anon = 'anon_' + crypto.randomUUID();
+  await chrome.storage.local.set({ relu_anon_id: anon });
+  return anon;
+}
+
+async function track(event, properties) {
+  if (!POSTHOG_KEY) return;
+  try {
+    const distinct_id = await getDistinctId();
+    await fetch(`${POSTHOG_HOST}/capture/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        api_key: POSTHOG_KEY,
+        event,
+        distinct_id,
+        properties: { ...properties, $lib: 'relu-extension', source: 'extension_bg' },
+      }),
+    });
+  } catch (err) {
+    // Sink unreachable — drop the event, never break the session.
+    console.warn('[ReLU] track dropped:', event, err?.message);
+  }
+}
 
 function isUsableSession(s) {
   return !!(s && typeof s.access_token === 'string' && typeof s.refresh_token === 'string');
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // Funnel event from the content script (or overlay, relayed via content script).
+  // Fire-and-forget — no response awaited.
+  if (msg?.type === 'relu_track' && typeof msg.event === 'string') {
+    track(msg.event, msg.properties || {});
+    return false;
+  }
+
   // Content script asks for the stored session on overlay open. We return the raw
   // tokens; the overlay's supabase-js refreshes them if the access_token expired.
   if (msg?.type === 'relu_get_token') {
