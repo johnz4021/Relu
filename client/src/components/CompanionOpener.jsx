@@ -25,6 +25,9 @@ export default function CompanionOpener({ onChoose, problemTitle }) {
         <div className="mt-6 flex flex-col gap-3">
           <button
             type="button"
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- moves focus into the
+            // panel on open (a11y); this opener is the overlay's first interactive view.
+            autoFocus
             onClick={() => onChoose('nudge')}
             className="w-full rounded-lg border border-[#4f46e5] bg-[#4f46e5] px-4 py-3 text-left text-white transition-colors hover:bg-[#4338ca] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4f46e5] focus-visible:ring-offset-2"
           >

@@ -40,8 +40,43 @@
 
   let currentSlug = null;
   let overlayEl = null;
-  let readyHandler = null; // window 'message' listener for the embed handshake
-  let authPort = null;     // MessagePort1 of the private content-script ↔ overlay channel (D5)
+  let readyHandler = null;   // window 'message' listener for the embed handshake
+  let authPort = null;       // MessagePort1 of the private content-script ↔ overlay channel (D5)
+  let keydownHandler = null; // document keydown for Escape-to-close while overlay open
+  let launcherEl = null;     // the "Stuck?" button — focus returns here when the overlay closes
+
+  // ----- design tokens + a11y styles (Step 8) -------------------------------
+  // A minimal CSS-variable token set, scoped with relu-* names so it can't clash
+  // with leetcode's chrome, plus focus-visible rings on our controls. The font is
+  // Inter (best-effort load; leetcode CSP may block the link, in which case the
+  // fallback stack — NOT bare system-ui — applies).
+  function injectReluStyles() {
+    if (document.getElementById('relu-tokens')) return;
+    try {
+      const font = document.createElement('link');
+      font.rel = 'stylesheet';
+      font.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+      document.head.appendChild(font);
+    } catch { /* head not ready / blocked — fallback stack covers it */ }
+
+    const style = document.createElement('style');
+    style.id = 'relu-tokens';
+    style.textContent = `
+      :root {
+        --relu-accent: #4f46e5;
+        --relu-accent-press: #4338ca;
+        --relu-bar-bg: #111827;
+        --relu-radius: 12px;
+        --relu-font: 'Inter', ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      #relu-stuck-btn:focus-visible,
+      #relu-overlay button:focus-visible {
+        outline: 2px solid var(--relu-accent);
+        outline-offset: 2px;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
 
   // ----- 0. background-owned auth (eng D5) ----------------------------------
   // The background worker is the durable owner of the Supabase session. These two
@@ -173,23 +208,27 @@
     if (document.getElementById('relu-stuck-btn')) return;
     const btn = document.createElement('button');
     btn.id = 'relu-stuck-btn';
-    btn.textContent = '🧠 Stuck? Ask ReLU';
+    // Anti-slop: no emoji, single restrained indigo accent (no gradient), real font.
+    btn.textContent = 'Stuck? Ask ReLU';
+    btn.setAttribute('aria-label', 'Open the ReLU stuck helper');
     Object.assign(btn.style, {
       position: 'fixed',
       right: '20px',
       bottom: '20px',
       zIndex: '2147483646',
-      padding: '10px 16px',
+      minHeight: '44px', // a11y: 44px tap target
+      padding: '10px 18px',
       borderRadius: '999px',
       border: 'none',
-      background: '#4f46e5',
+      background: 'var(--relu-accent)',
       color: '#fff',
-      font: '600 14px system-ui, sans-serif',
+      font: '600 14px var(--relu-font)',
       cursor: 'pointer',
       boxShadow: '0 4px 14px rgba(0,0,0,.25)',
     });
     btn.addEventListener('click', onStuckClick);
     document.body.appendChild(btn);
+    launcherEl = btn; // focus returns here when the overlay closes (a11y)
     log('button_shown', { slug: currentSlug });
     track('extension_button_shown');
   }
@@ -218,6 +257,7 @@
   function clearReadyHandler() {
     if (readyHandler) { window.removeEventListener('message', readyHandler); readyHandler = null; }
     if (authPort) { try { authPort.close(); } catch { /* already closed */ } authPort = null; }
+    if (keydownHandler) { document.removeEventListener('keydown', keydownHandler); keydownHandler = null; }
   }
 
   function openOverlay(problem) {
@@ -227,39 +267,62 @@
     const SIDEBAR_WIDTH = 'min(520px, 90vw)';
     const wrap = document.createElement('div');
     wrap.id = 'relu-overlay';
+    // a11y: a labelled modal dialog; distinct white panel + dark bar, not leetcode chrome.
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', 'ReLU helper');
     Object.assign(wrap.style, {
       position: 'fixed', top: '0', right: '0', height: '100vh', width: SIDEBAR_WIDTH,
       zIndex: '2147483647', boxShadow: '-8px 0 24px rgba(0,0,0,.3)', background: '#fff',
-      display: 'flex', flexDirection: 'column',
+      display: 'flex', flexDirection: 'column', font: '400 14px var(--relu-font)',
       transition: 'width 0.2s ease', // D2: hybrid sidebar <-> fullscreen
     });
 
     const bar = document.createElement('div');
-    Object.assign(bar.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#111', color: '#fff', font: '600 13px system-ui' });
-    bar.innerHTML = '<span>ReLU (spike)</span>';
+    Object.assign(bar.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 4px 14px', background: 'var(--relu-bar-bg)', color: '#fff', font: '600 13px var(--relu-font)' });
+    bar.innerHTML = '<span>ReLU</span>';
 
     const btnGroup = document.createElement('div');
-    Object.assign(btnGroup.style, { display: 'flex', alignItems: 'center', gap: '6px' });
+    Object.assign(btnGroup.style, { display: 'flex', alignItems: 'center', gap: '2px' });
+
+    // Shared by the ✕ button and Escape: tear down + restore focus to the launcher.
+    function closeOverlay() {
+      track('extension_overlay_closed');
+      wrap.remove();
+      overlayEl = null;
+      clearReadyHandler();
+      try { launcherEl?.focus(); } catch { /* launcher gone (SPA nav) */ }
+    }
+
+    // a11y: 44px tap targets, real icon buttons with labels + focus rings.
+    const iconBtnStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '44px', minHeight: '44px', background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '18px', lineHeight: '1', borderRadius: '8px' };
 
     // D2: expand-to-fullscreen toggle. Sidebar default (stay on the problem),
     // pop to full screen for dense viz, collapse back.
     let expanded = false;
     const expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
     expandBtn.textContent = '⤢';
     expandBtn.title = 'Expand to full screen';
-    Object.assign(expandBtn.style, { background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '16px', lineHeight: '1' });
+    expandBtn.setAttribute('aria-label', 'Expand to full screen');
+    Object.assign(expandBtn.style, iconBtnStyle);
     expandBtn.addEventListener('click', () => {
       expanded = !expanded;
       wrap.style.width = expanded ? '100vw' : SIDEBAR_WIDTH;
       expandBtn.textContent = expanded ? '⤡' : '⤢';
-      expandBtn.title = expanded ? 'Collapse to sidebar' : 'Expand to full screen';
+      const label = expanded ? 'Collapse to sidebar' : 'Expand to full screen';
+      expandBtn.title = label;
+      expandBtn.setAttribute('aria-label', label);
       log(expanded ? 'expanded to fullscreen' : 'collapsed to sidebar');
     });
 
     const close = document.createElement('button');
+    close.type = 'button';
     close.textContent = '✕';
-    Object.assign(close.style, { background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '16px', lineHeight: '1' });
-    close.addEventListener('click', () => { track('extension_overlay_closed'); wrap.remove(); overlayEl = null; clearReadyHandler(); });
+    close.title = 'Close';
+    close.setAttribute('aria-label', 'Close the ReLU helper');
+    Object.assign(close.style, iconBtnStyle);
+    close.addEventListener('click', closeOverlay);
 
     btnGroup.appendChild(expandBtn);
     btnGroup.appendChild(close);
@@ -284,6 +347,16 @@
     wrap.appendChild(iframe);
     document.body.appendChild(wrap);
     overlayEl = wrap;
+
+    // a11y: move focus into the panel on open, and Escape closes. A full focus
+    // TRAP is not possible from here — the panel body is a cross-origin iframe whose
+    // focus is opaque to the parent — so we do the achievable: initial focus on a
+    // panel control, Escape-to-close, and focus restored to the launcher on close.
+    try { close.focus(); } catch { /* not focusable yet */ }
+    keydownHandler = (e) => {
+      if (e.key === 'Escape' && overlayEl) { e.preventDefault(); closeOverlay(); }
+    };
+    document.addEventListener('keydown', keydownHandler);
 
     // Handshake (eng D5): the embedded app posts {type:'relu_embed_ready'} once it
     // mounts. We reply with (a) the background-owned auth session and (b) the
@@ -356,7 +429,7 @@
     currentSlug = slug;
     log('problem switch →', slug);
     // tear down a stale overlay so the frame never talks about the old problem
-    if (overlayEl) { overlayEl.remove(); overlayEl = null; }
+    if (overlayEl) { overlayEl.remove(); overlayEl = null; clearReadyHandler(); }
     injectButton();
   }
 
@@ -373,6 +446,7 @@
   }
 
   // ----- boot ---------------------------------------------------------------
+  injectReluStyles();
   currentSlug = slugFromUrl();
   if (currentSlug) {
     log('booted on', currentSlug, '| nonce', NONCE);
