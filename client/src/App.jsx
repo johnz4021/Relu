@@ -314,21 +314,44 @@ export default function App() {
   //     (i.e. right after the user signs in inside the frame).
   // Full no-op outside embed mode.
   //
-  // NOTE (hardening, not done here): the nonce travels in the iframe URL
-  // fragment, which leetcode page-world scripts CAN read off the iframe's
-  // src attribute. Fine for the spike (problem text isn't secret); the
-  // production TOKEN channel must use a transferred MessagePort instead.
+  // AUTH (eng D5): the parent content script owns the Supabase session and hands
+  // it in over a direct origin-targeted postMessage (safe from page-world reads).
+  // The rotated session goes back out over a transferred MessagePort so the
+  // access_token never touches the shared window 'message' bus. This is the
+  // "production TOKEN channel must use a transferred MessagePort" hardening the
+  // spike deferred — now implemented (see extension/content.js handshake).
   const embedMode = new URLSearchParams(window.location.search).get('embed') === '1';
   const embedNonce = (window.location.hash.match(/[#&]n=([^&]+)/) || [])[1] || null;
   const embedStartedRef = useRef(false);
   const embedPendingProblemRef = useRef(null);
+  const embedAuthPortRef = useRef(null); // MessagePort to push rotated sessions back to the worker
   const [embedTick, setEmbedTick] = useState(0);
+
+  // Latest auth session, mirrored to a ref so the message handler can post the
+  // current session the instant the port arrives (no wait for the next render).
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   useEffect(() => {
     if (embedMode) console.log('[ReLU embed] embed mode ACTIVE, nonce=', embedNonce);
   }, [embedMode, embedNonce]);
 
-  // Receive the problem from the parent (any time, before or after auth).
+  // Push the current session to the background worker over the private port, so a
+  // first in-frame login and every supabase-js token rotation are persisted there.
+  const postSessionToWorker = useCallback((s) => {
+    const port = embedAuthPortRef.current;
+    if (!port || !s?.access_token || !s?.refresh_token) return;
+    try {
+      port.postMessage({
+        type: 'relu_session_update',
+        session: { access_token: s.access_token, refresh_token: s.refresh_token },
+      });
+    } catch {
+      /* port closed (overlay tearing down) */
+    }
+  }, []);
+
+  // Receive the auth session + problem from the parent (any time, before or after auth).
   useEffect(() => {
     if (!embedMode) return;
     const ALLOWED_PARENT_ORIGINS = ['https://leetcode.com', 'http://localhost:5173'];
@@ -336,19 +359,52 @@ export default function App() {
       if (!ALLOWED_PARENT_ORIGINS.includes(e.origin)) return;
       if (e.source !== window.parent) return;
       const d = e.data;
-      if (!d || d.type !== 'relu_problem') return;
+      if (!d) return;
       if (embedNonce && d.nonce !== embedNonce) {
         console.warn('[ReLU embed] nonce mismatch — ignoring message');
         return;
       }
-      if (!d.problemText || typeof d.problemText !== 'string') return;
-      console.log('[ReLU embed] problem received (connected=' + connected + ')');
-      embedPendingProblemRef.current = d.problemText;
-      setEmbedTick((t) => t + 1); // re-trigger the start effect below
+
+      // Background-owned auth: store the private return port and adopt the session
+      // so the user is signed in without a re-login. setSession refreshes the
+      // access_token from the refresh_token if it has expired (cold-worker case).
+      if (d.type === 'relu_auth_token') {
+        if (e.ports && e.ports[0]) {
+          embedAuthPortRef.current = e.ports[0];
+          // If we already hold a session (e.g. partitioned storage persisted one),
+          // push it now so the worker's copy is current the moment the port lands.
+          postSessionToWorker(sessionRef.current);
+        }
+        if (d.session?.access_token && d.session?.refresh_token && supabase) {
+          console.log('[ReLU embed] adopting background-owned session');
+          supabase.auth
+            .setSession({ access_token: d.session.access_token, refresh_token: d.session.refresh_token })
+            .then(({ error }) => {
+              if (error) console.warn('[ReLU embed] setSession failed:', error.message);
+            });
+        } else {
+          console.log('[ReLU embed] no stored session — login UI will show once, then persist');
+        }
+        return;
+      }
+
+      if (d.type === 'relu_problem') {
+        if (!d.problemText || typeof d.problemText !== 'string') return;
+        console.log('[ReLU embed] problem received (connected=' + connected + ')');
+        embedPendingProblemRef.current = d.problemText;
+        setEmbedTick((t) => t + 1); // re-trigger the start effect below
+      }
     }
     window.addEventListener('message', onParentMessage);
     return () => window.removeEventListener('message', onParentMessage);
-  }, [embedMode, embedNonce, connected]);
+  }, [embedMode, embedNonce, connected, postSessionToWorker]);
+
+  // Whenever the auth session changes inside the overlay (first login, token
+  // refresh/rotation), persist it back to the background worker.
+  useEffect(() => {
+    if (!embedMode) return;
+    postSessionToWorker(session);
+  }, [embedMode, session, postSessionToWorker]);
 
   // Announce readiness on mount and whenever the connection flips. Ready ping
   // carries NO nonce (parent page-world scripts could read it); the parent

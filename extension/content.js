@@ -41,6 +41,29 @@
   let currentSlug = null;
   let overlayEl = null;
   let readyHandler = null; // window 'message' listener for the embed handshake
+  let authPort = null;     // MessagePort1 of the private content-script ↔ overlay channel (D5)
+
+  // ----- 0. background-owned auth (eng D5) ----------------------------------
+  // The background worker is the durable owner of the Supabase session. These two
+  // helpers are the content script's window onto it. Both swallow errors: auth is
+  // best-effort, never a blocker for opening the overlay.
+
+  function getStoredSession() {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'relu_get_token' }, (resp) => {
+          if (chrome.runtime.lastError) { resolve(null); return; }
+          resolve(resp?.session || null);
+        });
+      } catch { resolve(null); }
+    });
+  }
+
+  function saveSession(session) {
+    try {
+      chrome.runtime.sendMessage({ type: 'relu_set_session', session }, () => void chrome.runtime.lastError);
+    } catch { /* worker gone; next open re-syncs */ }
+  }
 
   // ----- 1. slug + extraction ----------------------------------------------
 
@@ -179,6 +202,7 @@
 
   function clearReadyHandler() {
     if (readyHandler) { window.removeEventListener('message', readyHandler); readyHandler = null; }
+    if (authPort) { try { authPort.close(); } catch { /* already closed */ } authPort = null; }
   }
 
   function openOverlay(problem) {
@@ -246,28 +270,63 @@
     document.body.appendChild(wrap);
     overlayEl = wrap;
 
-    // Handshake (step 2): the embedded app posts {type:'relu_embed_ready'} once
-    // it's authed + WS-connected. We reply with the extracted problem so the
-    // lesson auto-starts. Validate origin + that it came from OUR iframe.
-    if (problem && problem.text) {
-      readyHandler = (e) => {
-        if (e.origin !== RELU_ORIGIN) return;
-        // NOTE: do NOT check e.source === iframe.contentWindow here. In a
-        // content-script isolated world, cross-origin contentWindow identity is
-        // unreliable and this check silently dropped the handshake. The origin
-        // check above is the real boundary (only our relu.run frame can match).
-        if (!e.data || e.data.type !== 'relu_embed_ready') return;
-        log('embed app ready → sending problem');
+    // Handshake (eng D5): the embedded app posts {type:'relu_embed_ready'} once it
+    // mounts. We reply with (a) the background-owned auth session and (b) the
+    // extracted problem, so the lesson auto-starts WITHOUT a re-login.
+    //
+    // SECURITY — two directions, two channels:
+    //   inbound  (session → iframe): a direct iframe.contentWindow.postMessage
+    //            targeted at RELU_ORIGIN. The leetcode page-world cannot read a
+    //            message addressed to the iframe, so the access_token is safe here.
+    //   outbound (rotated session → us): a transferred MessagePort. supabase-js in
+    //            the overlay rotates the refresh token; if it posted that back over
+    //            the shared window bus, leetcode page-world scripts could read it.
+    //            The private port keeps it off that bus entirely. (This is the
+    //            "production TOKEN channel must use a transferred MessagePort"
+    //            note from the App.jsx spike — now implemented.)
+    //
+    // Validate origin (only our relu.run frame can match). We deliberately do NOT
+    // check e.source === iframe.contentWindow: in an isolated-world content script
+    // cross-origin contentWindow identity is unreliable and silently dropped the
+    // handshake during the spike.
+    const authChannel = new MessageChannel();
+    authPort = authChannel.port1;
+    authPort.onmessage = (ev) => {
+      const d = ev.data;
+      if (d && d.type === 'relu_session_update' && d.session) {
+        log('overlay → rotated session; persisting to background');
+        saveSession(d.session);
+      }
+    };
+    let authSent = false; // transfer the port exactly once per overlay
+
+    readyHandler = async (e) => {
+      if (e.origin !== RELU_ORIGIN) return;
+      if (!e.data || e.data.type !== 'relu_embed_ready') return;
+      log('embed app ready');
+      if (!authSent) {
+        authSent = true;
+        const session = await getStoredSession();
+        // Hand over the port even with no stored session, so a first in-frame
+        // login can flow its session back out and be captured for next time.
+        iframe.contentWindow.postMessage(
+          { type: 'relu_auth_token', session: session || null, nonce: NONCE },
+          RELU_ORIGIN,
+          [authChannel.port2],
+        );
+        log(session ? 'sent stored session → overlay (no re-login)' : 'no stored session; overlay shows login once, then it sticks');
+      }
+      if (problem && problem.text) {
         iframe.contentWindow.postMessage(
           { type: 'relu_problem', problemText: problem.text, nonce: NONCE },
-          RELU_ORIGIN
+          RELU_ORIGIN,
         );
-        clearReadyHandler(); // one-shot
-      };
-      window.addEventListener('message', readyHandler);
-    } else {
-      warn('no extracted problem to auto-send — sign in (if needed) and paste it into the frame manually.');
-    }
+        log('sent problem → overlay');
+      } else {
+        warn('no extracted problem to auto-send — paste it into the frame manually.');
+      }
+    };
+    window.addEventListener('message', readyHandler);
 
     log('overlay injected, iframe →', iframe.src);
   }
