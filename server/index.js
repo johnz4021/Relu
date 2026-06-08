@@ -574,6 +574,10 @@ function attachHandlers(ws, session) {
 
           session.active = true;
           session.mode = 'leetcode';
+          // STUCK COMPANION MODE (eng D2/D6): the in-problem "Nudge me — no spoilers"
+          // overlay sets this so the intake/system prompt switches to the no-spoiler
+          // escalating-hint frame instead of the paste-to-learn walkthrough.
+          session.companionMode = !!msg.companionMode;
 
           if (session.userId) {
             const convId = await createConversation(session.userId, `[LeetCode] ${title || msg.problemText.slice(0, 100)}`);

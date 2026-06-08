@@ -54,6 +54,58 @@ export function computeActiveTools(session, allTools) {
   return allTools;
 }
 
+// Closing instruction appended to the intake user message. Two variants:
+//   - STANDARD: the web-app / paste-to-learn flow (STAGE 0 intake → run_solver → teach).
+//   - COMPANION: the in-problem "I'm stuck" overlay on leetcode.com (eng D2/D6, design
+//     Pass 1/2). No-spoiler by default; opens by asking for the student's read; escalates
+//     specificity only on request; the terminal rung is the problem-specific visualization.
+const STANDARD_INTAKE_INSTRUCTION =
+  '\n\nFirst, determine if this is a concept/general explanation request or a concrete problem with specific input. If it\'s a concept request, follow the CONCEPT FLOW — construct your own example and guide the student through it interactively. If it\'s a concrete problem, start with the STAGE 0 intake question to learn what the student has tried, then check for multiple parts (use send_options if needed), then call run_solver or run_solver_batch — classification is returned in the tool result, proceed directly to teaching.';
+
+const COMPANION_INTAKE_INSTRUCTION =
+  '\n\n[STUCK COMPANION MODE] The student is working this problem live on leetcode.com and tapped a "Nudge me — no spoilers" helper. You are an in-problem companion, NOT a solution walkthrough. Hard rules: (1) Do NOT reveal the solution, the optimal approach, the data structure, or the algorithm name in your opening turns — that removes the productive struggle and sends them back to ChatGPT. (2) Open by asking for the student\'s read, e.g. "What\'s your read on this one so far? Even a rough guess at the approach helps." — do not lead with a hint. (3) Give the lightest useful nudge first (a thinking question, a reframing, a small observation about the input), then escalate specificity ONLY when the student asks for more — never refuse or fight a request to escalate. (4) The terminal rung is the problem-specific visualization: when the student is still stuck after hints, or explicitly asks to see it, move toward the structure viz and then the solution trace. Do NOT run_solver up front; keep the loop conversational until escalation calls for the viz.';
+
+// Pure helper exported for tests: assembles the first user-turn text for a guided session.
+// Mirrors the assembly previously inlined in startGuidedSession. The non-companion output
+// is pinned by a regression test — the shared-prompt companion edit must not perturb it.
+export function buildIntakeUserText(session, problemText) {
+  const textPart = problemText
+    ? `Here is the problem the student wants to solve:\n\n${problemText}`
+    : 'See the attached image for the problem the student wants to solve.';
+
+  let lcContext = '';
+  if (isOutOfScopeSession(session)) {
+    // Classifier intentionally returned null (see leetcodeAgent.js disambiguation:
+    // "REMOVED → null" rules for problems whose old umbrella algos were retired).
+    // Viz tools are filtered from the API call; this block tells the agent why and
+    // what to do instead so it doesn't try to narrate around a missing viz.
+    lcContext = '\n\n[LEETCODE MODE — OUT OF SCOPE] This problem does not match any registered algorithm — no visualization is available for it. Visualization tools (create_graph, create_visualization, run_algorithm, build_example_graph) are unavailable in this session. Walk the student through the problem conceptually in text only. Do not narrate as if a visualization exists — none will appear. Begin your first spoken message with: "I don\'t have a visualization for this one, but let\'s walk through it together."';
+  } else if (session._leetcodeAlgorithmKey) {
+    // Reached only when hasViz === true (truly out-of-scope keys are caught by
+    // isOutOfScopeSession above). The previous `if (session.hasViz === false)`
+    // branch here invited viz creation even when no algorithm backing existed —
+    // that's the [NO PRE-BUILT TRACE] case, now subsumed by isOutOfScopeSession.
+    const conf = session._leetcodeConfidence != null ? ` (confidence: ${session._leetcodeConfidence.toFixed(2)})` : '';
+    lcContext = `\n\n[LEETCODE MODE] Primary algorithm identified: ${session._leetcodeAlgorithmKey}${conf}. The student pasted this LeetCode problem to learn through interactive tutoring.`;
+    if (session._leetcodeTier === 1) {
+      const trace = session._leetcodeTrace;
+      const traceLen = trace ? trace.length : 0;
+      const renderer = session._leetcodeRenderer || 'graph';
+      lcContext += `\n\n[TIER 1 TRACE] A pre-built trace (${traceLen} steps) is available for ${session._leetcodeAlgorithmKey} (renderer: ${renderer}). After run_solver and build_example_graph, you MUST call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" to load the pre-built trace into the visualization. Do NOT manually construct viz_actions for the trace — run_algorithm handles all renderer updates automatically. After run_algorithm returns, use emit_segment with trace_step_indices to narrate each step.`;
+    } else if (session._leetcodeTier === 2) {
+      const trace = session._leetcodeTrace;
+      const traceLen = trace ? trace.length : 0;
+      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm — this mounts the "algorithm_state" context panel (it is NOT visible until run_algorithm is called). After run_algorithm returns, narrate every trace step using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panel will stay blank. Each trace step carries embedded viz_actions that update the panel automatically when referenced via trace_step_indices.`;
+    }
+  }
+
+  const instruction = session.companionMode
+    ? COMPANION_INTAKE_INSTRUCTION
+    : STANDARD_INTAKE_INSTRUCTION;
+
+  return `${textPart}${lcContext}${instruction}`;
+}
+
 const GUIDED_SYSTEM_PROMPT = `You are ReLU, an expert algorithm tutor. A student has pasted a problem and you will guide them through solving it via conversation.
 
 YOUR ROLE: Have a natural back-and-forth dialogue with the student, then teach them the algorithm using Socratic method and interactive visualization.
@@ -1034,39 +1086,9 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
       source: { type: 'base64', media_type: imageMimeType, data: imageBase64 },
     });
   }
-  const textPart = problemText
-    ? `Here is the problem the student wants to solve:\n\n${problemText}`
-    : 'See the attached image for the problem the student wants to solve.';
-
-  let lcContext = '';
-  if (isOutOfScopeSession(session)) {
-    // Classifier intentionally returned null (see leetcodeAgent.js disambiguation:
-    // "REMOVED → null" rules for problems whose old umbrella algos were retired).
-    // Viz tools are filtered from the API call; this block tells the agent why and
-    // what to do instead so it doesn't try to narrate around a missing viz.
-    lcContext = '\n\n[LEETCODE MODE — OUT OF SCOPE] This problem does not match any registered algorithm — no visualization is available for it. Visualization tools (create_graph, create_visualization, run_algorithm, build_example_graph) are unavailable in this session. Walk the student through the problem conceptually in text only. Do not narrate as if a visualization exists — none will appear. Begin your first spoken message with: "I don\'t have a visualization for this one, but let\'s walk through it together."';
-  } else if (session._leetcodeAlgorithmKey) {
-    // Reached only when hasViz === true (truly out-of-scope keys are caught by
-    // isOutOfScopeSession above). The previous `if (session.hasViz === false)`
-    // branch here invited viz creation even when no algorithm backing existed —
-    // that's the [NO PRE-BUILT TRACE] case, now subsumed by isOutOfScopeSession.
-    const conf = session._leetcodeConfidence != null ? ` (confidence: ${session._leetcodeConfidence.toFixed(2)})` : '';
-    lcContext = `\n\n[LEETCODE MODE] Primary algorithm identified: ${session._leetcodeAlgorithmKey}${conf}. The student pasted this LeetCode problem to learn through interactive tutoring.`;
-    if (session._leetcodeTier === 1) {
-      const trace = session._leetcodeTrace;
-      const traceLen = trace ? trace.length : 0;
-      const renderer = session._leetcodeRenderer || 'graph';
-      lcContext += `\n\n[TIER 1 TRACE] A pre-built trace (${traceLen} steps) is available for ${session._leetcodeAlgorithmKey} (renderer: ${renderer}). After run_solver and build_example_graph, you MUST call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" to load the pre-built trace into the visualization. Do NOT manually construct viz_actions for the trace — run_algorithm handles all renderer updates automatically. After run_algorithm returns, use emit_segment with trace_step_indices to narrate each step.`;
-    } else if (session._leetcodeTier === 2) {
-      const trace = session._leetcodeTrace;
-      const traceLen = trace ? trace.length : 0;
-      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm — this mounts the "algorithm_state" context panel (it is NOT visible until run_algorithm is called). After run_algorithm returns, narrate every trace step using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panel will stay blank. Each trace step carries embedded viz_actions that update the panel automatically when referenced via trace_step_indices.`;
-    }
-  }
-
   userContent.push({
     type: 'text',
-    text: `${textPart}${lcContext}\n\nFirst, determine if this is a concept/general explanation request or a concrete problem with specific input. If it's a concept request, follow the CONCEPT FLOW — construct your own example and guide the student through it interactively. If it's a concrete problem, start with the STAGE 0 intake question to learn what the student has tried, then check for multiple parts (use send_options if needed), then call run_solver or run_solver_batch — classification is returned in the tool result, proceed directly to teaching.`,
+    text: buildIntakeUserText(session, problemText),
   });
 
   const messages = [{ role: 'user', content: userContent }];

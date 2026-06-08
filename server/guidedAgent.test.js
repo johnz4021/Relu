@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeActiveTools, isOutOfScopeSession } from './guidedAgent.js';
+import { computeActiveTools, isOutOfScopeSession, buildIntakeUserText } from './guidedAgent.js';
 
 // Minimal mock tool list matching the union of tools.js + guidedAgent-specific tools.
 // We only assert membership, never invoke any tool, so a tiny shape is enough.
@@ -93,5 +93,79 @@ describe('computeActiveTools', () => {
     const before = ALL_TOOLS.map((t) => t.name);
     computeActiveTools(session, ALL_TOOLS);
     expect(ALL_TOOLS.map((t) => t.name)).toEqual(before);
+  });
+});
+
+describe('buildIntakeUserText', () => {
+  // REGRESSION PIN (iron rule): the non-companion intake text is the contract the
+  // existing web-app / paste-to-learn flow depends on. The shared-prompt companion
+  // edit (and later the useLessonSession refactor) must NOT perturb these outputs.
+  // We pin the full string for the three flows the extraction touches.
+  const PROBLEM = 'Given an array nums, return the two indices that sum to target.';
+  const STANDARD_TAIL =
+    "\n\nFirst, determine if this is a concept/general explanation request or a concrete problem with specific input. If it's a concept request, follow the CONCEPT FLOW — construct your own example and guide the student through it interactively. If it's a concrete problem, start with the STAGE 0 intake question to learn what the student has tried, then check for multiple parts (use send_options if needed), then call run_solver or run_solver_batch — classification is returned in the tool result, proceed directly to teaching.";
+
+  it('plain (non-LC) session: problem text + standard instruction, no LC context', () => {
+    const text = buildIntakeUserText({ mode: 'guided' }, PROBLEM);
+    expect(text).toBe(
+      `Here is the problem the student wants to solve:\n\n${PROBLEM}${STANDARD_TAIL}`,
+    );
+  });
+
+  it('image-only session: falls back to the attached-image phrasing', () => {
+    const text = buildIntakeUserText({ mode: 'guided' }, '');
+    expect(text).toBe(
+      `See the attached image for the problem the student wants to solve.${STANDARD_TAIL}`,
+    );
+  });
+
+  it('out-of-scope LC session: emits the OUT OF SCOPE block + standard instruction', () => {
+    const text = buildIntakeUserText({ mode: 'leetcode', hasViz: false }, PROBLEM);
+    expect(text).toContain('[LEETCODE MODE — OUT OF SCOPE]');
+    expect(text).toContain('no visualization is available');
+    expect(text.endsWith(STANDARD_TAIL)).toBe(true);
+    // No solution-mode/companion framing leaks into the standard path.
+    expect(text).not.toContain('[STUCK COMPANION MODE]');
+  });
+
+  it('Tier-1 LC session: emits LEETCODE MODE + TIER 1 TRACE + standard instruction', () => {
+    const session = {
+      mode: 'leetcode',
+      hasViz: true,
+      _leetcodeAlgorithmKey: 'two_sum',
+      _leetcodeConfidence: 0.95,
+      _leetcodeTier: 1,
+      _leetcodeTrace: [{}, {}, {}],
+      _leetcodeRenderer: 'array',
+    };
+    const text = buildIntakeUserText(session, PROBLEM);
+    expect(text).toContain('[LEETCODE MODE] Primary algorithm identified: two_sum (confidence: 0.95)');
+    expect(text).toContain('[TIER 1 TRACE] A pre-built trace (3 steps) is available for two_sum (renderer: array)');
+    expect(text.endsWith(STANDARD_TAIL)).toBe(true);
+    expect(text).not.toContain('[STUCK COMPANION MODE]');
+  });
+
+  // The new branch: companion mode swaps the closing instruction for the no-spoiler
+  // stuck-helper framing, but leaves the problem text + LC context assembly intact.
+  it('companion mode: swaps to the STUCK COMPANION instruction, keeps LC context', () => {
+    const session = {
+      mode: 'leetcode',
+      hasViz: true,
+      companionMode: true,
+      _leetcodeAlgorithmKey: 'two_sum',
+      _leetcodeConfidence: 0.95,
+      _leetcodeTier: 1,
+      _leetcodeTrace: [{}, {}, {}],
+      _leetcodeRenderer: 'array',
+    };
+    const text = buildIntakeUserText(session, PROBLEM);
+    expect(text).toContain('[STUCK COMPANION MODE]');
+    expect(text).toContain('Nudge me');
+    expect(text).toContain("What's your read on this one so far?");
+    // Companion mode must NOT carry the standard STAGE 0 / run_solver-up-front instruction.
+    expect(text).not.toContain('STAGE 0 intake question');
+    expect(text.endsWith(STANDARD_TAIL)).toBe(false);
+    // LC context is preserved regardless of mode.
+    expect(text).toContain('[TIER 1 TRACE]');
   });
 });
