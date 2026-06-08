@@ -9,6 +9,7 @@ import GraphRenderer from './components/renderers/GraphRenderer';
 import Transcript from './components/Transcript';
 import Controls from './components/Controls';
 import LandingTabs from './components/LandingTabs';
+import CompanionOpener from './components/CompanionOpener';
 import AuthModal from './components/AuthModal';
 import SessionFeedback from './components/SessionFeedback';
 import SessionGate from './components/SessionGate';
@@ -327,6 +328,24 @@ export default function App() {
   const embedAuthPortRef = useRef(null); // MessagePort to push rotated sessions back to the worker
   const [embedTick, setEmbedTick] = useState(0);
 
+  // Opener intent (design Pass 1/2): 'nudge' → no-spoiler companion, 'showme' →
+  // viz-first walkthrough. Seeded from the remembered last choice so a returning
+  // student isn't re-gated; null means show the blocking two-choice opener.
+  const [embedIntent, setEmbedIntent] = useState(() => {
+    if (!embedMode) return null;
+    try {
+      const remembered = localStorage.getItem('relu_embed_intent');
+      return remembered === 'nudge' || remembered === 'showme' ? remembered : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const chooseEmbedIntent = useCallback((intent) => {
+    try { localStorage.setItem('relu_embed_intent', intent); } catch { /* storage blocked */ }
+    setEmbedIntent(intent);
+  }, []);
+
   // Latest auth session, mirrored to a ref so the message handler can post the
   // current session the instant the port arrives (no wait for the next render).
   const sessionRef = useRef(session);
@@ -419,14 +438,19 @@ export default function App() {
     }
   }, [embedMode, connected]);
 
-  // Start the lesson once we have BOTH a pending problem AND a live connection.
+  // Start the lesson once we have a pending problem, a live connection, AND the
+  // student has chosen an intent (or a remembered choice seeded it). companionMode
+  // is the no-spoiler nudge path; 'showme' is the viz-first walkthrough.
   useEffect(() => {
     if (!embedMode || embedStartedRef.current) return;
-    if (!connected || !embedPendingProblemRef.current) return;
+    if (!connected || !embedPendingProblemRef.current || !embedIntent) return;
     embedStartedRef.current = true;
-    console.log('[ReLU embed] starting lesson');
-    handleSelectAlgorithm(null, { problemText: embedPendingProblemRef.current });
-  }, [embedMode, connected, embedTick, handleSelectAlgorithm]);
+    console.log('[ReLU embed] starting lesson (intent=' + embedIntent + ')');
+    handleSelectAlgorithm(null, {
+      problemText: embedPendingProblemRef.current,
+      companionMode: embedIntent === 'nudge',
+    });
+  }, [embedMode, connected, embedTick, embedIntent, handleSelectAlgorithm]);
 
   const handleResumeConversation = useCallback(
     (conversationId) => {
@@ -696,11 +720,19 @@ export default function App() {
                 lastProblemText={lcParsed?.problemText || null}
               />
             ) : embedMode ? (
-              // Embed mode: never show the landing — the problem auto-starts.
-              // Show a clean loading state until the lesson kicks out of idle.
-              <div className="h-full flex items-center justify-center bg-surface-0">
-                <div className="text-text-tertiary text-sm font-body">Loading your problem…</div>
-              </div>
+              // Embed mode: never show the landing. Show the two-choice opener
+              // until the student picks an intent (or a remembered choice seeds
+              // it), then a clean loading state until the lesson kicks out of idle.
+              !embedIntent ? (
+                <CompanionOpener
+                  onChoose={chooseEmbedIntent}
+                  problemTitle={lcParsed?.title || null}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center bg-surface-0">
+                  <div className="text-text-tertiary text-sm font-body">Loading your problem…</div>
+                </div>
+              )
             ) : (
               <LandingTabs
                 onSelect={handleSelectAlgorithm}
