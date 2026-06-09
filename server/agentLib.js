@@ -68,9 +68,22 @@ export function registerPanels(session, panels, contextPanels) {
 
 // Validate viz_actions against the panel registry.
 // Returns { valid, warnings } — actions targeting unknown panels are stripped.
-function validatePanelIds(actions, panels) {
+//
+// RENDERER-TYPE ALIAS (the recurring blank-viz fix): panels are often registered under
+// a custom id (e.g. "array_main" from build_example_graph), but the emit_segment tool
+// description explicitly tells the model it MAY target a single-panel layout by its bare
+// renderer type ("array"). The trace-driven paths rewrite type→id via _rendererPanelId,
+// but the agent's OWN improvised viz_actions used to come straight here and get stripped
+// ("renderer 'array' not declared") → blank panel. So when a bare renderer type matches
+// exactly ONE registered panel of that type, we alias it to that panel's id instead of
+// dropping it. Ambiguous (>1 panel of the type) still warns — the model must disambiguate.
+export function validatePanelIds(actions, panels) {
   const valid = [];
   const warnings = [];
+  const idsByRenderer = {};
+  for (const [id, p] of Object.entries(panels || {})) {
+    if (p?.type === 'renderer') (idsByRenderer[p.renderer] ||= []).push(id);
+  }
   for (const action of actions) {
     const renderer = action.renderer;
     if (!renderer) { valid.push(action); continue; }
@@ -80,11 +93,21 @@ function validatePanelIds(actions, panels) {
         warnings.push(`context update targets unknown panel '${panelId}'`);
         continue;
       }
-    } else if (!panels[renderer]) {
-      warnings.push(`renderer '${renderer}' not declared in create_visualization`);
+      valid.push(action);
       continue;
     }
-    valid.push(action);
+    if (panels[renderer]) { valid.push(action); continue; } // exact id / registered match
+    // No exact match — alias a bare renderer type to its sole registered panel id.
+    const candidates = idsByRenderer[renderer] || [];
+    if (candidates.length === 1) {
+      valid.push({ ...action, renderer: candidates[0] });
+      continue;
+    }
+    warnings.push(
+      candidates.length > 1
+        ? `renderer '${renderer}' is ambiguous (${candidates.length} panels: ${candidates.join(', ')}) — target a specific panel id`
+        : `renderer '${renderer}' not declared in create_visualization`,
+    );
   }
   return { valid, warnings };
 }
