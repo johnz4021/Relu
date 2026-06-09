@@ -353,7 +353,6 @@ export default function ArrayRenderer({
                 />
               );
             })()}
-            )}
 
             <AnimatePresence>
               {data.map((value, idx) => {
