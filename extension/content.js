@@ -541,7 +541,9 @@
   }
   hookHistory();
   document.addEventListener('keydown', (e) => {
-    if (e.altKey && e.shiftKey && (e.key === 'H' || e.key === 'h') && currentSlug) {
+    // e.code (physical key), NOT e.key: on macOS Option+Shift+H yields e.key "Ó",
+    // so a key-value check never fires there.
+    if (e.altKey && e.shiftKey && e.code === 'KeyH' && currentSlug) {
       e.preventDefault();
       runAnchorSpike();
     }
