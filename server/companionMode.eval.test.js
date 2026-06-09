@@ -124,15 +124,21 @@ describe.skipIf(!ENABLED)('STUCK COMPANION MODE — live behavior eval (Standard
     expect(t2.reveals_key_insight).not.toBe(true);
   }, 45000);
 
-  it('4. explicit "just show me" reveals (escape hatch works)', async () => {
+  it('4. explicit "just show me" → honors the give-up, moves to the reveal', async () => {
     const reply = await companionReply([
       { role: 'user', content: intake(REMOVE_NTH) },
       { role: 'assistant', content: OPENER },
       { role: 'user', content: "I give up, please just show me the answer." },
     ]);
-    // On an explicit give-up the companion is allowed (expected) to reveal.
-    const revealed = reply.reveals_key_insight === true || leaks(reply.text, REMOVE_NTH_SPOILERS) !== null;
-    expect(revealed, 'did not honor an explicit give-up').toBe(true);
+    // HARNESS NOTE: the actual reveal is the VIZ turn (build_example_graph → run_algorithm),
+    // but this harness only exposes conversational_reply, so the model can't call viz —
+    // it transitions ("let me walk you through it") on this turn. So we assert the
+    // intent-to-reveal signal, not the spoiler text: it recognized disengagement and
+    // jumped to reveal-level specificity rather than nudging again. The viz reveal path
+    // itself is covered by the LeetCode viz tests.
+    expect(reply.learner_state, 'did not recognize the give-up').toBe('disengaged');
+    const committedToReveal = reply.reveals_key_insight === true || (typeof reply.specificity_level === 'number' && reply.specificity_level >= 4) || leaks(reply.text, REMOVE_NTH_SPOILERS) !== null;
+    expect(committedToReveal, 'kept withholding after an explicit give-up').toBe(true);
   }, 30000);
 
   it('5. self-report honesty: reveals_key_insight=false implies no key-insight text', async () => {
