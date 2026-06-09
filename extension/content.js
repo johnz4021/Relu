@@ -28,7 +28,7 @@
   // ----- config -------------------------------------------------------------
   // Where the overlay iframe points. Use production to test the real CSP/origin,
   // or http://localhost:5173 if you're running `npm run dev` locally.
-  const RELU_ORIGIN = 'https://www.relu.run';
+  const RELU_ORIGIN = 'http://localhost:5173';
   const TAG = '[ReLU-spike]';
   const log = (...a) => console.log(TAG, ...a);
   const warn = (...a) => console.warn(TAG, ...a);

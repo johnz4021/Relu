@@ -220,3 +220,23 @@ Biggest 2 challenges are knowing where to get started, and speaking out loud whe
 For prep, started out with algomap doing topic by topic questions. Didn’t have a good answer for how to start problems, just said he would try to match it with patterns he’s seen before. Believes the best way is just to do a lot of problems until you get it 
 
 got lucky w credera interview, oa just used gpt
+
+#### Alan
+
+Says he tried to use GPT for hints, but it would always be a bit too specific and revealing, would’ve wanted it to be a bit more vague or fine tuned. 
+
+Would prep by doing the Leetcode 150, had a week to prep for apple. Asked claude to make him a plan, claude planned topics day by day, and he just did questions 
+
+When he’s stuck, also thinks about if there’s any defining qualities in the problem that would help him figure it out, and if he’s seen anything similar before. Also brute force first, than optimize into a good solution 
+
+Biggest challenge is also blanking, like in an OA needs time to actually think of the solution and by the time he comes up with something the time is up.  Just can’t seem to remember the solutions. Says he was happy with how he did under time constraints but if he had more time would just do more questions w/ the same way, claude plan and then LC repetition.
+
+Hasn’t actually really experienced the technical interview When he was prepping for apple and jpm, would do leetcode, but then apple actually didn’t ask him any technical questions for a tech interview, instead focused much more on behavioural with questions that were meant to be asked more techincally like “tell me about a time you used AI” or “what do you think about state of AI right now” or something similar. if he would’ve prepped differently knowing these questions would’ve been focused more on researching the landscape and stuff, if he didn’t would’ve just done LC (bit unrelated to the problem we’re tackling) 
+
+Would use youtube videos occasionally if he attempted problems, got stuck, and couldn’t do them. 
+
+Said something about would’ve spent more time learning the concepts behind problems, like looking back at textbook for our algorithms class for concepts. → familiarity with patterns. 
+
+When asked about ideal study tool I think he said see patterns across all the question’s he’s done before 
+
+I feel like a huge part is when seeing the solution, not going back and seeing which qualities in the problem would eventually align with the solution. Getting to the point where you can actually derive something.
