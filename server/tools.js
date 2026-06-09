@@ -227,6 +227,24 @@ export const tools = [
           description:
             'Additional delay in ms after TTS finishes (default 500). Use longer delays for complex visualizations.',
         },
+        // STUCK COMPANION MODE self-report (eng D2). Optional; REQUIRED only in
+        // companion mode. Mirrors conversational_reply so viz-bearing companion turns
+        // (the structure/solution reveal) carry the same pacing signal.
+        learner_state: {
+          type: 'string',
+          enum: ['not_attempted', 'wrong_direction', 'partial', 'understands', 'disengaged'],
+          description: 'COMPANION MODE only: your read of where the student is this turn.',
+        },
+        specificity_level: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 5,
+          description: 'COMPANION MODE only: how specific this segment is (1=open question … 5=full reveal).',
+        },
+        reveals_key_insight: {
+          type: 'boolean',
+          description: 'COMPANION MODE only: true ONLY if this segment legitimately states the reserved key insight.',
+        },
       },
       required: ['narration'],
     },
@@ -576,6 +594,23 @@ export const tools = [
       properties: {
         text: { type: 'string', description: 'The reply or question (1-2 sentences max)' },
         wait_for_response: { type: 'boolean', description: 'Wait for learner reply before continuing. Default true.' },
+        // STUCK COMPANION MODE self-report (eng D2). Optional everywhere; REQUIRED only
+        // in companion mode (the prompt instructs it). Other modes omit them entirely.
+        learner_state: {
+          type: 'string',
+          enum: ['not_attempted', 'wrong_direction', 'partial', 'understands', 'disengaged'],
+          description: 'COMPANION MODE only: your read of where the student is this turn.',
+        },
+        specificity_level: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 5,
+          description: 'COMPANION MODE only: how specific this reply is (1=open question … 5=full reveal). At most +1 from your previous turn unless the student explicitly gave up.',
+        },
+        reveals_key_insight: {
+          type: 'boolean',
+          description: 'COMPANION MODE only: true ONLY if this turn legitimately states the reserved key insight (student derived it, or they gave up and you are revealing). Never true on a partial-attempt turn.',
+        },
       },
       required: ['text'],
     },

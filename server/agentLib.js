@@ -32,6 +32,21 @@ export function sendJSON(ws, obj) {
   }
 }
 
+// STUCK COMPANION MODE self-report (eng D2). Pulls the optional pacing fields off a
+// tool call's input. Returns null when none are present (non-companion turns), so the
+// outgoing WS message stays clean for every other mode. The client reads this to post
+// precise funnel events (nudge_given, key-insight reveal) instead of guessing from viz.
+export function companionSelfReport(input) {
+  if (!input) return null;
+  const { learner_state, specificity_level, reveals_key_insight } = input;
+  if (learner_state == null && specificity_level == null && reveals_key_insight == null) return null;
+  return {
+    learner_state: learner_state ?? null,
+    specificity_level: specificity_level ?? null,
+    reveals_key_insight: reveals_key_insight === true,
+  };
+}
+
 export function sendBinary(ws, buffer) {
   if (ws.readyState === ws.OPEN) {
     ws.send(buffer, { binary: true });
@@ -688,6 +703,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
         narration: input.narration,
         viz_actions: allVizActions,
         phase: input.phase || '',
+        companion: companionSelfReport(input),
       });
 
       // TTS or simulated delay (synthesizeAndStream waits for playback to finish)

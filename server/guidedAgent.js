@@ -2,7 +2,7 @@
 
 import { tools } from './tools.js';
 import { ALGORITHMS, runRegisteredAlgorithm } from './algorithms/registry.js';
-import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState } from './agentLib.js';
+import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState, companionSelfReport } from './agentLib.js';
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
 import { CANONICAL_EXAMPLES } from './examples/canonicalExamples.js';
 import { getDefaultContextPanels, getModeDefaultPanels } from './contextPanelDefaults.js';
@@ -749,36 +749,69 @@ OPEN BY ASKING FOR THEIR READ. Your first turn is a question, not a hint —
 e.g. "What's your read on this one so far? Even a rough guess at the approach
 helps." Do not lead with a hint, and do NOT run any solver up front.
 
-ESCALATE CONVERSATIONALLY — NO HARD GATE, NO VISIBLE TIERS. The student never
-sees "levels". Read how stuck they are from what they say and modulate the
-specificity of your help yourself. Start with the lightest useful nudge (a
-thinking question, a reframing, an observation about the input or a tiny
-case). Get more specific only as they ask for more or clearly stay stuck.
+READ THE LEARNER EACH TURN (your internal read — NO visible tiers). Before you
+reply, silently classify where the student is:
+  • NOT_ATTEMPTED — hasn't engaged the current question → re-ask / reframe smaller, no new info.
+  • WRONG_DIRECTION — attempt is in a wrong frame → acknowledge the effort, redirect with a
+    question; do not reveal.
+  • PARTIAL — real progress but still short of the idea, OR still reasoning inside the OLD frame
+    (e.g. describing a brute-force / two-pass approach when the trick is something else) →
+    acknowledge what's right, then give ONE small step toward the gap. THIS IS THE TRAP: a partial
+    attempt is NOT permission to hand over the answer. Do NOT reveal the key insight here.
+  • UNDERSTANDS — the student articulated the key idea themselves → confirm it, move to the next
+    sub-step or implementation.
+  • DISENGAGED / WANTS_ANSWER — explicit give-up ("just show me", "I give up") or sustained
+    frustration → offer the exit, and on confirmation move to the terminal reveal.
 
-DO NOT FIGHT THE STUDENT. If they ask for more, or ask you to just show them,
-HONOR IT and escalate immediately. Never refuse and never withhold behind a
-"try first" wall once they've asked — a hard barrier just sends them back to
-ChatGPT. The moat is hint QUALITY plus the visualization endpoint, not
+ONE RUNG PER TURN. Each reply may be at most ONE notch more specific than your last. NEVER jump
+from a vague nudge to the answer in a single turn — that is the exact failure that sends students
+back to ChatGPT having learned nothing. The progression is roughly: open question → point at the
+relevant part of the input → name the sub-question to answer → hint at the KIND of idea (not the
+idea) → walk it together → reveal. Move one notch, then wait for their response.
+
+RESERVE THE KEY INSIGHT. The single idea that cracks the problem (the trick, the data structure,
+the invariant) is RESERVED. State or paraphrase it ONLY when (a) the student has derived it
+themselves, or (b) they explicitly gave up and you are doing the terminal reveal. If a [RESERVED
+KEY INSIGHT] block appears below, that is the exact thing you must NOT say, name, or paraphrase
+until (a) or (b). Phrasing a reserved idea as a leading question ("what if two pointers were n
+apart?") STILL counts as revealing it — don't.
+
+DO NOT FIGHT THE STUDENT. If they ask for more, or ask you to just show them, HONOR IT — escalate
+one rung, or go to the reveal if they explicitly gave up. Never refuse or withhold behind a "try
+first" wall once they've asked. The moat is hint QUALITY plus the visualization endpoint, not
 withholding.
 
-TERMINAL RUNG = THE VISUALIZATION. When the student is still stuck after a few
-nudges, or explicitly asks to see it, move toward the visualization: first the
-zero-spoiler STRUCTURE view of the problem's own input (build_example_graph),
-then — only if they want the full reveal — the SOLUTION trace (run_solver +
-run_algorithm). The structure view is a hint; the solution trace is the
-reveal. Do not jump straight to the trace unless the student asked to just see
-the answer.
+TERMINAL RUNG = THE VISUALIZATION. When the student gives up or has earned the reveal: first the
+zero-spoiler STRUCTURE view of the problem's own input (build_example_graph), then the SOLUTION
+trace (run_solver + run_algorithm). Structure view = hint; solution trace = reveal. Off-registry,
+the reveal is text.
 
-PACING. Short, conversational turns. One idea per turn. This is a back-and-
-forth in a sidebar while they code, not a lecture.`;
+SELF-REPORT EACH TURN (required in this mode). On every conversational_reply and emit_segment, set
+these fields so your pacing is explicit and auditable:
+  • learner_state: not_attempted | wrong_direction | partial | understands | disengaged
+  • specificity_level: integer 1 (open question) … 5 (full reveal); at most +1 from your previous
+    turn unless the student explicitly gave up.
+  • reveals_key_insight: true ONLY if this turn legitimately states the reserved key insight (the
+    student derived it, or they gave up and you are revealing). If you're tempted to set this true
+    on a PARTIAL turn, you are about to spoil it — give the smaller step instead.
+
+PACING. Short, conversational turns. One idea per turn. A back-and-forth in a sidebar while they
+code, not a lecture.`;
 
 // Parameterized assembly of the guided system prompt. ONE base prompt; companion
 // mode appends the no-spoiler doctrine. Non-companion sessions get the base prompt
 // byte-for-byte (pinned by the regression eval), so existing teaching is unchanged.
 export function buildGuidedSystemPrompt(session) {
-  return session?.companionMode
-    ? GUIDED_SYSTEM_PROMPT + COMPANION_MODE_PROMPT
-    : GUIDED_SYSTEM_PROMPT;
+  if (!session?.companionMode) return GUIDED_SYSTEM_PROMPT;
+  let prompt = GUIDED_SYSTEM_PROMPT + COMPANION_MODE_PROMPT;
+  // Reserved key-insight payload (eng D3): present only once the background warm
+  // solve has resolved. It names the exact idea the companion must NOT reveal until
+  // the student derives it or gives up. Absent on the opening turns (warm solve
+  // still in flight) — those rely on the taxonomy + one-rung rule.
+  if (session._warmKeyInsight) {
+    prompt += `\n\n[RESERVED KEY INSIGHT — DO NOT reveal, name, or paraphrase (even as a leading question) until the student derives it themselves OR explicitly gives up and you move to the terminal reveal]\n${session._warmKeyInsight}`;
+  }
+  return prompt;
 }
 
 // Tools specific to guided mode
@@ -1145,6 +1178,7 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
   session._savedGraphState = null;
   session._panels = {};
   session._warmSolver = null;
+  session._warmKeyInsight = null;
 
   const ws = liveWs(session);
   sendJSON(ws, { type: 'guided_start', problemText });
@@ -1166,10 +1200,19 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
     const promise = (session._leetcodeAlgorithmKey
       ? solveLeetcodeProblem(warmText, session._leetcodeAlgorithmKey, noop, session.anthropicClient)
       : solveProblem(warmText, noop, session.imageBase64, session.imageMimeType, session.anthropicClient)
-    ).catch((err) => {
-      console.warn('[GuidedAgent] warm solver failed (non-fatal):', err.message);
-      return null;
-    });
+    )
+      .then((sr) => {
+        // Surface the key insight as a RESERVED payload the moment the warm solve
+        // resolves (eng D3). buildGuidedSystemPrompt injects it into the companion
+        // prompt as "do not reveal"; stored independently of run_solver so it guards
+        // the dangerous mid-conversation turns before any solver tool is called.
+        if (sr && sr.success && sr.keyInsight) session._warmKeyInsight = sr.keyInsight;
+        return sr;
+      })
+      .catch((err) => {
+        console.warn('[GuidedAgent] warm solver failed (non-fatal):', err.message);
+        return null;
+      });
     session._warmSolver = { text: warmText, promise };
   }
 
@@ -1484,8 +1527,13 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
         } else if (block.name === 'conversational_reply') {
           const { text, wait_for_response } = block.input;
 
+          // Companion self-report (eng D2): audit server-side, forward to the client for
+          // precise funnel events. Null/no-op outside companion mode.
+          const companion = companionSelfReport(block.input);
+          if (companion) console.log(`[Companion] reply state=${companion.learner_state} level=${companion.specificity_level} reveals=${companion.reveals_key_insight}`);
+
           // Send as interrupt_response to reuse existing purple "Argmax:" segment
-          sendJSON(ws, { type: 'interrupt_response', answer: text, explanation_mode: 'none' });
+          sendJSON(ws, { type: 'interrupt_response', answer: text, explanation_mode: 'none', companion });
 
           // Set up resolver BEFORE TTS so early responses are captured
           let responsePromise, timeoutPromise;

@@ -116,22 +116,25 @@ export default function App() {
 
       processMessage(msg);
 
-      // Companion funnel (eng D4): fire each in-overlay rung once. nudge_given and
-      // structure_viz_shown are exact signals; solution_viz_shown is a heuristic —
-      // the first viz-bearing segment after the structure view is set up (the trace
-      // animation; the client segment carries no trace_step_indices to be precise).
+      // Companion funnel (eng D4) — driven by the server's per-turn self-report
+      // (msg.companion) instead of guessing from viz. nudge_given = the first turn
+      // carrying a self-report; solution reveal = the turn the model flags
+      // reveals_key_insight. structure_viz_shown stays the viz signal (a real
+      // create_visualization, not a heuristic). Each fires once.
       if (companionActiveRef.current) {
         const f = companionFunnelRef.current;
-        if (!f.nudgeGiven && (msg.type === 'segment_start' || msg.type === 'conversational_reply')) {
+        const report = msg.companion; // present on companion conversational/segment turns
+        if (!f.nudgeGiven && report) {
           f.nudgeGiven = true;
-          track('companion_nudge_given', {});
+          track('companion_nudge_given', { learner_state: report.learner_state });
         }
         if (!f.structureShown && (msg.type === 'create_graph' || msg.type === 'create_visualization')) {
           f.structureShown = true;
           track('companion_structure_viz_shown', {});
-        } else if (!f.solutionShown && f.structureShown && msg.type === 'segment_start' && msg.viz_actions?.length > 0) {
+        }
+        if (!f.solutionShown && report?.reveals_key_insight) {
           f.solutionShown = true;
-          track('companion_solution_viz_shown', {});
+          track('companion_solution_viz_shown', { learner_state: report.learner_state });
         }
       }
 
