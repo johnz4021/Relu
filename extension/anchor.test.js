@@ -99,3 +99,48 @@ describe('DESCRIPTION_SELECTORS', () => {
     expect(DESCRIPTION_SELECTORS.length).toBeGreaterThanOrEqual(3);
   });
 });
+
+// ── REAL-PROBLEM FIXTURES (captured by the live spike, 2026-06-09) ─────────
+// These pin the actual divergence surface: quotes from GraphQL htmlToText()
+// matched against the rendered page's raw text-node segments (code/sup/em
+// splits, double-space artifacts, sup-flattened exponents). Spike run: 9
+// problems, ~54/54 quotes anchored. Two representative fixtures pinned here.
+
+describe('locateQuote — real leetcode fixtures', () => {
+  // search-in-rotated-sorted-array: prose split by <code>/<em>, constraints with
+  // <sup>-split exponents ("-10","4" renders what GraphQL flattens to "-104").
+  const ROTATED = ["There is an integer array ","nums"," sorted in ascending order (with ","distinct"," values).","\n\n","Prior to being passed to your function, ","nums"," is ","possibly left rotated"," at an unknown index ","k"," (","1 <= k < nums.length",") such that the resulting array is ","[nums[k], nums[k+1], ..., nums[n-1], nums[0], nums[1], ..., nums[k-1]]"," (","0-indexed","). For example, ","[0,1,2,4,5,6,7]"," might be left rotated by ","3"," indices and become ","[4,5,6,7,0,1,2]",".","\n\n","Given the array ","nums"," ","after"," the possible rotation and an integer ","target",", return ","the index of ","target"," if it is in ","nums",", or ","-1"," if it is not in ","nums",".","\n\n","You must write an algorithm with ","O(log n)"," runtime complexity.","\n\n"," ","\n","Example 1:","\n","Input:"," nums = [4,5,6,7,0,1,2], target = 0\n","Output:"," 4\n","Example 2:","\n","Input:"," nums = [4,5,6,7,0,1,2], target = 3\n","Output:"," -1\n","Example 3:","\n","Input:"," nums = [1], target = 0\n","Output:"," -1\n","\n"," ","\n","Constraints:","\n\n","\n\t","1 <= nums.length <= 5000","\n\t","-10","4"," <= nums[i] <= 10","4","\n\t","All values of ","nums"," are ","unique",".","\n\t","nums"," is an ascending array that is possibly rotated.","\n\t","-10","4"," <= target <= 10","4","\n","\n"];
+
+  it('anchors a prose quote across code/em segment splits (rotated array)', () => {
+    const loc = locateQuote(ROTATED, 'Given the array nums after the possible rotation and an integer target');
+    expect(loc).not.toBeNull();
+    expect(loc.exact).toBe(true);
+  });
+
+  it('anchors a sup-flattened constraint exactly as GraphQL renders it', () => {
+    const loc = locateQuote(ROTATED, '-104 <= nums[i] <= 104');
+    expect(loc).not.toBeNull();
+    expect(loc.exact).toBe(true);
+  });
+
+  it('anchors the runtime-complexity sentence (code-split O(log n))', () => {
+    const loc = locateQuote(ROTATED, 'You must write an algorithm with O(log n) runtime complexity.');
+    expect(loc).not.toBeNull();
+  });
+
+  // unique-binary-search-trees-ii: apostrophe split ("BST'","s") and the
+  // double-space artifacts ("from"," ","1"," ","to"," ","n") that whitespace
+  // collapsing must absorb.
+  const UNIQUE_BST = ["Given an integer ","n",", return ","all the structurally unique ","BST'","s (binary search trees), which has exactly ","n"," nodes of unique values from"," ","1"," ","to"," ","n",". Return the answer in ","any order",".","\n\n"," ","\n","Example 1:","\n","\n","Input:"," n = 3\n","Output:"," [[1,null,2,null,3],[1,null,3,2],[2,1,3],[3,1,null,null,2],[3,2,null,1]]\n","\n\n","Example 2:","\n\n","Input:"," n = 1\n","Output:"," [[1]]\n","\n\n"," ","\n","Constraints:","\n\n","\n\t","1 <= n <= 8","\n","\n"];
+
+  it('anchors across an apostrophe-split segment and spaced-out single-char segments', () => {
+    const loc = locateQuote(UNIQUE_BST, "unique BST's (binary search trees), which has exactly n nodes of unique values from 1 to n.");
+    expect(loc).not.toBeNull();
+    expect(loc.exact).toBe(true);
+  });
+
+  it('anchors a short closing sentence (unique BST)', () => {
+    const loc = locateQuote(UNIQUE_BST, 'Return the answer in any order.');
+    expect(loc).not.toBeNull();
+  });
+});

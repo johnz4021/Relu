@@ -1129,6 +1129,22 @@ agent. The seams (all in `server/guidedAgent.js`):
   and structure viz never await it; `run_solver` reuses the warmed result when the
   student escalates (cold ~12s wait avoided), falling back to a fresh solve on warm
   failure.
+- **Page highlight — `highlight_problem_text`** (eng review 2026-06-09 D1-D3/D9) —
+  companion-ONLY tool (stripped on every non-companion path by `computeActiveTools`;
+  lives in `guidedTools`, not `tools.js`). The "point at the relevant part of the
+  input" rung (specificity 2): highlights a verbatim quote of the problem statement
+  on the leetcode page itself. Chain: `agentLib.js` handler →
+  `highlight_problem {id, quote|clear}` WS → embed app (`App.jsx`) relays over the
+  private MessagePort → `content.js` anchors via `extension/anchor.js`
+  (`locateQuote` — normalized cross-node matching, unit-tested against real
+  problem fixtures) and paints via CSS Custom Highlight API (`::highlight(relu-hint)`),
+  single-text-node `<mark>` fallback when the API is unavailable. The handler AWAITS
+  an id-correlated ack (`highlight_result {anchored, method, visible}`, 2s timeout →
+  `anchored:'unknown'`); the embed NACKs instantly when the port isn't transferred
+  yet, and `index.js` cleans the pending resolver on `end_session` / force-terminate
+  (`abortHighlightWait`). Tool result tells the model how to degrade: anchored
+  false/unknown → make the point in prose; visible false (off-screen or fullscreen
+  overlay) → reply must stand alone. Funnel: `extension_highlight_shown {ok, method}`.
 - **Terminal visualization ladder** (eng review 2026-06-09 D8) — the reveal endgame is
   three rungs, one per turn: STRUCTURE VIEW (specificity 3, zero-spoiler) → PARTIAL
   TRACE (specificity 4: `emit_segment` with ONLY the first 2-4 `trace_step_indices`,

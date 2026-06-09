@@ -53,6 +53,27 @@ export function sendBinary(ws, buffer) {
   }
 }
 
+// index.js routes the client's `highlight_result` WS message here (page-highlight
+// ack, eng review 2026-06-09 D2/D9). The id check is the correlation guard: a late
+// ack from a timed-out highlight must be DROPPED, never resolve a newer call's
+// promise. Returns true when a pending call was resolved.
+export function resolveHighlightResult(session, msg) {
+  const pending = session._highlightResolver;
+  if (!pending || msg?.id !== pending.id) return false;
+  session._highlightResolver = null;
+  pending.resolve({ anchored: msg.anchored, method: msg.method ?? null, visible: msg.visible === true });
+  return true;
+}
+
+// end_session / disconnect cleanup — mirrors the pauseResolver/guidedResponseResolver
+// pattern in index.js: a pending highlight await must not dangle into a dead session.
+export function abortHighlightWait(session) {
+  if (!session._highlightResolver) return;
+  const pending = session._highlightResolver;
+  session._highlightResolver = null;
+  pending.resolve({ anchored: 'unknown', aborted: true });
+}
+
 // Registry of declared panels (both renderer and context).
 // Call whenever create_visualization or create_graph sends panels to the client.
 export function registerPanels(session, panels, contextPanels) {
@@ -1089,6 +1110,51 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           message: `The learner answered: "${answerText}". STOP and evaluate this answer BEFORE continuing. If CORRECT: give brief praise (1 sentence) via conversational_reply with wait_for_response: false, then continue the lesson in the SAME turn. Do NOT ask follow-up probing questions on the same concept. If WRONG: explain why and give a hint (first attempt) or the correct answer (second attempt).`,
         };
       }
+    }
+
+    case 'highlight_problem_text': {
+      // STUCK COMPANION MODE page-highlight (eng review 2026-06-09 D1-D3, D9).
+      // Sends highlight_problem to the embed app, which relays it over the
+      // content-script MessagePort to paint on the leetcode page. The handler
+      // AWAITS the relayed ack (anchored/method/visible) so the model knows
+      // whether the student can actually see the mark — with a 2s timeout
+      // (anchored:'unknown') because the chain crosses three fire-and-forget
+      // hops and any of them can be dead.
+      const quote = typeof input.quote === 'string' ? input.quote.trim() : '';
+      if (input.clear) {
+        const id = (session._highlightSeq = (session._highlightSeq || 0) + 1);
+        sendJSON(ws, { type: 'highlight_problem', id, clear: true });
+        return { success: true, cleared: true };
+      }
+      if (quote.length < 5 || quote.length > 300) {
+        return {
+          success: false,
+          message: 'highlight_problem_text requires a verbatim "quote" of 5-300 characters copied exactly from the problem statement (or clear: true).',
+        };
+      }
+      // Correlation id (D9 item 1): a late ack from a timed-out call must never
+      // resolve a newer call's promise — the route drops mismatched ids.
+      const id = (session._highlightSeq = (session._highlightSeq || 0) + 1);
+      const ack = new Promise((resolve) => {
+        session._highlightResolver = { id, resolve };
+      });
+      const timeout = new Promise((resolve) => setTimeout(() => resolve({ anchored: 'unknown', timedOut: true }), 2000));
+      sendJSON(ws, { type: 'highlight_problem', id, quote });
+      const result = await Promise.race([ack, timeout]);
+      if (session._highlightResolver?.id === id) session._highlightResolver = null;
+      const anchored = result.anchored === true ? true : result.anchored === false ? false : 'unknown';
+      const visible = result.visible === true;
+      return {
+        success: true,
+        anchored,
+        visible,
+        method: result.method ?? null,
+        message: anchored === true
+          ? (visible
+            ? 'Highlight is on the page and on-screen. Ask your short standalone question — do not restate the quoted text.'
+            : 'Highlight anchored but is NOT visible to the student right now (off-screen or fullscreen overlay). Your reply must make the point on its own.')
+          : 'Highlight did not land — the student sees nothing. Treat as failed: make the same point in prose (quoting the passage in chat is fine here).',
+      };
     }
 
     case 'conversational_reply': {

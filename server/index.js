@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { DEFAULT_GRAPH } from './algorithms.js';
 import { startGuidedSession, resumeGuidedSession } from './guidedAgent.js';
+import { resolveHighlightResult, abortHighlightWait } from './agentLib.js';
 import { resetTTSDisabled } from './tts.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyJWT } from './supabase.js';
@@ -119,7 +120,7 @@ const wss = new WebSocketServer({ noServer: true });
 
 const PORT = process.env.PORT || 3001;
 
-const FREE_SESSION_LIMIT = 10;
+const FREE_SESSION_LIMIT = 50;
 
 const sessions = new Map();
 const sessionsByUserId = new Map();
@@ -250,6 +251,15 @@ function attachHandlers(ws, session) {
           break;
         }
 
+        case 'highlight_result': {
+          // Page-highlight ack from the embed app (companion mode). The id-checked
+          // resolver in agentLib drops stale acks from timed-out calls.
+          if (!resolveHighlightResult(session, msg)) {
+            console.log(`[WS] highlight_result dropped (id=${msg.id}, no matching pending highlight)`);
+          }
+          break;
+        }
+
         case 'end_session': {
           if (!session.active) {
             console.log(`[WS] end_session ignored — session not active (mode=${session.mode}, gen=${session.runGeneration})`);
@@ -273,6 +283,8 @@ function attachHandlers(ws, session) {
             session.followUpResolver('__end_session__');
             session.followUpResolver = null;
           }
+          // Unblock a pending page-highlight ack wait
+          abortHighlightWait(session);
           break;
         }
 
@@ -335,6 +347,7 @@ function attachHandlers(ws, session) {
             if (session.pauseResolver) { session.pauseResolver(); session.pauseResolver = null; }
             if (session.guidedResponseResolver) { session.guidedResponseResolver('__end_session__'); session.guidedResponseResolver = null; }
             if (session.followUpResolver) { session.followUpResolver('__end_session__'); session.followUpResolver = null; }
+            abortHighlightWait(session);
           }
           session.active = false;
           session.endSessionFlag = false;
@@ -497,6 +510,7 @@ function attachHandlers(ws, session) {
             if (session.pauseResolver) { session.pauseResolver(); session.pauseResolver = null; }
             if (session.guidedResponseResolver) { session.guidedResponseResolver('__end_session__'); session.guidedResponseResolver = null; }
             if (session.followUpResolver) { session.followUpResolver('__end_session__'); session.followUpResolver = null; }
+            abortHighlightWait(session);
           }
           session.active = false;
           session.endSessionFlag = false;

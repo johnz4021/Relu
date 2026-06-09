@@ -57,6 +57,10 @@ export default function App() {
   // before embedIntent — can read companion state and fire each rung once.
   const companionActiveRef = useRef(false);
   const companionFunnelRef = useRef({ nudgeGiven: false, structureShown: false, solutionShown: false });
+  // Private MessagePort to the extension content script (declared here, before
+  // onMessage, for the same reason as the companion refs above). Set in the embed
+  // handshake below; carries session updates out AND highlight commands/results.
+  const embedAuthPortRef = useRef(null);
 
   const contextPanelsRef = useRef(state.contextPanels);
   contextPanelsRef.current = state.contextPanels;
@@ -292,6 +296,23 @@ export default function App() {
         // demand signal for problems in the orphaned-classifier set (Sudoku, etc.).
         setLcParsed((prev) => (prev && prev.has_viz === false ? prev : null));
       }
+      if (msg.type === 'highlight_problem') {
+        // Companion page-highlight (eng review 2026-06-09): relay to the extension
+        // content script over the private MessagePort. INSTANT NACK when the port
+        // isn't here yet (model can call the tool on turn 1, before the handshake)
+        // or the post throws — otherwise the server eats its full 2s ack timeout.
+        const port = embedAuthPortRef.current;
+        let relayed = false;
+        if (port) {
+          try {
+            port.postMessage({ type: 'relu_highlight', id: msg.id, quote: msg.quote ?? null, clear: !!msg.clear });
+            relayed = true;
+          } catch { /* port closed (overlay tearing down) */ }
+        }
+        if (!relayed && !msg.clear) {
+          sendRef.current?.({ type: 'highlight_result', id: msg.id, anchored: false, method: null, visible: false, reason: 'no-port' });
+        }
+      }
       if (msg.type === 'lc_sessions_listed') {
         setLcSessions(msg.sessions || []);
       }
@@ -351,11 +372,17 @@ export default function App() {
   // access_token never touches the shared window 'message' bus. This is the
   // "production TOKEN channel must use a transferred MessagePort" hardening the
   // spike deferred — now implemented (see extension/content.js handshake).
+  //
+  // The SAME private port also carries the companion page-highlight traffic
+  // (relu_highlight out, relu_highlight_result back — eng review 2026-06-09):
+  // not because highlights are secret, but because the port is the one channel
+  // that already exists, stays off the page-world bus, and dies with the overlay.
   const embedMode = new URLSearchParams(window.location.search).get('embed') === '1';
   const embedNonce = (window.location.hash.match(/[#&]n=([^&]+)/) || [])[1] || null;
   const embedStartedRef = useRef(false);
   const embedPendingProblemRef = useRef(null);
-  const embedAuthPortRef = useRef(null); // MessagePort to push rotated sessions back to the worker
+  // embedAuthPortRef is declared up top (next to the companion refs) so the WS
+  // message handler can relay highlight commands over it.
   const [embedTick, setEmbedTick] = useState(0);
 
   // Opener intent (design Pass 1/2): 'nudge' → no-spoiler companion, 'showme' →
@@ -430,6 +457,14 @@ export default function App() {
       if (d.type === 'relu_auth_token') {
         if (e.ports && e.ports[0]) {
           embedAuthPortRef.current = e.ports[0];
+          // Inbound traffic on the private port: highlight acks from the content
+          // script, forwarded to the server as the id-checked highlight_result.
+          embedAuthPortRef.current.onmessage = (ev) => {
+            const m = ev.data;
+            if (m?.type === 'relu_highlight_result') {
+              sendRef.current?.({ type: 'highlight_result', id: m.id, anchored: m.anchored, method: m.method ?? null, visible: m.visible === true });
+            }
+          };
           // If we already hold a session (e.g. partitioned storage persisted one),
           // push it now so the worker's copy is current the moment the port lands.
           postSessionToWorker(sessionRef.current);

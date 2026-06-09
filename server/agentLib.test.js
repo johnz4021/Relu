@@ -76,3 +76,111 @@ describe('companionSelfReport — smoke', () => {
     });
   });
 });
+
+// ── highlight_problem_text (companion page-highlight, eng review 2026-06-09) ──
+//
+//   model → handleToolCall ─ws─▶ embed app ─port─▶ content.js (paint)
+//                 ▲                                      │
+//                 └── highlight_result (id-checked) ◀────┘
+//
+// The handler AWAITS the ack with a 2s timeout; resolveHighlightResult is the
+// id-checked route target; abortHighlightWait is the end_session cleanup.
+
+import { handleToolCall, resolveHighlightResult, abortHighlightWait } from './agentLib.js';
+
+function fakeSession() {
+  const sent = [];
+  return {
+    sent,
+    ws: { OPEN: 1, readyState: 1, send: (s) => sent.push(JSON.parse(s)) },
+  };
+}
+
+const call = (session, input) =>
+  handleToolCall(session, { name: 'highlight_problem_text', input }, null, null, null);
+
+describe('highlight_problem_text handler', () => {
+  it('rejects a missing/short quote with an explicit error (no WS send)', async () => {
+    const s = fakeSession();
+    expect((await call(s, {})).success).toBe(false);
+    expect((await call(s, { quote: 'arr' })).success).toBe(false);
+    expect(s.sent).toHaveLength(0);
+  });
+
+  it('sends highlight_problem with a correlation id and resolves on the matching ack', async () => {
+    const s = fakeSession();
+    const pending = call(s, { quote: 'sorted in ascending order' });
+    expect(s.sent[0].type).toBe('highlight_problem');
+    const id = s.sent[0].id;
+    expect(resolveHighlightResult(s, { id, anchored: true, method: 'highlight-api', visible: true })).toBe(true);
+    const result = await pending;
+    expect(result).toMatchObject({ success: true, anchored: true, visible: true, method: 'highlight-api' });
+    expect(result.message).toContain('do not restate');
+    expect(s._highlightResolver).toBe(null);
+  });
+
+  it('anchored:false ack tells the model to fall back to prose', async () => {
+    const s = fakeSession();
+    const pending = call(s, { quote: 'sorted in ascending order' });
+    resolveHighlightResult(s, { id: s.sent[0].id, anchored: false, method: null, visible: false });
+    const result = await pending;
+    expect(result.anchored).toBe(false);
+    expect(result.message).toContain('prose');
+  });
+
+  it('anchored but not visible warns that the reply must stand alone', async () => {
+    const s = fakeSession();
+    const pending = call(s, { quote: 'sorted in ascending order' });
+    resolveHighlightResult(s, { id: s.sent[0].id, anchored: true, method: 'mark', visible: false });
+    const result = await pending;
+    expect(result).toMatchObject({ anchored: true, visible: false });
+    expect(result.message).toContain('on its own');
+  });
+
+  it('drops a stale ack: wrong id never resolves the pending call', async () => {
+    const s = fakeSession();
+    const pending = call(s, { quote: 'sorted in ascending order' });
+    const id = s.sent[0].id;
+    // Late ack from a PREVIOUS (timed-out) highlight — must be ignored.
+    expect(resolveHighlightResult(s, { id: id - 1, anchored: false })).toBe(false);
+    expect(s._highlightResolver?.id).toBe(id); // still pending
+    resolveHighlightResult(s, { id, anchored: true, visible: true });
+    expect((await pending).anchored).toBe(true);
+  });
+
+  it('correlation ids increment per call so two calls never share an id', async () => {
+    const s = fakeSession();
+    const p1 = call(s, { quote: 'sorted in ascending order' });
+    resolveHighlightResult(s, { id: s.sent[0].id, anchored: true, visible: true });
+    await p1;
+    const p2 = call(s, { quote: 'return the index of target' });
+    expect(s.sent[1].id).toBe(s.sent[0].id + 1);
+    resolveHighlightResult(s, { id: s.sent[1].id, anchored: true, visible: true });
+    await p2;
+  });
+
+  it('clear:true fires and returns immediately without an ack wait', async () => {
+    const s = fakeSession();
+    const result = await call(s, { clear: true });
+    expect(result).toEqual({ success: true, cleared: true });
+    expect(s.sent[0]).toMatchObject({ type: 'highlight_problem', clear: true });
+    expect(s._highlightResolver ?? null).toBe(null);
+  });
+
+  it('abortHighlightWait (end_session) resolves a pending wait as unknown', async () => {
+    const s = fakeSession();
+    const pending = call(s, { quote: 'sorted in ascending order' });
+    abortHighlightWait(s);
+    const result = await pending;
+    expect(result.anchored).toBe('unknown');
+    expect(s._highlightResolver).toBe(null);
+    abortHighlightWait(s); // idempotent on no pending wait
+  });
+
+  it('times out to anchored:unknown when no ack ever arrives', async () => {
+    const s = fakeSession();
+    const result = await call(s, { quote: 'sorted in ascending order' });
+    expect(result.anchored).toBe('unknown');
+    expect(result.message).toContain('prose');
+  }, 4000);
+});

@@ -44,6 +44,8 @@
   let authPort = null;       // MessagePort1 of the private content-script ↔ overlay channel (D5)
   let keydownHandler = null; // document keydown for Escape-to-close while overlay open
   let launcherEl = null;     // the "Stuck?" button — focus returns here when the overlay closes
+  let overlayExpanded = false; // sidebar (false) vs fullscreen (true) — feeds the highlight ack's `visible`
+  let activeMark = null;     // <mark> fallback node when the Highlight API is unavailable — unwrapped on clear
 
   // ----- design tokens + a11y styles (Step 8) -------------------------------
   // A minimal CSS-variable token set, scoped with relu-* names so it can't clash
@@ -288,6 +290,7 @@
     // Shared by the ✕ button and Escape: tear down + restore focus to the launcher.
     function closeOverlay() {
       track('extension_overlay_closed');
+      clearPageHighlight(); // no orphan highlight (or <mark>) after the companion leaves
       wrap.remove();
       overlayEl = null;
       clearReadyHandler();
@@ -300,6 +303,7 @@
     // D2: expand-to-fullscreen toggle. Sidebar default (stay on the problem),
     // pop to full screen for dense viz, collapse back.
     let expanded = false;
+    overlayExpanded = false; // fresh overlay opens in sidebar mode
     const expandBtn = document.createElement('button');
     expandBtn.type = 'button';
     expandBtn.textContent = '⤢';
@@ -308,6 +312,7 @@
     Object.assign(expandBtn.style, iconBtnStyle);
     expandBtn.addEventListener('click', () => {
       expanded = !expanded;
+      overlayExpanded = expanded; // module-level mirror for the highlight ack's `visible`
       wrap.style.width = expanded ? '100vw' : SIDEBAR_WIDTH;
       expandBtn.textContent = expanded ? '⤡' : '⤢';
       const label = expanded ? 'Collapse to sidebar' : 'Expand to full screen';
@@ -384,6 +389,9 @@
       if (d && d.type === 'relu_session_update' && d.session) {
         log('overlay → rotated session; persisting to background');
         saveSession(d.session);
+      }
+      if (d && d.type === 'relu_highlight') {
+        handleHighlightCommand(d);
       }
     };
     let authSent = false; // transfer the port exactly once per overlay
@@ -507,6 +515,89 @@
     track('extension_anchor_spike', { hits, total: results.length });
   }
 
+  // ----- 3.6 PAGE HIGHLIGHT (companion "point at the input" rung) -------------
+  // Command arrives from the overlay over the private MessagePort
+  // ({type:'relu_highlight', id, quote|clear}); the id-tagged ack goes back the
+  // same way and the embed forwards it to the server, where the tool call is
+  // awaiting it. anchored = range located; method = how it painted; visible =
+  // on-screen in sidebar mode right now. Never mutates the page DOM except the
+  // single-text-node <mark> fallback (unwrapped on every clear — eng review D3).
+
+  function clearPageHighlight() {
+    try { if (typeof Highlight !== 'undefined' && CSS.highlights) CSS.highlights.delete('relu-hint'); } catch { /* no registry */ }
+    if (activeMark) {
+      try {
+        const parent = activeMark.parentNode;
+        while (activeMark.firstChild) parent.insertBefore(activeMark.firstChild, activeMark);
+        parent.removeChild(activeMark);
+        parent.normalize(); // re-merge the split text nodes — DOM back to byte-identical
+      } catch { /* leetcode re-rendered it away — nothing to unwrap */ }
+      activeMark = null;
+    }
+  }
+
+  function handleHighlightCommand(d) {
+    const reply = (payload) => {
+      try { authPort?.postMessage({ type: 'relu_highlight_result', id: d.id, ...payload }); } catch { /* port closed */ }
+    };
+    if (d.clear) {
+      clearPageHighlight();
+      reply({ anchored: true, method: 'clear', visible: false });
+      return;
+    }
+    const anchor = globalThis.ReLUAnchor;
+    const container = getDescriptionContainer();
+    if (!anchor || !container || typeof d.quote !== 'string') {
+      track('extension_highlight_shown', { ok: false, method: null, reason: 'no-container' });
+      reply({ anchored: false, method: null, visible: false });
+      return;
+    }
+    const nodes = collectTextNodes(container);
+    const loc = anchor.locateQuote(nodes.map((n) => n.data), d.quote);
+    if (!loc) {
+      track('extension_highlight_shown', { ok: false, method: null, reason: 'no-match' });
+      reply({ anchored: false, method: null, visible: false });
+      return;
+    }
+
+    clearPageHighlight(); // one highlight at a time — replace, never stack
+    let method = null;
+    try {
+      const range = new Range();
+      range.setStart(nodes[loc.start.seg], loc.start.offset);
+      range.setEnd(nodes[loc.end.seg], loc.end.offset);
+      if (typeof Highlight !== 'undefined' && CSS.highlights) {
+        CSS.highlights.set('relu-hint', new Highlight(range));
+        method = 'highlight-api';
+      } else if (loc.start.seg === loc.end.seg) {
+        // <mark> fallback (eng review D3 — accepted React-DOM risk, single text
+        // node only, strict unwrap on clear).
+        const mark = document.createElement('mark');
+        mark.className = 'relu-mark';
+        mark.style.backgroundColor = 'rgba(99, 102, 241, 0.32)';
+        mark.style.color = 'inherit';
+        range.surroundContents(mark);
+        activeMark = mark;
+        method = 'mark';
+      } else {
+        track('extension_highlight_shown', { ok: false, method: null, reason: 'multi-node-no-api' });
+        reply({ anchored: false, method: null, visible: false });
+        return;
+      }
+      // Instant scroll (not smooth) so the visibility rect below tells the truth.
+      nodes[loc.start.seg].parentElement?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      const rect = range.getBoundingClientRect();
+      const onScreen = rect.bottom > 0 && rect.top < window.innerHeight && rect.width + rect.height > 0;
+      const visible = onScreen && !overlayExpanded;
+      track('extension_highlight_shown', { ok: true, method, visible });
+      reply({ anchored: true, method, visible });
+    } catch (err) {
+      warn('highlight paint threw', err);
+      track('extension_highlight_shown', { ok: false, method, reason: 'paint-threw' });
+      reply({ anchored: false, method: null, visible: false });
+    }
+  }
+
   // ----- 4. SPA navigation (leetcode switches problems w/o reload) -----------
 
   function onRouteMaybeChanged() {
@@ -516,6 +607,7 @@
     currentSlug = slug;
     log('problem switch →', slug);
     // tear down a stale overlay so the frame never talks about the old problem
+    clearPageHighlight(); // never leave a highlight anchored to the OLD problem's text
     if (overlayEl) { overlayEl.remove(); overlayEl = null; clearReadyHandler(); }
     injectButton();
   }

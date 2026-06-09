@@ -15,6 +15,7 @@ const ALL_TOOLS = [
   { name: 'conversational_reply' },
   { name: 'send_options' },
   { name: 'lesson_complete' },
+  { name: 'highlight_problem_text' }, // companion-only (eng review 2026-06-09 D1)
 ];
 
 const names = (tools) => new Set(tools.map((t) => t.name));
@@ -91,16 +92,49 @@ describe('computeActiveTools', () => {
     expect(active.has('run_algorithm')).toBe(false);
   });
 
-  it('normal LC session with viz: all tools available', () => {
+  it('normal LC session with viz: all tools available except the companion-only highlight', () => {
     const session = { mode: 'leetcode', _leetcodeAlgorithmKey: 'dijkstra', hasViz: true };
     const active = names(computeActiveTools(session, ALL_TOOLS));
-    expect(active.size).toBe(ALL_TOOLS.length);
+    expect(active.has('highlight_problem_text')).toBe(false);
+    expect(active.size).toBe(ALL_TOOLS.length - 1);
   });
 
-  it('non-LC guided session: no filtering', () => {
+  it('non-LC guided session: no filtering except the companion-only highlight', () => {
     const session = { mode: 'guided', hasViz: true };
     const active = names(computeActiveTools(session, ALL_TOOLS));
-    expect(active.size).toBe(ALL_TOOLS.length);
+    expect(active.has('highlight_problem_text')).toBe(false);
+    expect(active.size).toBe(ALL_TOOLS.length - 1);
+  });
+
+  // eng review 2026-06-09 D1 + D9 item 7: the highlight tool is companion-only and
+  // must be stripped on BOTH non-companion branches (the out-of-scope filter AND the
+  // formerly-untouched in-scope return). Companion keeps it in-scope AND off-registry
+  // (page-pointing needs no registry entry).
+  describe('highlight_problem_text gating', () => {
+    it('companion in-scope: tool present', () => {
+      const session = { mode: 'leetcode', _leetcodeAlgorithmKey: 'dijkstra', hasViz: true, companionMode: true };
+      expect(names(computeActiveTools(session, ALL_TOOLS)).has('highlight_problem_text')).toBe(true);
+    });
+
+    it('companion off-registry: tool present (only the trace rung is filtered)', () => {
+      const session = { mode: 'leetcode', hasViz: false, companionMode: true };
+      const active = names(computeActiveTools(session, ALL_TOOLS));
+      expect(active.has('highlight_problem_text')).toBe(true);
+      expect(active.has('run_algorithm')).toBe(false);
+    });
+
+    it('non-companion out-of-scope: tool absent', () => {
+      const session = { mode: 'leetcode', hasViz: false };
+      expect(names(computeActiveTools(session, ALL_TOOLS)).has('highlight_problem_text')).toBe(false);
+    });
+
+    // Pin the full non-companion tool list (D9 item 7), the way the prompt is pinned:
+    // any future tool that should be companion-only will trip this on leak.
+    it('PIN: non-companion in-scope tool list contains no companion-only tools', () => {
+      const session = { mode: 'leetcode', _leetcodeAlgorithmKey: 'dijkstra', hasViz: true };
+      const active = computeActiveTools(session, ALL_TOOLS).map((t) => t.name);
+      expect(active).toEqual(ALL_TOOLS.map((t) => t.name).filter((n) => n !== 'highlight_problem_text'));
+    });
   });
 
   it('does not mutate the input tool list', () => {
@@ -265,6 +299,15 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     // The bug case is named explicitly so the model recognizes it.
     expect(companion).toContain('PARTIAL');
     expect(companion).toContain('is NOT permission to hand over the answer');
+  });
+
+  // eng review 2026-06-09: page-highlight doctrine — the "point at the input" rung
+  // got a dedicated tool; the doctrine governs pacing and the ack-driven fallbacks.
+  it('companion doctrine encodes the page-highlight rung and its ack fallbacks', () => {
+    expect(companion).toContain('POINT AT THE PAGE (highlight_problem_text)');
+    expect(companion).toContain('never restate the highlighted text');
+    expect(companion).toContain('failed highlight');
+    expect(companion).toContain('visible false');
   });
 
   // Refinement from the live rotated-array run: the crux ("left++/right--") was TOLD,

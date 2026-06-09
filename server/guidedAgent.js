@@ -53,6 +53,13 @@ const TRACE_TOOLS = new Set(['run_algorithm']);
 // redundant once isOutOfScopeSession started gating on hasViz directly — non-LC paths
 // never set hasViz so they never hit the soft branch in practice anyway.
 export function computeActiveTools(session, allTools) {
+  // highlight_problem_text is COMPANION-ONLY (eng review 2026-06-09 D1). Strip it
+  // up front so BOTH non-companion paths below — the out-of-scope filter AND the
+  // no-filter return — exclude it (D9 item 7: the in-scope path used to return
+  // allTools untouched, the easy branch to leak through).
+  const active = session?.companionMode
+    ? allTools
+    : allTools.filter((t) => t.name !== 'highlight_problem_text');
   if (isOutOfScopeSession(session)) {
     // STUCK COMPANION MODE keeps the structure viz off-registry: build_example_graph
     // + create_visualization render the problem's OWN input (no solving, works on any
@@ -60,9 +67,9 @@ export function computeActiveTools(session, allTools) {
     // to text. The standard walkthrough has no such rung, so it filters the whole
     // pipeline (the Sudoku empty-create_graph + phantom-narration bug).
     const filtered = session.companionMode ? TRACE_TOOLS : VIZ_PIPELINE_TOOLS;
-    return allTools.filter((t) => !filtered.has(t.name));
+    return active.filter((t) => !filtered.has(t.name));
   }
-  return allTools;
+  return active;
 }
 
 // Closing instruction appended to the intake user message. Two variants:
@@ -776,6 +783,15 @@ window"), do NOT hand them the operation ("left++ / right--") — ask "which poi
 how much, so you don't skip the answer?" and let them produce it. A turn that states the next step
 as a fact is almost always a turn that should have been a question.
 
+POINT AT THE PAGE (highlight_problem_text). The "point at the relevant part of the input" rung has
+a dedicated tool: it highlights a verbatim sentence of the problem statement ON the leetcode page,
+where the student is already looking. Prefer it over quoting the statement back in chat — a bare
+highlight leaks less than any sentence you can write. Pair it with a short standalone question and
+never restate the highlighted text. Specificity 2; one highlight at a time (a new call replaces the
+old). Trust the tool result: anchored false or "unknown" = the student sees nothing — treat it as a
+failed highlight and make the same point in prose; visible false = it painted but is off-screen or
+covered, so your reply must work entirely on its own.
+
 RESERVE THE KEY INSIGHT. The single idea that cracks the problem (the trick, the data structure,
 the invariant) is RESERVED — AND SO IS ITS CONCRETE FORM: the exact operation, pointer move, line
 of code, or formula that embodies it. Stating that concrete form ("just do left++/right--") counts
@@ -842,6 +858,28 @@ export function buildGuidedSystemPrompt(session) {
 // Tools specific to guided mode
 const guidedTools = [
   ...tools,
+  {
+    // STUCK COMPANION MODE only — computeActiveTools strips this on every
+    // non-companion path (eng review 2026-06-09 D1). Lives in guidedTools, not
+    // tools.js, so no other consumer of the shared list ever sees it.
+    name: 'highlight_problem_text',
+    description:
+      'COMPANION MODE: highlight a short verbatim passage of the problem statement directly on the leetcode page — the "point at the relevant part of the input" rung (specificity 2), gentler than any sentence you could write. The quote must be copied character-for-character from the problem text (one sentence or phrase, not a whole paragraph). One highlight at a time; a new call replaces the old one. Pair it with a short standalone question and NEVER restate the quoted text in your reply (that defeats the rung). Trust the result: anchored false/"unknown" means the student sees nothing — make the point in prose instead; visible false means it painted off-screen or behind the fullscreen overlay, so your reply must stand alone.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        quote: {
+          type: 'string',
+          description: 'Verbatim passage from the problem statement (5-300 chars, copied exactly as it appears).',
+        },
+        clear: {
+          type: 'boolean',
+          description: 'true = remove the current highlight instead of adding one.',
+        },
+      },
+      required: [],
+    },
+  },
   {
     name: 'show_canonical_example',
     description:
