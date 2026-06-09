@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeActiveTools, isOutOfScopeSession, buildIntakeUserText, buildGuidedSystemPrompt } from './guidedAgent.js';
+import { companionSelfReport } from './agentLib.js';
 
 // Minimal mock tool list matching the union of tools.js + guidedAgent-specific tools.
 // We only assert membership, never invoke any tool, so a tiny shape is enough.
@@ -224,15 +225,80 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('do NOT run any solver up front');
   });
 
-  it('companion doctrine encodes: escalate conversationally, on demand, no hard gate', () => {
-    expect(companion).toContain('ESCALATE CONVERSATIONALLY — NO HARD GATE, NO VISIBLE TIERS');
+  it('companion doctrine encodes: escalate on demand, no hard gate, no visible tiers', () => {
+    expect(companion).toContain('NO visible tiers');
     expect(companion).toContain('DO NOT FIGHT THE STUDENT');
-    expect(companion).toContain('escalate immediately');
+    expect(companion).toContain('one rung, or go to the reveal if they explicitly gave up');
   });
 
   it('companion doctrine encodes: terminal rung is the visualization (structure then trace)', () => {
     expect(companion).toContain('TERMINAL RUNG = THE VISUALIZATION');
     expect(companion).toContain('build_example_graph');
     expect(companion).toContain('run_algorithm');
+  });
+
+  // eng-1: the no-spoiler fix doctrine — taxonomy, one-rung pacing, reserve, self-report.
+  it('companion doctrine encodes the graduated-escalation fix', () => {
+    expect(companion).toContain('READ THE LEARNER EACH TURN');
+    expect(companion).toContain('ONE RUNG PER TURN');
+    expect(companion).toContain('RESERVE THE KEY INSIGHT');
+    expect(companion).toContain('SELF-REPORT EACH TURN');
+    // The bug case is named explicitly so the model recognizes it.
+    expect(companion).toContain('PARTIAL');
+    expect(companion).toContain('is NOT permission to hand over the answer');
+  });
+
+  // Refinement from the live rotated-array run: the crux ("left++/right--") was TOLD,
+  // not drawn out. The doctrine must elicit, and must reserve the CONCRETE form too.
+  it('companion doctrine encodes elicit-don\'t-tell + reserves the concrete operation', () => {
+    expect(companion).toContain('ELICIT, DON\'T TELL');
+    expect(companion).toContain('AND SO IS ITS CONCRETE FORM');
+    expect(companion).toContain('reveals_key_insight');
+  });
+});
+
+describe('buildGuidedSystemPrompt — reserved key-insight payload (eng-3)', () => {
+  const KEY = 'Use two pointers n apart; when the lead hits the end the trailing pointer is at the target.';
+
+  // The doctrine references the marker "[RESERVED KEY INSIGHT]" by name so the model
+  // recognizes it; the actual injected payload is the distinctive "— DO NOT ..." form.
+  // Assert on that form (and the payload text) to avoid colliding with the reference.
+  const INJECTED = '[RESERVED KEY INSIGHT — DO NOT';
+
+  it('injects the reserved block only once the warm solve has resolved (companion)', () => {
+    const before = buildGuidedSystemPrompt({ companionMode: true });
+    const after = buildGuidedSystemPrompt({ companionMode: true, _warmKeyInsight: KEY });
+    expect(before).not.toContain(INJECTED);
+    expect(before).not.toContain(KEY);
+    expect(after).toContain(INJECTED);
+    expect(after).toContain(KEY);
+    expect(after.startsWith(before)).toBe(true); // pure append, doctrine unchanged
+  });
+
+  it('never leaks the reserved block into non-companion sessions', () => {
+    // Even if a stale _warmKeyInsight rode along, a non-companion session gets the base prompt.
+    const text = buildGuidedSystemPrompt({ companionMode: false, _warmKeyInsight: KEY });
+    expect(text).not.toContain(INJECTED);
+    expect(text).not.toContain(KEY);
+  });
+});
+
+describe('companionSelfReport (eng-2 — self-report seam)', () => {
+  it('returns null when no self-report fields are present (non-companion turns)', () => {
+    expect(companionSelfReport({ text: 'hi' })).toBe(null);
+    expect(companionSelfReport(undefined)).toBe(null);
+  });
+
+  it('normalizes the fields and coerces reveals_key_insight to a boolean', () => {
+    expect(companionSelfReport({ learner_state: 'partial', specificity_level: 2 })).toEqual({
+      learner_state: 'partial',
+      specificity_level: 2,
+      reveals_key_insight: false, // absent → false, never accidentally "truthy"
+    });
+    expect(companionSelfReport({ learner_state: 'disengaged', specificity_level: 5, reveals_key_insight: true })).toEqual({
+      learner_state: 'disengaged',
+      specificity_level: 5,
+      reveals_key_insight: true,
+    });
   });
 });
