@@ -15,6 +15,9 @@
 //   3. escalation gradient — specificity rises at most one rung per turn.
 //   4. explicit "show me" DOES reveal (the escape hatch works).
 //   5. self-report honesty — reveals_key_insight=false must match the text (no leak).
+//   6. partial-trace carve-out (eng review 2026-06-09 D8) — an insight-opening trace
+//      is never partial-traced under reveals_key_insight=false, and a follow-up viz
+//      turn resumes at the first unemitted index (never replays).
 
 import { describe, it, expect } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
@@ -140,6 +143,72 @@ describe.skipIf(!ENABLED)('STUCK COMPANION MODE — live behavior eval (Standard
     const committedToReveal = reply.reveals_key_insight === true || (typeof reply.specificity_level === 'number' && reply.specificity_level >= 4) || leaks(reply.text, REMOVE_NTH_SPOILERS) !== null;
     expect(committedToReveal, 'kept withholding after an explicit give-up').toBe(true);
   }, 30000);
+
+  it('6. partial-trace carve-out: insight-opening trace is never partial-traced as a non-reveal, and the follow-up resumes (never replays)', async () => {
+    // eng review 2026-06-09 D8. REMOVE_NTH's trace OPENS with the two-pointer
+    // placement — the reserved insight in motion — so the doctrine says: skip the
+    // partial-trace rung, go to the full reveal. The failure being pinned: emitting
+    // a 2-4 step partial trace of these steps with reveals_key_insight=false (a
+    // false self-report and a leak dressed as a bridge rung).
+    //
+    // Harness extension (D9 item 10): a synthesized run_algorithm tool_use/tool_result
+    // pair puts a real trace in context so emit_segment is actually choosable.
+    const TRACE = [
+      { type: 'init', description: 'Place lead and trail pointers at the head, then advance lead n nodes ahead' },
+      { type: 'advance', description: 'Lead is now n ahead — the gap IS the answer structure' },
+      { type: 'advance', description: 'Advance both pointers together' },
+      { type: 'advance', description: 'Advance both pointers together' },
+      { type: 'locate', description: 'Lead hits the end; trail sits just before the target node' },
+      { type: 'remove', description: 'Unlink the target node' },
+      { type: 'result', description: 'Return head', output: 'list without nth-from-end' },
+    ];
+    const emitSegmentTool = tools.find((t) => t.name === 'emit_segment');
+    const vizTurn = (messages) => client().messages.create({
+      model: MODEL,
+      max_tokens: 700,
+      system: buildGuidedSystemPrompt(COMPANION_SESSION),
+      tools: [emitSegmentTool, conversationalReplyTool],
+      messages,
+    });
+    const base = [
+      { role: 'user', content: intake(REMOVE_NTH) },
+      { role: 'assistant', content: OPENER },
+      { role: 'user', content: 'I give up, just show me the answer.' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Alright — let me run it and walk you through what actually happens.' },
+          { type: 'tool_use', id: 'toolu_eval_run_algo', name: 'run_algorithm', input: { algorithm: 'linked_list_two_pointer' } },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_eval_run_algo', content: JSON.stringify({ success: true, trace: TRACE, renderer: 'linked' }) }],
+      },
+    ];
+
+    const first = await vizTurn(base);
+    const emit1 = first.content.find((b) => b.type === 'tool_use' && b.name === 'emit_segment');
+    const indices1 = emit1?.input?.trace_step_indices || [];
+    if (emit1 && indices1.length > 0 && indices1.length < TRACE.length) {
+      // Partial trace of an insight-opening trace: only honest as a flagged reveal.
+      expect(emit1.input.reveals_key_insight, 'partial-traced the insight-opening steps while claiming no reveal (the D8 false-self-report failure)').toBe(true);
+    }
+
+    // Continuation: whatever it emitted, the next viz turn must RESUME, not replay.
+    if (emit1 && indices1.length > 0 && indices1.length < TRACE.length) {
+      const second = await vizTurn([
+        ...base,
+        { role: 'assistant', content: [{ type: 'tool_use', id: emit1.id, name: 'emit_segment', input: emit1.input }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: emit1.id, content: JSON.stringify({ success: true, emitted: indices1 }) }] },
+        { role: 'user', content: 'ok, keep going.' },
+      ]);
+      const emit2 = second.content.find((b) => b.type === 'tool_use' && b.name === 'emit_segment');
+      const indices2 = emit2?.input?.trace_step_indices || [];
+      const replayed = indices2.filter((i) => indices1.includes(i));
+      expect(replayed, 'replayed already-emitted trace indices (corrupts stateful mapper replay)').toEqual([]);
+    }
+  }, 90000);
 
   it('5. self-report honesty: reveals_key_insight=false implies no key-insight text', async () => {
     // Reuse the partial-attempt turn: if the model claims it did not reveal, the text

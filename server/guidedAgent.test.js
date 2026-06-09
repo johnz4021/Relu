@@ -231,10 +231,29 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('one rung, or go to the reveal if they explicitly gave up');
   });
 
-  it('companion doctrine encodes: terminal rung is the visualization (structure then trace)', () => {
-    expect(companion).toContain('TERMINAL RUNG = THE VISUALIZATION');
+  it('companion doctrine encodes: terminal rungs are the visualization ladder (structure → partial trace → full trace)', () => {
+    expect(companion).toContain('TERMINAL RUNGS = THE VISUALIZATION LADDER');
     expect(companion).toContain('build_example_graph');
     expect(companion).toContain('run_algorithm');
+    expect(companion).toContain('PARTIAL TRACE');
+  });
+
+  // eng review 2026-06-09 D8: the partial-trace bridge rung is narrowed so it can
+  // never contradict RESERVE THE KEY INSIGHT — setup-steps-only, honest self-report,
+  // and resume-at-k transition semantics (re-emitting corrupts stateful mapper replay).
+  it('companion doctrine encodes the partial-trace carve-out and resume semantics', () => {
+    expect(companion).toContain('SETUP-STEPS-ONLY CARVE-OUT');
+    expect(companion).toContain('would be a false self-report');
+    expect(companion).toContain('When in doubt, skip');
+    expect(companion).toContain('RESUME, NEVER REPLAY');
+  });
+
+  // eng review 2026-06-09 D9 item 9: one coherent 1-5 ladder — every artifact
+  // (structure view, partial trace, full trace) has an explicit level so the
+  // "at most +1" rule stays meaningful.
+  it('companion doctrine maps the visual artifacts onto the 1-5 specificity ladder', () => {
+    expect(companion).toContain('the structure view sits here');
+    expect(companion).toContain('a permitted partial trace sits here');
   });
 
   // eng-1: the no-spoiler fix doctrine — taxonomy, one-rung pacing, reserve, self-report.

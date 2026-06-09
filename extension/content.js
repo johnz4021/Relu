@@ -74,6 +74,10 @@
         outline: 2px solid var(--relu-accent);
         outline-offset: 2px;
       }
+      ::highlight(relu-hint) {
+        background-color: rgba(99, 102, 241, 0.32);
+        color: inherit;
+      }
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -170,13 +174,9 @@
   }
 
   function scrapeFromDom() {
-    // Fallback only — selectors rot on leetcode redesigns. Try a few known
-    // containers for the problem statement.
-    const sel = [
-      '[data-track-load="description_content"]',
-      'div.elfjS', // 2024-era statement container (will drift)
-      '[class*="content__"]',
-    ];
+    // Fallback only — selectors rot on leetcode redesigns. Selector list is
+    // shared with the highlight anchorer (anchor.js) so rot is fixed once.
+    const sel = globalThis.ReLUAnchor?.DESCRIPTION_SELECTORS || ['[data-track-load="description_content"]'];
     for (const s of sel) {
       const el = document.querySelector(s);
       const text = el && el.innerText && el.innerText.trim();
@@ -420,6 +420,93 @@
     track('extension_overlay_opened', { had_problem: !!(problem && problem.text) });
   }
 
+  // ----- 3.5 ANCHOR SPIKE HARNESS (eng review D7 — gates the highlight tool) --
+  // Alt+Shift+H on a problem page: derives sentence quotes from the GraphQL
+  // text (the SAME source the tutoring model will quote from), runs
+  // ReLUAnchor.locateQuote against the live DOM's text nodes, paints the first
+  // hit via CSS Custom Highlight API (the per-world open question — VISUALLY
+  // confirm the indigo wash appears), and dumps a fixture pair for
+  // extension/anchor.test.js. Run on ~20 problems; the hit-rate decides whether
+  // the server-side highlight pipeline gets built. Everything logs under TAG.
+
+  function getDescriptionContainer() {
+    for (const s of (globalThis.ReLUAnchor?.DESCRIPTION_SELECTORS || [])) {
+      const el = document.querySelector(s);
+      if (el && el.innerText && el.innerText.trim().length > 40) return el;
+    }
+    return null;
+  }
+
+  function collectTextNodes(container) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    return nodes;
+  }
+
+  // Sentence-ish candidate quotes from the GraphQL text — what the model would
+  // realistically pass as `quote`. Mixes prose sentences and constraint lines.
+  function deriveSpikeQuotes(text) {
+    const sentences = text
+      .split(/(?<=[.?!])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 20 && s.length <= 160);
+    const constraints = text
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 8 && s.length <= 120 && (s.includes('<=') || s.includes('10^') || /^\d/.test(s)));
+    return [...new Set([...sentences.slice(0, 8), ...constraints.slice(0, 4)])];
+  }
+
+  async function runAnchorSpike() {
+    const anchor = globalThis.ReLUAnchor;
+    if (!anchor) { warn('SPIKE: anchor.js not loaded — check manifest content_scripts order'); return; }
+    const container = getDescriptionContainer();
+    if (!container) { warn('SPIKE: no description container matched DESCRIPTION_SELECTORS'); return; }
+    const problem = await fetchViaGraphQL(currentSlug);
+    if (!problem?.text) { warn('SPIKE: GraphQL extraction failed — cannot derive quotes'); return; }
+
+    const nodes = collectTextNodes(container);
+    const segments = nodes.map((node) => node.data);
+    const quotes = deriveSpikeQuotes(problem.text);
+    if (!quotes.length) { warn('SPIKE: no candidate quotes derived'); return; }
+
+    const results = quotes.map((q) => {
+      const loc = anchor.locateQuote(segments, q);
+      return { quote: q.slice(0, 60), hit: !!loc, exact: loc?.exact ?? null, loc };
+    });
+    const hits = results.filter((r) => r.hit).length;
+    log(`SPIKE [${currentSlug}]: ${hits}/${results.length} quotes anchored (${Math.round((hits / results.length) * 100)}%)`);
+    console.table(results.map(({ quote, hit, exact }) => ({ quote, hit, exact })));
+
+    // Paint test — the CSS.highlights per-world question. One range, centered.
+    const first = results.find((r) => r.hit);
+    if (first) {
+      try {
+        const range = new Range();
+        range.setStart(nodes[first.loc.start.seg], first.loc.start.offset);
+        range.setEnd(nodes[first.loc.end.seg], first.loc.end.offset);
+        if (typeof Highlight !== 'undefined' && CSS.highlights) {
+          CSS.highlights.set('relu-hint', new Highlight(range));
+          nodes[first.loc.start.seg].parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          log('SPIKE: painted via CSS.highlights — VISUAL CHECK: is an indigo wash visible on:', first.quote);
+        } else {
+          warn('SPIKE: CSS Custom Highlight API unavailable in this world — mark fallback would be the only path');
+        }
+      } catch (err) {
+        warn('SPIKE: paint threw', err);
+      }
+    }
+
+    // Fixture pair for anchor.test.js (GraphQL text + raw DOM segments).
+    const fixture = { slug: currentSlug, capturedAt: new Date().toISOString(), graphqlText: problem.text, segments };
+    try { chrome.storage.local.set({ ['relu_fixture_' + currentSlug]: fixture }); } catch { /* storage full/gone */ }
+    log('SPIKE: fixture stored (chrome.storage.local key relu_fixture_' + currentSlug + '). Copyable JSON below:');
+    console.log(JSON.stringify(fixture));
+    track('extension_anchor_spike', { hits, total: results.length });
+  }
+
   // ----- 4. SPA navigation (leetcode switches problems w/o reload) -----------
 
   function onRouteMaybeChanged() {
@@ -449,8 +536,14 @@
   injectReluStyles();
   currentSlug = slugFromUrl();
   if (currentSlug) {
-    log('booted on', currentSlug, '| nonce', NONCE);
+    log('booted on', currentSlug, '| nonce', NONCE, '| Alt+Shift+H = anchor spike');
     injectButton();
   }
   hookHistory();
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && e.shiftKey && (e.key === 'H' || e.key === 'h') && currentSlug) {
+      e.preventDefault();
+      runAnchorSpike();
+    }
+  });
 })();

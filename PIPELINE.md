@@ -1129,6 +1129,18 @@ agent. The seams (all in `server/guidedAgent.js`):
   and structure viz never await it; `run_solver` reuses the warmed result when the
   student escalates (cold ~12s wait avoided), falling back to a fresh solve on warm
   failure.
+- **Terminal visualization ladder** (eng review 2026-06-09 D8) — the reveal endgame is
+  three rungs, one per turn: STRUCTURE VIEW (specificity 3, zero-spoiler) → PARTIAL
+  TRACE (specificity 4: `emit_segment` with ONLY the first 2-4 `trace_step_indices`,
+  then a prediction prompt) → SOLUTION TRACE (specificity 5, resumes at the first
+  unemitted index — never re-emits, because `mapperState` is stateful and replay
+  corrupts interrupt-restore). The partial-trace rung has a **setup-steps-only
+  carve-out**: it is forbidden when the trace's opening steps enact the reserved key
+  insight (two-pointer placement, hash lookup — the common LC patterns); the model
+  must skip to the full reveal rather than emit them under `reveals_key_insight: false`.
+  Behavioral pin: `companionMode.eval.test.js` case 6; doctrine pins in
+  `guidedAgent.test.js`. An explicit give-up may still jump straight to the full trace.
+  Off-registry, rungs 2-3 degrade to text.
 
 **Instrumentation (eng D4):** the background worker is the funnel poster. Extension-side
 rungs (`extension_button_shown`, `_button_clicked`, `_extraction`, `_overlay_opened`,
