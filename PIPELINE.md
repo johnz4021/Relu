@@ -1096,13 +1096,25 @@ session, parameterized by `session.companionMode` (set from `msg.companionMode` 
 Companion mode is a **parameterized mode of the ONE guided prompt**, not a second
 agent. The seams (all in `server/guidedAgent.js`):
 
-- **`buildGuidedSystemPrompt(session)`** — appends `COMPANION_MODE_PROMPT` (no-spoiler
-  doctrine: open by asking for the student's read, no solver up front, conversational
-  escalation with no hard gate / no visible tiers, never fight an escalation request,
-  terminal rung is the visualization) to the base prompt when `companionMode`. Every
-  system-prompt construction site routes through this, so the doctrine holds across the
-  whole loop (post-`run_solver`, resume). Non-companion output is byte-identical to the
-  base prompt (regression-pinned in `guidedAgent.test.js`).
+- **`buildGuidedSystemPrompt(session)`** — appends `COMPANION_MODE_PROMPT` to the base
+  prompt when `companionMode`. The doctrine: open by asking for the student's read, no
+  solver up front, **model-paced contingent escalation** (a learner-state read each turn:
+  not_attempted / wrong_direction / partial / understands / disengaged), **one rung per
+  turn** (never jump to the answer — the partial-attempt trap is named explicitly),
+  **reserve the key insight**, never fight an escalation request, terminal rung is the
+  visualization. Every system-prompt construction site routes through this, so the
+  doctrine holds across the whole loop (post-`run_solver`, resume). Non-companion output
+  is byte-identical to the base prompt (regression-pinned in `guidedAgent.test.js`).
+- **Reserved key-insight payload** — the background warm solve's `.then()` stores
+  `session._warmKeyInsight`; `buildGuidedSystemPrompt` injects a `[RESERVED KEY INSIGHT —
+  DO NOT REVEAL]` block once it resolves (the ~turn-3-4 danger zone; opening turns rely
+  on the taxonomy). Never leaks into non-companion sessions.
+- **Per-turn self-report** — in companion mode the model sets optional
+  `{learner_state, specificity_level, reveals_key_insight}` on `conversational_reply` /
+  `emit_segment` (a metacognitive checkpoint that stops the jump; non-companion modes omit
+  them). `companionSelfReport()` (agentLib.js) normalizes it; the server forwards it on the
+  `interrupt_response` / `segment_start` message, and the client funnel posts precise
+  events (nudge_given, solution-reveal) off it instead of guessing from viz.
 - **`buildIntakeUserText(session, problemText)`** — pure assembly of the first user
   turn; swaps the closing instruction to the companion opener. Off-registry companion
   gets a `[COMPANION — OFF REGISTRY]` block (structure viz still works; only the trace
