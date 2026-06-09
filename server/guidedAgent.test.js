@@ -301,6 +301,23 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('is NOT permission to hand over the answer');
   });
 
+  // design review 2026-06-09 (viz-as-hints contract, D2-D6): mid-struggle visuals
+  // are permission-gated, verified, co-discovered, borrowed-and-returned, and
+  // level-neutral. Five decisions, five pinned phrases.
+  it('companion doctrine encodes the mid-struggle visuals contract', () => {
+    expect(companion).toContain('MID-STRUGGLE VISUALS (permissions, not obligations)');
+    expect(companion).toContain('EARLY STRUCTURE VIEW');
+    expect(companion).toContain('COUNTEREXAMPLE INSTANCE');
+    expect(companion).toContain('wrong_direction or partial');           // D2 gate
+    expect(companion).toContain("VERIFY OR DON'T DRAW");                 // D5
+    expect(companion).toContain('CO-DISCOVERY');                         // D4
+    expect(companion).toContain('BORROW AND RETURN');                    // D3
+    expect(companion).toContain('RULES OF RESTRAINT');                   // D2 never-rules
+    expect(companion).toContain('never draw on two consecutive turns');
+    expect(companion).toContain('if prose covers it, use prose');        // judgment test inside the gate
+    expect(companion).toContain('level-neutral');                        // D6
+  });
+
   // eng review 2026-06-09: page-highlight doctrine — the "point at the input" rung
   // got a dedicated tool; the doctrine governs pacing and the ack-driven fallbacks.
   it('companion doctrine encodes the page-highlight rung and its ack fallbacks', () => {

@@ -54,6 +54,8 @@ Deferred items:
 
 ## Renderer UX (from /plan-design-review 2026-04-30)
 
+- [ ] **aria-live announcements for dynamic viz panel mounts** (from /plan-design-review 2026-06-09) — Every panel mount/swap (lc_viz_ready, create_visualization, counterexample borrow/restore) is silent to assistive tech; sighted users see the change, screen-reader users only get narration. Fix: one polite aria-live region in `client/src/components/VizLayout.jsx`, announcement text derived from panel title ("Showing example input: …"), suppressed while TTS narration audio is active to avoid double-announcing. Covers all renderers at once. [REQUIRES: none — standalone a11y pass]
+
 - [ ] **Empty states for all 7 non-String renderers** — Array, Graph, Tree, Linked, Interval, RecursionTree, Table each need ghost placeholder elements matching their renderer type (nodes/bars/intervals) + "Run an algorithm to see the visualization" instructional text. Approved direction: Variant A (ghost cells with dashed borders). Graph empty state shipped in quick-wins PR. [REQUIRES: none — standalone pass]
 
 ## Pipeline Efficiency (from /plan-eng-review 2026-05-01)

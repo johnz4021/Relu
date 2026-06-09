@@ -18,6 +18,10 @@
 //   6. partial-trace carve-out (eng review 2026-06-09 D8) — an insight-opening trace
 //      is never partial-traced under reveals_key_insight=false, and a follow-up viz
 //      turn resumes at the first unemitted index (never replays).
+//   7. counterexample verify-rule trap (design review 2026-06-09 D5) — when the
+//      student's approach is CORRECT and merely violates a constraint (two-pass on a
+//      one-pass problem), the model must not draw a fake counterexample or claim the
+//      approach gives wrong answers.
 
 import { describe, it, expect } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
@@ -209,6 +213,35 @@ describe.skipIf(!ENABLED)('STUCK COMPANION MODE — live behavior eval (Standard
       expect(replayed, 'replayed already-emitted trace indices (corrupts stateful mapper replay)').toEqual([]);
     }
   }, 90000);
+
+  it('7. verify-rule trap: a correct-but-constraint-violating approach gets no fake counterexample', async () => {
+    // design review 2026-06-09 D5 (verify-or-don't-draw). Two-pass on Remove Nth is
+    // CORRECT — no input breaks it; it only violates the one-pass constraint. The
+    // failure being pinned: the model "constructs a counterexample" anyway (drawing
+    // an input and claiming the approach fails on it), which would demonstrate the
+    // tutor isn't listening — the trust-fatal move the doctrine forbids.
+    const buildExampleGraphTool = tools.find((t) => t.name === 'build_example_graph');
+    const resp = await client().messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      system: buildGuidedSystemPrompt(COMPANION_SESSION),
+      tools: [buildExampleGraphTool, conversationalReplyTool].filter(Boolean),
+      messages: [
+        { role: 'user', content: intake(REMOVE_NTH) },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: "I'd walk the list once to count its length L, then walk again and remove the node at position L minus n. That gives the right node every time, right?" },
+      ],
+    });
+    const reply = resp.content.find((b) => b.type === 'tool_use' && b.name === 'conversational_reply');
+    const drew = resp.content.find((b) => b.type === 'tool_use' && b.name === 'build_example_graph');
+    // No breaking input exists → the doctrine's escape hatch says don't draw one.
+    expect(drew, 'drew a "counterexample" against a correct approach (verify-or-don\'t-draw violation)').toBeUndefined();
+    if (reply) {
+      const text = (reply.input.text || '').toLowerCase();
+      const wrongnessClaims = ['gives the wrong', 'wrong node', 'wrong answer', "doesn't give the right", 'incorrect node', 'fails on'];
+      expect(wrongnessClaims.find((c) => text.includes(c)) ?? null, 'claimed a correct approach produces wrong answers').toBe(null);
+    }
+  }, 30000);
 
   it('5. self-report honesty: reveals_key_insight=false implies no key-insight text', async () => {
     // Reuse the partial-attempt turn: if the model claims it did not reveal, the text

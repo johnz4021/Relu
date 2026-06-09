@@ -1145,6 +1145,23 @@ agent. The seams (all in `server/guidedAgent.js`):
   (`abortHighlightWait`). Tool result tells the model how to degrade: anchored
   false/unknown → make the point in prose; visible false (off-screen or fullscreen
   overlay) → reply must stand alone. Funnel: `extension_highlight_shown {ok, method}`.
+- **Mid-struggle visuals** (design review 2026-06-09 D2-D6) — the canvas is usable
+  DURING the struggle, not just at the endgame, under a permission-gated contract:
+  EARLY STRUCTURE VIEW (once, after the first concrete reference — the shared
+  whiteboard) and COUNTEREXAMPLE INSTANCE (only on `wrong_direction`/`partial`, one
+  per misconception, paired with its walk-through question). Both operate on the
+  problem or the student's own idea — never the solution — so they are spoiler-safe
+  and **specificity-level-neutral** (report the previous turn's level; the ladder
+  budget is for solution disclosure). Hard restraints: verify-or-don't-draw (mentally
+  execute THEIR approach on the candidate input first; no breaking input → don't
+  draw, consider the gap may be a constraint, not correctness), co-discovery (the
+  student names the break, never the tutor), borrow-and-return (counterexample
+  borrows the canvas, then the structure view of their input is re-mounted — plain
+  `create_visualization` re-mount, no `restoreGraphState` involvement), never two
+  viz turns in a row, never while a question is pending, prose-over-pictures when
+  prose suffices. Pins in `guidedAgent.test.js`; verify-rule trap eval is
+  `companionMode.eval.test.js` case 7. Animated hypotheticals of arbitrary student
+  approaches remain out of scope (no trace generator for them).
 - **Terminal visualization ladder** (eng review 2026-06-09 D8) — the reveal endgame is
   three rungs, one per turn: STRUCTURE VIEW (specificity 3, zero-spoiler) → PARTIAL
   TRACE (specificity 4: `emit_segment` with ONLY the first 2-4 `trace_step_indices`,
