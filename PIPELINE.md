@@ -572,13 +572,55 @@ Tools split into two groups:
 
 `emit_segment` is the most critical tool — it drives everything the student sees and hears:
 
-1. Resolve `trace_step_indices` → call `mapTraceStep()` → prepend auto viz_actions
-2. Validate manual `viz_actions` against panel registry + graph node IDs
+1. Resolve `trace_step_indices` → call `mapTraceStep()` → prepend auto viz_actions.
+   Tier 2 steps with embedded `viz_actions` skip the mapper but are schema-checked
+   (see the enforcement ladder below) with per-step warnings returned to the agent.
+2. Run manual `viz_actions` through the **enforcement ladder** (below); strip invalid
+   actions with precise errors
 3. Send `segment_start` message to client (contains narration text + viz_actions)
 4. Call `synthesizeAndStream()` (TTS) — streams audio chunks via binary WS messages
 5. Wait for TTS completion (or pause/skip/interrupt signals)
 6. Send `audio_flush` + `segment_end`
 7. Check `session.interruptFlag` — if set, snapshot graph state, stub remaining tools, inject `[LEARNER INTERRUPT]` message
+
+#### Viz-action enforcement ladder (consistency architecture)
+
+`rendererManifest.js` is the **enforced single source of truth** for the viz contract
+(every renderer's legal actions + param types). Four layers consume it, so a
+hallucinated action name or malformed params can no longer die silently as a blank
+panel:
+
+1. **Tool schema gate** (`tools.js`): the `emit_segment`/`respond_to_interrupt`
+   `viz_actions[].action` field is an enum generated from the manifest — hallucinated
+   action names are blocked at the API boundary.
+2. **Panel registry** (`agentLib.validatePanelIds`): unknown panel ids stripped; a bare
+   renderer type ("array") is aliased to its sole registered panel id ("array_main").
+3. **Manifest schema validation** (`vizValidator.js`): action must exist for the
+   targeted renderer's type; required params checked; types checked against the
+   manifest's type DSL. Safe repairs are applied instead of stripping: action-name
+   near-misses (case/hyphens), param aliases (`data`→`values`, `node`↔`id`,
+   `index`→`indices`), numeric-string→number coercion, scalar→array wrapping. Output
+   is normalized to nested `{ renderer, action, params }`. System-emitted actions
+   (residual overlays) live in `SYSTEM_ACTIONS` and pass without a published contract.
+4. **Graph node-id validation** (`agentLib.validateVizActions`): highlight/path targets
+   must exist in `session.currentGraph` — or have been introduced by an accepted
+   `add_node` (tracked in `session._addedNodeIds`, reset on every graph replacement).
+
+**Failure is loud, not silent.** Stripped actions come back to the model as precise
+per-action errors in the tool result (`WARNINGS: …`, including the renderer's valid
+action list). If the model supplied viz_actions and **every one** was rejected (and no
+trace actions carry the segment), `emit_segment` **fails the tool call** before sending
+anything — the model fixes the actions and re-emits instead of the student watching
+narration point at a blank panel. `respond_to_interrupt` runs the same ladder on its
+`viz_actions` and validates overlay `spotlight_nodes`/`spotlight_edges` against the
+graph.
+
+**Drift protection** (`vizContract.test.js`): every manifest action must have a client
+handler; every `vizMapper` `viz()`/`ctx()` call must be documented in the manifest (or
+`SYSTEM_ACTIONS`) *and* have a client handler; the tool-schema enum must cover the
+manifest. Renaming or adding an action in any one layer without the others fails CI.
+Adding/renaming an action in `rendererManifest.js` is the only sanctioned way to change
+the contract.
 
 **Pause/Resume/Skip mechanics:**
 - `pauseFlag` set by client → TTS stream aborts at next chunk boundary
