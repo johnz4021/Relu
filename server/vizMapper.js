@@ -422,8 +422,17 @@ function mapGraphStep(algo, step, state) {
     }
 
     case 'relax': {
-      v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.to, className: 'highlighted' }));
-      v.push(viz('graph', 'set_label', { node: step.to, label: String(step.new_distance) }));
+      // Edge-relaxation algos (dijkstra, bellman-ford) carry from/to/new_distance.
+      // floyd_warshall relax steps carry only the intermediate `node` — highlight it
+      // instead of emitting an edge highlight with undefined endpoints.
+      if (step.from !== undefined && step.to !== undefined) {
+        v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.to, className: 'highlighted' }));
+      } else if (step.node !== undefined) {
+        v.push(viz('graph', 'mark_current', { node: step.node }));
+      }
+      if (step.to !== undefined && step.new_distance !== undefined) {
+        v.push(viz('graph', 'set_label', { node: step.to, label: String(step.new_distance) }));
+      }
       if (step.distances) {
         c.push(ctxUpdate('distances', {
           entries: Object.entries(step.distances).map(([k, d]) => ({
@@ -1295,7 +1304,10 @@ function mapArrayStep(algo, step, state) {
 
     case 'swap': {
       state.swaps = (state.swaps || 0) + 1;
-      v.push(viz('array', 'swap', { i: step.i, j: step.j }));
+      // Most array traces carry i/j; matrix traces (rotate_matrix) carry indices: [i, j]
+      const swapI = step.i ?? step.indices?.[0];
+      const swapJ = step.j ?? step.indices?.[1];
+      v.push(viz('array', 'swap', { i: swapI, j: swapJ }));
       if (step.pointers) {
         for (const [name, idx] of Object.entries(step.pointers)) {
           if (idx >= 0) v.push(viz('array', 'set_pointer', { name, index: idx }));
@@ -1464,11 +1476,18 @@ function mapArrayStep(algo, step, state) {
           ],
         }));
       } else {
-        v.push(viz('array', 'mark_sorted', { indices: [step.index] }));
+        // Search algos carry a single `index`; backtracking algos (combination_sum,
+        // permutations) carry `indices` for the whole found solution.
+        const foundIndices = Array.isArray(step.indices)
+          ? step.indices.filter((x) => x != null)
+          : (step.index !== undefined ? [step.index] : []);
+        if (foundIndices.length > 0) {
+          v.push(viz('array', 'mark_sorted', { indices: foundIndices }));
+        }
         c.push(ctxUpdate('bounds', {
           entries: [
             { key: 'Target', value: step.value },
-            { key: 'Found at', value: step.index, status: 'updated' },
+            { key: 'Found at', value: step.index ?? `[${foundIndices.join(', ')}]`, status: 'updated' },
           ],
         }));
       }
@@ -1865,6 +1884,16 @@ function mapTableStep(algo, step, state) {
 
     case 'fill_cell':
     case 'skip_cell': {
+      // stock_dp packs the whole state-machine row (held/sold/rest) into one step —
+      // fill all three columns instead of one cell with an undefined value.
+      if (algo === 'stock_dp' && step.held !== undefined) {
+        const fmt = (x) => (x === -Infinity ? '-∞' : x === Infinity ? '∞' : x);
+        v.push(viz('table', 'fill_cell', { row: step.row, col: 0, value: fmt(step.held) }));
+        v.push(viz('table', 'fill_cell', { row: step.row, col: 1, value: fmt(step.sold) }));
+        v.push(viz('table', 'fill_cell', { row: step.row, col: 2, value: fmt(step.rest) }));
+        v.push(viz('table', 'highlight_row', { row: step.row }));
+        break;
+      }
       const isCoinChange = algo === 'coin_change';
       const row = isCoinChange ? 0 : step.row;
       const col = isCoinChange ? step.index : step.col;
@@ -2254,11 +2283,15 @@ function mapTreeStep(algo, step, state) {
     }
 
     case 'insert': {
-      // BST node inserted
+      // BST node inserted. BST traces carry node_id; heap traces (top_k_heap,
+      // median_finder, k_closest_points) carry `node` — accept both.
       if (step.tree) {
         v.push(viz('tree', 'set_tree', step.tree));
       }
-      v.push(viz('tree', 'highlight_node', { id: step.node_id, className: 'inserted' }));
+      const insertedId = step.node_id ?? step.node;
+      if (insertedId !== undefined) {
+        v.push(viz('tree', 'highlight_node', { id: insertedId, className: 'inserted' }));
+      }
       if (!state.insertCount) state.insertCount = 0;
       state.insertCount++;
       c.push(ctxUpdate('stats', {
@@ -2866,7 +2899,11 @@ function mapStringStep(algo, step, state) {
           }));
         }
       } else {
-        s('set_string', { s: step.s });
+        // rabin_karp and manacher init steps carry `text` (+ pattern), not `s`
+        s('set_string', { s: step.s ?? step.text });
+        if (step.pattern !== undefined && algo === 'rabin_karp') {
+          s('set_pattern', { p: step.pattern });
+        }
       }
       break;
     }

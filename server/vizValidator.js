@@ -243,6 +243,9 @@ export function validateVizActionSchemas(actions, panels, opts = {}) {
         }
         continue;
       }
+      // null on an OPTIONAL param is an explicit-absence idiom (e.g. linked
+      // reverse_pointer { to: null } meaning "reverse toward head") — legal.
+      if (params[pname] === null && isOptionalSpec(pspec)) continue;
       const r = checkParamType(params[pname], pspec);
       if (!r.ok) {
         actionError =
