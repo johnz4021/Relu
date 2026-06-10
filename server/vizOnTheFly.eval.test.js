@@ -43,6 +43,8 @@ const MODEL = process.env.RELU_EVAL_MODEL || 'claude-opus-4-6';
 
 const TOOL_NAMES = ['create_graph', 'create_visualization', 'emit_segment'];
 const evalTools = tools.filter((t) => TOOL_NAMES.includes(t.name));
+const interruptTools = tools.filter((t) =>
+  [...TOOL_NAMES, 'respond_to_interrupt', 'end_illustration'].includes(t.name));
 
 const client = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -70,8 +72,8 @@ const TALLY = { supplied: 0, delivered: 0, hardFailures: 0, scenarios: 0, semant
  * Drive one scenario: live model + real tool handlers, up to maxTurns assistant turns.
  * Returns { session, delivered, supplied, hardFailures, toolCalls }.
  */
-async function runScenario({ task, rendererDocs, maxTurns = 6 }) {
-  const session = mockSession();
+async function runScenario({ task, rendererDocs, maxTurns = 6, session: presetSession, tools: toolset }) {
+  const session = presetSession || mockSession();
   const system = buildGuidedSystemPrompt(session);
   const messages = [{
     role: 'user',
@@ -87,7 +89,7 @@ async function runScenario({ task, rendererDocs, maxTurns = 6 }) {
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const resp = await client().messages.create({
-      model: MODEL, max_tokens: 2000, system, tools: evalTools, messages,
+      model: MODEL, max_tokens: 2000, system, tools: toolset || evalTools, messages,
     });
     const uses = resp.content.filter((b) => b.type === 'tool_use');
     if (uses.length === 0) break;
@@ -96,7 +98,9 @@ async function runScenario({ task, rendererDocs, maxTurns = 6 }) {
     const results = [];
     for (const use of uses) {
       toolCalls.push(use);
-      if (use.name === 'emit_segment') supplied += (use.input.viz_actions || []).length;
+      if (use.name === 'emit_segment' || use.name === 'respond_to_interrupt') {
+        supplied += (use.input.viz_actions || []).length;
+      }
       let result;
       try {
         result = await handleToolCall(session, use, null, null, null);
@@ -125,6 +129,28 @@ async function runScenario({ task, rendererDocs, maxTurns = 6 }) {
 }
 
 const has = (delivered, pred) => delivered.some(pred);
+
+// Mid-lesson session state for interrupt scenarios: a dijkstra lesson graph is on
+// screen, panels registered — the exact state respond_to_interrupt fires from.
+const LESSON_GRAPH = {
+  nodes: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+  edges: [
+    { source: 'a', target: 'b', weight: 1 },
+    { source: 'a', target: 'c', weight: 4 },
+    { source: 'b', target: 'c', weight: 2 },
+    { source: 'c', target: 'd', weight: 1 },
+  ],
+  directed: true,
+};
+function midLessonSession() {
+  const s = mockSession();
+  s.currentGraph = LESSON_GRAPH;
+  s.currentAlgorithm = 'dijkstra';
+  s.currentRenderer = 'graph';
+  s._panels = { graph: { renderer: 'graph', type: 'renderer' } };
+  return s;
+}
+const sentOfType = (session, type) => session.sent.filter((m) => m.type === type);
 
 // ── scenario matrix: one per renderer + structural edge cases ────────────────
 const SCENARIOS = [
@@ -195,12 +221,72 @@ const SCENARIOS = [
       has(d, (a) => ['highlight_level', 'reveal_level', 'set_cumulative'].includes(a.action)),
   },
   {
+    name: 'interrupt overlay — spotlight on the live lesson graph',
+    docs: ['graph'],
+    session: midLessonSession,
+    tools: interruptTools,
+    maxTurns: 4,
+    requiresActions: false, // overlay spotlights live on the interrupt_response, not viz_actions
+    task:
+      'MID-LESSON INTERRUPT. The dijkstra lesson graph currently on screen has nodes a, b, c, d ' +
+      'and directed edges a→b (weight 1), a→c (weight 4), b→c (weight 2), c→d (weight 1). ' +
+      'The student just asked: "Why did we visit b before c?" ' +
+      'Answer with respond_to_interrupt using overlay mode — spotlight the nodes and edges that explain the answer.',
+    semantic: (d, session) => {
+      const ir = sentOfType(session, 'interrupt_response').find((m) => m.explanation_mode === 'overlay');
+      const nodes = ir?.overlay?.spotlight_nodes || [];
+      const edges = ir?.overlay?.spotlight_edges || [];
+      const known = new Set(['a', 'b', 'c', 'd']);
+      return !!ir && (nodes.length + edges.length) > 0 &&
+        nodes.every((n) => known.has(n)) &&
+        edges.every((e) => known.has(e.from) && known.has(e.to));
+    },
+  },
+  {
+    name: 'interrupt illustrate — smaller example graph, then borrow-and-return',
+    docs: ['graph'],
+    session: midLessonSession,
+    tools: interruptTools,
+    maxTurns: 8,
+    task:
+      'MID-LESSON INTERRUPT. A dijkstra lesson is running on a 4-node graph. ' +
+      'The student just asked: "This graph is confusing — can you show me the idea on a smaller example first?" ' +
+      'Use respond_to_interrupt with illustrate mode to draw a fresh 2-3 node example graph, teach ONE short ' +
+      'emit_segment beat on it (highlight something), then call end_illustration to restore the lesson graph.',
+    semantic: (d, session) => {
+      const ir = sentOfType(session, 'interrupt_response').find((m) => m.explanation_mode === 'illustrate');
+      const exampleNodes = ir?.illustrate?.graph?.nodes?.length ?? 0;
+      const restored = sentOfType(session, 'explanation_complete').length > 0;
+      return exampleNodes >= 2 && exampleNodes <= 4 && restored;
+    },
+  },
+  {
     name: 'context panel — hash map state tracking',
     docs: ['array'],
     task: 'Create an array panel showing [2, 7, 11, 15] plus a key_value context panel with id "seen" titled "Seen map". Then show the first two-sum step: highlight index 0 and update the "seen" panel with the entry key "2" value "index 0".',
     semantic: (d) =>
       has(d, (a) => a.action === 'set_data') &&
       has(d, (a) => a.renderer === 'context' && a.action === 'update' && a.params?.panel_id === 'seen'),
+  },
+  {
+    name: 'graph — weighted directed graph with edge label updates',
+    docs: ['graph'],
+    task: 'Draw a weighted directed graph: s→a weight 4, s→b weight 2, a→b weight 5, b→t weight 3, a→t weight 1. Then highlight the edge s→b as examining and update its displayed label to "2 ✓" as if it was just relaxed.',
+    semantic: (d, session) =>
+      (session.currentGraph?.edges?.length ?? 0) === 5 &&
+      session.currentGraph.edges.every((e) => e.weight !== undefined) &&
+      has(d, (a) => a.action === 'update_edge_label') &&
+      has(d, (a) => a.action === 'highlight_edge'),
+  },
+  {
+    name: 'graph — undirected graph + mid-lesson add_node/add_edge mutation',
+    docs: ['graph'],
+    task: 'Draw a small UNDIRECTED graph with nodes x, y, z and edges x-y, y-z. Then, as a follow-up teaching beat, ADD a new node w connected to y (use the add_node and add_edge viz actions, not a new graph) and highlight the new node w as current.',
+    semantic: (d, session) =>
+      session.currentGraph?.directed === false &&
+      has(d, (a) => a.action === 'add_node' && (a.params?.id === 'w' || a.params?.label === 'w')) &&
+      has(d, (a) => a.action === 'add_edge') &&
+      has(d, (a) => ['highlight_node', 'mark_current'].includes(a.action) && (a.params?.node === 'w' || a.params?.id === 'w')),
   },
   {
     name: 'multi-panel — two graphs, unambiguous targeting',
@@ -219,6 +305,9 @@ describe.skipIf(!ENABLED)('on-the-fly viz — live model accuracy eval', () => {
       const { session, delivered, supplied, hardFailures } = await runScenario({
         task: sc.task,
         rendererDocs: buildRendererDocs(sc.docs),
+        session: sc.session ? sc.session() : undefined,
+        tools: sc.tools,
+        maxTurns: sc.maxTurns,
       });
 
       TALLY.scenarios++;
@@ -236,7 +325,9 @@ describe.skipIf(!ENABLED)('on-the-fly viz — live model accuracy eval', () => {
         (semanticOk ? '' : ` — delivered actions: ${JSON.stringify(delivered.map((a) => `${a.renderer}/${a.action}`))}`),
       );
 
-      expect(supplied, 'model never attempted any viz_actions').toBeGreaterThan(0);
+      if (sc.requiresActions !== false) {
+        expect(supplied, 'model never attempted any viz_actions').toBeGreaterThan(0);
+      }
       expect(semanticOk, `scenario did not produce the intended picture. Delivered: ${JSON.stringify(delivered, null, 1).slice(0, 1500)}`).toBe(true);
     }, 240000);
   }
