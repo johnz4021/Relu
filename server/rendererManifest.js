@@ -1,5 +1,12 @@
 // Renderer manifest — single source of truth for all renderer actions, classNames, and docs.
-// Used by guidedAgent.js to provide dynamic renderer documentation to the LLM.
+// Consumed by:
+//   - guidedAgent.js (buildRendererDocs): dynamic renderer documentation shown to the LLM
+//   - vizValidator.js: server-side enforcement of action names + param types on every
+//     model-supplied viz_action (manual emit_segment actions and Tier 2 embedded actions)
+//   - tools.js: the emit_segment action-name enum is generated from this file
+//   - vizContract.test.js: asserts every action here has a client handler, and every
+//     vizMapper-emitted action is documented here (or in SYSTEM_ACTIONS)
+// Adding/renaming an action HERE is the only sanctioned way to change the viz contract.
 
 export const RENDERER_MANIFEST = {
   graph: {
@@ -12,6 +19,8 @@ export const RENDERER_MANIFEST = {
       { name: 'reset_highlights', params: {}, description: 'Remove all highlight classes from all elements' },
       { name: 'show_path', params: { path: 'string[]' }, description: 'Highlight a sequence of nodes and connecting edges as a path' },
       { name: 'update_edge_label', params: { from: 'string', to: 'string', label: 'string' }, description: 'Update the weight/label displayed on an edge' },
+      { name: 'add_node', params: { id: 'string', label: 'string?', position: '{x,y}?', className: 'string?' }, description: 'Add a node to the graph (no-op if id already exists)' },
+      { name: 'add_edge', params: { from: 'string', to: 'string', weight: 'any?', className: 'string?', undirected: 'boolean?' }, description: 'Add an edge between existing nodes (no-op if it already exists)' },
     ],
     classNames: [
       { name: 'highlighted', color: 'gold/amber' },
@@ -76,6 +85,7 @@ export const RENDERER_MANIFEST = {
       { name: 'highlight_cell', params: { row: 'number', col: 'number', className: 'string?' }, description: 'Highlight a specific cell' },
       { name: 'highlight_row', params: { row: 'number' }, description: 'Highlight an entire row' },
       { name: 'highlight_col', params: { col: 'number' }, description: 'Highlight an entire column' },
+      { name: 'highlight_cells', params: { cells: '{row,col}[]', className: 'string?' }, description: 'Highlight multiple cells at once' },
       { name: 'show_dependency_arrow', params: { from: '{row,col}', to: '{row,col}', role: 'string' }, description: 'Draw an arrow between cells showing a dependency' },
       { name: 'clear_dependency_arrows', params: {}, description: 'Remove all dependency arrows' },
       { name: 'set_row_header', params: { row: 'number', label: 'string' }, description: 'Update a row header label' },
