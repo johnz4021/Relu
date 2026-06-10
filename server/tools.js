@@ -1,8 +1,19 @@
 // Claude tool schemas for ReLU
 
 import { ALGORITHMS } from './algorithms/registry.js';
+import { RENDERER_MANIFEST } from './rendererManifest.js';
 
 const algorithmEnum = Object.keys(ALGORITHMS);
+
+// Every legal viz_action name, generated from the renderer manifest (plus context-panel
+// actions and the server-intercepted toggle_residual). Constraining the schema to this
+// enum stops hallucinated action names at the API boundary; vizValidator.js then checks
+// the name is valid FOR the targeted renderer and that params match.
+const vizActionEnum = [...new Set([
+  ...Object.values(RENDERER_MANIFEST).flatMap((m) => m.actions.map((a) => a.name)),
+  'update', 'append_log', 'clear', // context panels (client contextManager.js)
+  'toggle_residual', // intercepted server-side in emit_segment
+])].sort();
 
 export const tools = [
   {
@@ -194,7 +205,8 @@ export const tools = [
               },
               action: {
                 type: 'string',
-                description: 'Renderer-specific action name',
+                enum: vizActionEnum,
+                description: 'Renderer-specific action name. Must be one of the documented actions for the TARGETED renderer (the enum is the union across all renderers — e.g. set_data is array-only, fill_cell is table-only).',
               },
               params: {
                 type: 'object',
@@ -215,7 +227,7 @@ export const tools = [
             required: ['renderer', 'action'],
           },
           description:
-            'Manual visualization actions. Only use when trace_step_indices cannot express what you need (rare). If both trace_step_indices and viz_actions are provided, auto-generated actions come first, then these are appended. Special action: toggle_residual ({action: "toggle_residual", show: true/false}) switches the graph between original and residual views.',
+            'Manual visualization actions. Only use when trace_step_indices cannot express what you need (rare). If both trace_step_indices and viz_actions are provided, auto-generated actions come first, then these are appended. Special action: toggle_residual ({action: "toggle_residual", show: true/false}) switches the graph between original and residual views. Every action is validated server-side against the renderer documentation: invalid action names or params are stripped and reported back to you — if ALL actions are invalid the call fails with the exact errors so you can fix and re-emit.',
         },
         phase: {
           type: 'string',
@@ -463,7 +475,7 @@ export const tools = [
           items: {
             type: 'object',
             properties: {
-              action: { type: 'string' },
+              action: { type: 'string', enum: vizActionEnum },
               node: { type: 'string' },
               from: { type: 'string' },
               to: { type: 'string' },

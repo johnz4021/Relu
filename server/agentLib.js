@@ -8,6 +8,7 @@ import { validateAlgorithmInput } from './algorithms/validateInput.js';
 import { adaptAlgorithmInput } from './algorithms/adaptInput.js';
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
 import { mapTraceStep } from './vizMapper.js';
+import { validateVizActionSchemas } from './vizValidator.js';
 import { getDefaultContextPanels } from './contextPanelDefaults.js';
 import { layoutGrid, autoLayout } from './graphLayout.js';
 
@@ -135,8 +136,15 @@ export function validatePanelIds(actions, panels) {
 
 // Validate agent-emitted viz_actions against the known graph.
 // Returns { valid, warnings } — invalid actions are stripped and reported back to the agent.
-function validateVizActions(actions, graph) {
-  const nodeIds = new Set(graph.nodes.map(n => n.id));
+// extraNodeIds: ids introduced outside the loaded graph (agent add_node calls, this batch
+// or earlier segments) — legal targets even though they aren't in session.currentGraph.
+function validateVizActions(actions, graph, extraNodeIds = new Set()) {
+  const nodeIds = new Set([...graph.nodes.map(n => n.id), ...extraNodeIds]);
+  // add_node in this same batch introduces ids that later actions in the batch may target
+  for (const action of actions) {
+    const p = action.params || action;
+    if (action.action === 'add_node' && p.id) nodeIds.add(p.id);
+  }
   const availableNodes = [...nodeIds].join(', ');
   const valid = [];
   const warnings = [];
@@ -181,6 +189,7 @@ export async function restoreGraphState(session, ws) {
   const saved = session._savedGraphState;
   console.log(`[restoreGraphState] restoring: renderer=${saved.renderer}, ${saved.emittedTraceSteps?.length || 0} emitted steps, algorithm=${saved.algorithm}, vizType=${saved.lastVizMessage?.type}`);
   session.currentGraph = saved.graph;
+  session._addedNodeIds = new Set();
   session.currentTrace = saved.trace;
   session.currentAlgorithm = saved.algorithm;
   session.currentRenderer = saved.renderer;
@@ -287,6 +296,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
       }
       sendJSON(ws, { type: 'create_graph', graph: graphData });
       session.currentGraph = graphData;
+      session._addedNodeIds = new Set();
       session._lastVizMessage = { type: 'create_graph', graph: graphData };
       if (!session._rendererVizHistory) session._rendererVizHistory = {};
       session._rendererVizHistory['graph'] = [];
@@ -520,6 +530,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               const autoGraphMsg = { type: 'create_graph', graph: finalGraph };
               sendJSON(ws, autoGraphMsg);
               session.currentGraph = finalGraph;
+              session._addedNodeIds = new Set();
               session._lastVizMessage = autoGraphMsg;
             }
             // If the agent pre-registered a custom-named graph panel (e.g. 'graph_main'
@@ -652,7 +663,16 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
                 act.renderer === rendererType ? { ...act, renderer: panelId } : act
               );
             }
-            allVizActions.push(...actions);
+            // Tier 2 traces are AI-authored — schema-check their embedded actions
+            // against the manifest. Lenient on unknown renderers (panel registry may
+            // not cover every Tier 2 panel) but strict on action names/params.
+            const { valid: t2Valid, errors: t2Errors } = validateVizActionSchemas(
+              actions, session._panels || {}, { lenientUnknownRenderer: true });
+            if (t2Errors.length > 0) {
+              console.warn(`[Agent] Tier 2 step ${idx} embedded viz_action errors:`, t2Errors);
+              mapperWarnings.push(...t2Errors.map((e) => `trace step ${idx}: ${e}`));
+            }
+            allVizActions.push(...t2Valid);
             continue;
           }
           const { viz: vizActs, ctx: ctxActs } = mapTraceStep(
@@ -684,12 +704,19 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
         console.warn('[Agent] trace_step_indices provided but no trace on session — was run_algorithm called?');
         mapperWarnings.push('trace_step_indices provided but no trace on session — was run_algorithm called?');
       }
-      // Merge any explicit viz_actions from agent (rare overrides / backward compat)
+      // Merge any explicit viz_actions from agent (manual path — model-authored, so this
+      // is where the full validation ladder runs: panel registry → manifest schema →
+      // graph node ids). Invalid actions are stripped with precise errors; if EVERYTHING
+      // the model supplied is invalid (and no trace actions carry the segment), the tool
+      // call FAILS so the model corrects and retries instead of the student watching
+      // narration point at a blank panel.
+      const traceActionCount = allVizActions.length;
+      let manualAccepted = 0;
       if (input.viz_actions && input.viz_actions.length > 0) {
         let actionsToProcess = input.viz_actions;
         const allActionWarnings = [];
 
-        // Panel registry validation — strip actions targeting undeclared panels/IDs
+        // 1. Panel registry validation — alias bare types, strip unknown panels/IDs
         if (session._panels) {
           const { valid: panelValid, warnings: panelWarnings } = validatePanelIds(actionsToProcess, session._panels);
           if (panelWarnings.length > 0) {
@@ -699,21 +726,53 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           actionsToProcess = panelValid;
         }
 
-        // Node/edge ID validation against the current graph (graph renderer only)
+        // 2. Manifest schema validation — action names + param types (vizValidator.js).
+        //    Repairs safe near-misses, coerces types, normalizes to nested params.
+        const { valid: schemaValid, errors: schemaErrors } = validateVizActionSchemas(
+          actionsToProcess, session._panels || {});
+        if (schemaErrors.length > 0) {
+          console.warn('[Agent] viz_action schema errors:', schemaErrors);
+        }
+        allActionWarnings.push(...schemaErrors);
+        actionsToProcess = schemaValid;
+
+        // 3. Node/edge ID validation against the current graph (graph renderer only).
+        //    Ids introduced by accepted add_node actions (this batch or earlier
+        //    segments) are legal targets.
         const graph = session.currentGraph;
         if (graph?.nodes?.length > 0) {
-          const { valid, warnings } = validateVizActions(actionsToProcess, graph);
+          if (!session._addedNodeIds) session._addedNodeIds = new Set();
+          const { valid, warnings } = validateVizActions(actionsToProcess, graph, session._addedNodeIds);
           if (warnings.length > 0) {
             console.warn('[Agent] viz_action node warnings:', warnings);
           }
           allActionWarnings.push(...warnings);
+          for (const act of valid) {
+            const p = act.params || act;
+            if (act.action === 'add_node' && p.id) session._addedNodeIds.add(p.id);
+          }
           allVizActions.push(...valid);
+          manualAccepted = valid.length;
         } else {
-          // No graph loaded — pass through (non-graph renderers like recursion_tree, table)
+          // No graph loaded — non-graph renderers (array, table, recursion_tree, …)
           allVizActions.push(...actionsToProcess);
+          manualAccepted = actionsToProcess.length;
         }
 
         session._lastVizWarnings = allActionWarnings;
+
+        // Loud failure: every supplied action was rejected and nothing else carries
+        // the segment. Reject the call — the errors below are precise enough to fix.
+        if (manualAccepted === 0 && traceActionCount === 0) {
+          const errs = session._lastVizWarnings;
+          session._lastVizWarnings = [];
+          return {
+            success: false,
+            message:
+              `Segment NOT delivered — every viz_action was invalid: ${errs.join('; ')}. ` +
+              'Fix the actions per the renderer documentation and call emit_segment again with the same narration.',
+          };
+        }
       }
 
       // Track viz_actions per renderer for state restoration (non-trace-step renderers like recursion_tree, interval, tree)
@@ -856,15 +915,58 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
         }
       }
 
+      // Validate model-supplied viz payloads before the client applies them.
+      const interruptVizWarnings = [];
+      let interruptVizActions = input.viz_actions || [];
+      if (interruptVizActions.length > 0) {
+        const { valid: pValid, warnings: pWarn } = validatePanelIds(interruptVizActions, session._panels || {});
+        const { valid: sValid, errors: sErr } = validateVizActionSchemas(pValid, session._panels || {});
+        interruptVizWarnings.push(...pWarn, ...sErr);
+        interruptVizActions = sValid;
+      }
+      let interruptOverlay = input.overlay || null;
+      if (interruptOverlay && session.currentGraph?.nodes?.length > 0) {
+        const nodeIds = new Set([
+          ...session.currentGraph.nodes.map((n) => n.id),
+          ...(session._addedNodeIds || []),
+        ]);
+        if (Array.isArray(interruptOverlay.spotlight_nodes)) {
+          const bad = interruptOverlay.spotlight_nodes.filter((n) => !nodeIds.has(n));
+          if (bad.length > 0) {
+            interruptVizWarnings.push(`overlay spotlight_nodes not in graph: [${bad.join(', ')}] (available: ${[...nodeIds].join(', ')})`);
+            interruptOverlay = {
+              ...interruptOverlay,
+              spotlight_nodes: interruptOverlay.spotlight_nodes.filter((n) => nodeIds.has(n)),
+            };
+          }
+        }
+        if (Array.isArray(interruptOverlay.spotlight_edges)) {
+          const bad = interruptOverlay.spotlight_edges.filter((e) => !nodeIds.has(e?.from) || !nodeIds.has(e?.to));
+          if (bad.length > 0) {
+            interruptVizWarnings.push(`overlay spotlight_edges reference unknown nodes: ${JSON.stringify(bad).slice(0, 120)}`);
+            interruptOverlay = {
+              ...interruptOverlay,
+              spotlight_edges: interruptOverlay.spotlight_edges.filter((e) => nodeIds.has(e?.from) && nodeIds.has(e?.to)),
+            };
+          }
+        }
+      }
+      if (interruptVizWarnings.length > 0) {
+        console.warn('[respond_to_interrupt] viz warnings:', interruptVizWarnings);
+      }
+      const interruptWarningText = interruptVizWarnings.length > 0
+        ? ` WARNINGS (invalid viz stripped): ${interruptVizWarnings.join('; ')}`
+        : '';
+
       sendJSON(ws, {
         type: 'interrupt_response',
         answer: input.answer,
         explanation_mode: input.explanation_mode || 'none',
-        overlay: input.overlay || null,
+        overlay: interruptOverlay,
         rewind: input.rewind || null,
         ghost_alternative: input.ghost_alternative || null,
         illustrate: input.illustrate || null,
-        viz_actions: input.viz_actions || [],
+        viz_actions: interruptVizActions,
       });
 
       const sendBinaryFn = (buffer) => sendBinary(ws, buffer);
@@ -963,6 +1065,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
         // Swap to the example graph
         sendJSON(ws, { type: 'create_graph', graph: graphData });
         session.currentGraph = graphData;
+        session._addedNodeIds = new Set();
         await new Promise((r) => setTimeout(r, 600));
 
         // Mark illustration active and return immediately — agent teaches with emit_segment
@@ -970,7 +1073,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
 
         return {
           success: true,
-          message: 'Example graph displayed. Teach on it using emit_segment with manual viz_actions (no trace_step_indices). Call end_illustration when done to restore the lesson graph.',
+          message: `Example graph displayed. Teach on it using emit_segment with manual viz_actions (no trace_step_indices). Call end_illustration when done to restore the lesson graph.${interruptWarningText}`,
         };
       }
 
@@ -983,7 +1086,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
 
       return {
         success: true,
-        message: 'Interrupt response delivered with explanation. Continue teaching.',
+        message: `Interrupt response delivered with explanation. Continue teaching.${interruptWarningText}`,
       };
     }
 
