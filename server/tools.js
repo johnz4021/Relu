@@ -101,7 +101,10 @@ export const tools = [
               },
               renderer: {
                 type: 'string',
-                enum: ['graph', 'array', 'table', 'tree', 'linked', 'recursion_tree'],
+                // Generated from the manifest — every client renderer is mountable.
+                // (string and interval were missing from the old hardcoded list, which
+                // made those renderers unreachable for on-the-fly visualizations.)
+                enum: Object.keys(RENDERER_MANIFEST),
               },
               title: {
                 type: 'string',

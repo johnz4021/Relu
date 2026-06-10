@@ -97,6 +97,14 @@ describe('vizMapper ↔ manifest parity', () => {
   });
 });
 
+describe('tools.js create_visualization schema ↔ manifest parity', () => {
+  it('every manifest renderer is mountable (string/interval were once missing)', () => {
+    const createViz = tools.find((t) => t.name === 'create_visualization');
+    const rendererEnum = createViz.input_schema.properties.panels.items.properties.renderer.enum;
+    expect([...rendererEnum].sort()).toEqual(Object.keys(RENDERER_MANIFEST).sort());
+  });
+});
+
 describe('tools.js emit_segment schema ↔ manifest parity', () => {
   it('the action enum covers every manifest action plus context actions', () => {
     const emitSegment = tools.find((t) => t.name === 'emit_segment');
