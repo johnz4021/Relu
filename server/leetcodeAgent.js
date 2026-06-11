@@ -97,13 +97,14 @@ DISAMBIGUATION RULES:
 - interval_merge vs interval_scheduling: "merge" = combine overlapping ranges → interval_merge; "select max non-overlapping" → interval_scheduling
 - topological_sort vs bfs/dfs: when problem explicitly involves dependency ordering or cycle detection in directed graph → topological_sort
 - two_pointers vs sliding_window: two_pointers is for pair-sum on sorted array; sliding_window is for fixed/variable window on unsorted array
+- container_water: Use for Container With Most Water (LC11) — converging two-pointer area maximization on { heights }. NOT two_pointers (no target sum) and NOT trapping rain water
 - binary_search vs two_pointers: binary_search for finding a value; two_pointers for finding a pair summing to target
 - two_sum_hash vs two_pointers: two_sum_hash when array is UNSORTED; two_pointers when array IS sorted
 - hash_map_grouping vs frequency_count: hash_map_grouping when grouping items by derived key; frequency_count when counting occurrences to find top-K or most frequent
 - greedy_choice vs interval_scheduling: greedy_choice for non-interval greedy (jump game, stock prices); interval_scheduling for interval selection
 - word_break vs lcs/edit_distance: use lcs for longest common subsequence, edit_distance for edit distance, word_break ONLY for Word Break (LC139) with wordDict input
 - max_subarray vs divide_conquer_array: REMOVED — use max_subarray for Maximum Subarray (Kadane's); Find Peak / Count Inversions → null
-- climbing_stairs vs recursion_memoization: REMOVED — use climbing_stairs ONLY for {n} input (Climbing Stairs, Fibonacci); House Robber → null
+- climbing_stairs vs recursion_memoization: REMOVED — use climbing_stairs ONLY for {n} input (Climbing Stairs, Fibonacci); House Robber → house_robber (registered, { nums } input)
 - word_search vs backtrack_grid: REMOVED — use word_search ONLY for board+word grid DFS; N-Queens → null
 - valid_sudoku: Use for Valid Sudoku (LC 36). Input shape: { board: string[9][9] of digits "1"-"9" or "." for empty cells }. Do NOT use for Sudoku Solver (LC 37) — that requires backtracking which is not yet supported.
 - min_path_sum vs matrix_dp: REMOVED — use min_path_sum for Minimum Path Sum and Unique Paths; Maximal Square → null

@@ -11,3 +11,4 @@ export { expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT } from './expandPalin
 export { kmpSearch, DEFAULT_KMP_SEARCH_INPUT } from './kmpSearch.js';
 export { findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT } from './findAnagrams.js';
 export { rotateArray, DEFAULT_ROTATE_ARRAY_INPUT } from './rotateArray.js';
+export { containerWater, DEFAULT_CONTAINER_WATER_INPUT } from './containerWater.js';

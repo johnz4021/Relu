@@ -2,7 +2,7 @@ import { dijkstra, bfs, dfs, DEFAULT_GRAPH, kruskal, prim, DEFAULT_UNDIRECTED_GR
 import { mergesort } from './sorting/index.js';
 import { knapsack, editDistance, lcs, coinChange, maxSubarray, DEFAULT_MAX_SUBARRAY_INPUT, wordBreak, DEFAULT_WORD_BREAK_INPUT, climbingStairs, DEFAULT_CLIMBING_STAIRS_INPUT, minPathSum, DEFAULT_MIN_PATH_SUM_INPUT } from './dp/index.js';
 import { polyReduction, DEFAULT_REDUCTION_FORMULA } from './complexity/index.js';
-import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT, rotateArray, DEFAULT_ROTATE_ARRAY_INPUT } from './searching/index.js';
+import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT, rotateArray, DEFAULT_ROTATE_ARRAY_INPUT, containerWater, DEFAULT_CONTAINER_WATER_INPUT } from './searching/index.js';
 import { huffman } from './compression/index.js';
 import { heapOperations, trie, DEFAULT_TRIE_INPUT, bstInsert, treeDfs, DEFAULT_TREE_DFS_INPUT, treeLevelOrder, DEFAULT_TREE_LEVEL_ORDER_INPUT, treePath, DEFAULT_TREE_PATH_INPUT, lcaTree, DEFAULT_LCA_TREE_INPUT, validateBst, DEFAULT_VALIDATE_BST_INPUT } from './tree/index.js';
 import { linkedListReversal, stackOperations, queueOperations, linkedListCycle, DEFAULT_LINKED_LIST_CYCLE_INPUT, mergeKSorted, DEFAULT_MERGE_K_SORTED_INPUT } from './linked/index.js';
@@ -384,6 +384,13 @@ export const ALGORITHMS = {
     renderer: 'array',
     category: 'Algorithms',
     defaultInput: DEFAULT_ROTATE_ARRAY_INPUT,
+    capabilities: { max_array_length: 15 },
+  },
+  container_water: {
+    run: (input) => containerWater(input),
+    renderer: 'array',
+    category: 'Searching / Two Pointers',
+    defaultInput: DEFAULT_CONTAINER_WATER_INPUT,
     capabilities: { max_array_length: 15 },
   },
 

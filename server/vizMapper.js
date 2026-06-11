@@ -1240,6 +1240,15 @@ function mapArrayStep(algo, step, state) {
             { key: 'Right', value: (step.array?.length ?? 1) - 1 },
           ],
         }));
+      } else if (algo === 'container_water') {
+        v.push(viz('array', 'set_pointer', { name: 'left', index: 0 }));
+        v.push(viz('array', 'set_pointer', { name: 'right', index: (step.array?.length ?? 1) - 1 }));
+        c.push(ctxUpdate('search_state', {
+          entries: [
+            { key: 'Width', value: (step.array?.length ?? 1) - 1 },
+            { key: 'Best', value: 0 },
+          ],
+        }));
       } else if (algo === 'gcd') {
         const cs = step.conceptual_state || {};
         c.push(ctxUpdate('stats', {
@@ -1476,6 +1485,14 @@ function mapArrayStep(algo, step, state) {
           ],
         }));
       } else {
+        if (algo === 'container_water') {
+          const pair = (step.indices || []).filter((x) => x != null);
+          if (pair.length > 0) v.push(viz('array', 'mark_sorted', { indices: pair }));
+          c.push(ctxUpdate('search_state', {
+            entries: [{ key: 'Best pair', value: `[${pair.join(', ')}]`, status: 'updated' }],
+          }));
+          break;
+        }
         // Search algos carry a single `index`; backtracking algos (combination_sum,
         // permutations) carry `indices` for the whole found solution.
         const foundIndices = Array.isArray(step.indices)
@@ -1581,6 +1598,24 @@ function mapArrayStep(algo, step, state) {
           { key: 'Left idx', value: step.left },
           { key: 'Right idx', value: step.right },
           { key: 'Sum', value: step.sum, status: step.sum === step.target ? 'updated' : 'highlight' },
+        ],
+      }));
+      break;
+    }
+
+    // Two-pointer area maximization (container_water). Not algo-gated: any
+    // converging-pointer algorithm whose per-step metric is an area/score can
+    // emit { left, right, area, best, improved }.
+    case 'check_area': {
+      v.push(viz('array', 'set_pointer', { name: 'left', index: step.left }));
+      v.push(viz('array', 'set_pointer', { name: 'right', index: step.right }));
+      v.push(viz('array', 'highlight', { indices: [step.left, step.right], className: step.improved ? 'sorted' : 'comparing' }));
+      c.push(ctxUpdate('search_state', {
+        entries: [
+          { key: 'Width', value: step.width },
+          { key: 'Height', value: step.height },
+          { key: 'Area', value: step.area, status: step.improved ? 'updated' : 'highlight' },
+          { key: 'Best', value: step.best, status: step.improved ? 'updated' : 'default' },
         ],
       }));
       break;

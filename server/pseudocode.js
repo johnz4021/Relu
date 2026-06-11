@@ -52,6 +52,15 @@ export const PSEUDOCODE = {
     'min_cut ← edges crossing S/T split', // 7
   ],
 
+  container_water: [
+    'left ← 0, right ← n-1, best ← 0',          // 0
+    'while left < right:',                          // 1
+    '  area ← (right-left) × min(h[left], h[right])', // 2
+    '  best ← max(best, area)',                    // 3
+    '  if h[left] < h[right]: left ← left + 1',   // 4
+    '  else: right ← right - 1',                   // 5
+    'return best',                                   // 6
+  ],
   binary_search: [
     'left ← 0, right ← n-1',             // 0
     'while left ≤ right:',                 // 1

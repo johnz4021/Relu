@@ -151,6 +151,11 @@ const PANEL_DEFAULTS = {
     { id: 'search_state', type: 'key_value', title: 'Search State' },
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
+  container_water: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.container_water } },
+    { id: 'search_state', type: 'key_value', title: 'Container State' },
+  ],
   interval_merge: [
     { id: 'stats', type: 'key_value', title: 'State' },
   ],
