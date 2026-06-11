@@ -3,6 +3,7 @@
 // Single Claude API call with structured tool output.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { GRAPH_BUILDER_MODEL } from './models.js';
 
 const defaultAnthropicClient = new Anthropic({ maxRetries: 3 });
 
@@ -231,7 +232,7 @@ export async function buildExampleGraph(problemText, solverResult, statusCallbac
     userContent.push({ type: 'text', text: textPart });
 
     const responsePromise = (anthropicClient || defaultAnthropicClient).messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: GRAPH_BUILDER_MODEL,
       max_tokens: 8000,
       system: VIZ_PLANNER_SYSTEM_PROMPT,
       tools: [SUBMIT_VIZ_PLAN_TOOL],

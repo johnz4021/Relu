@@ -2,6 +2,7 @@
 // giving the tutor a verified north star to guide toward.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { SOLVER_MODEL, SOLVER_LC_MODEL } from './models.js';
 
 const defaultAnthropicClient = new Anthropic({ maxRetries: 3 });
 
@@ -258,7 +259,7 @@ export async function solveProblems(subproblems, statusCallback, imageBase64, im
     userContent.push({ type: 'text', text: textPart });
 
     const responsePromise = (anthropicClient || defaultAnthropicClient).messages.create({
-      model: 'claude-opus-4-6',
+      model: SOLVER_MODEL,
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
       system: SOLVER_SYSTEM_PROMPT,
@@ -317,7 +318,7 @@ export async function solveProblem(problemText, statusCallback, imageBase64, ima
     userContent.push({ type: 'text', text: textPart });
 
     const responsePromise = (anthropicClient || defaultAnthropicClient).messages.create({
-      model: 'claude-opus-4-6',
+      model: SOLVER_MODEL,
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
       system: SOLVER_SYSTEM_PROMPT,
@@ -375,7 +376,7 @@ You MUST call submit_lc_solution. Do NOT respond with plain text.`;
 
   try {
     const responsePromise = (anthropicClient || defaultAnthropicClient).messages.create({
-      model: 'claude-sonnet-4-6',
+      model: SOLVER_LC_MODEL,
       max_tokens: 4096,
       system: systemPrompt,
       tools: [SUBMIT_LC_SOLUTION_TOOL],
