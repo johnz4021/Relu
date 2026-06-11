@@ -374,9 +374,22 @@ Every algorithm in the registry has:
 | `string` | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
 | `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, bit_ops, math_simulation, greedy_choice, jump_game_ii, valid_parentheses, task_scheduler, lru_cache, fast_power, gcd_algorithm, majority_vote |
 
-#### Tier 2: AI-Generated Trace Generators (dynamic only)
+#### Tier 2: AI-Generated Trace Generators (DORMANT)
 
-Tier 2 fires when a LeetCode problem does **not** match any registry entry (or matches below the 0.7 confidence bar). The extraction schema (`leetcodeAgent.js`) keeps `algorithm_key` enum-constrained to registry keys, but additionally requires a free-form **`pattern_key`** (snake_case pattern descriptor, e.g. `product_except_self`) plus a **`pattern_renderer`** whenever `algorithm_key` is null or low-confidence. `start_leetcode` (`index.js`) then calls `runAlgorithmWithFallback(pattern_key, …)` — the author-agent path — under a 45s timeout; on success the session is `viz_tier: 2`, on failure/timeout it degrades to **Tier 3 live viz** (see below), never to text-only. There are no pre-defined `run: null` stubs in the registry.
+> **STATUS: DORMANT (viz strategy decision 2026-06-11 — see TODOS.md "Viz strategy").**
+> Inline Tier 2 generation is disabled in `start_leetcode`: off-registry problems go
+> straight to **Tier 3 live viz** (below) with a client transparency toast
+> (`VizRequestToast.jsx`). The machinery in this section (authorAgent, sandbox, cache,
+> the off-registry `run_algorithm` path) remains in the codebase and unit-tested, but
+> is unreachable from the entry path. Do NOT re-enable without the revival criteria in
+> TODOS.md: move the Example-1 correctness check into the generation retry loop (it
+> only gates caching — a mismatched trace would be SERVED), require `output` on the
+> result step, lint every execution including cache hits, replace `node:vm` (not a
+> security boundary), background generation only. Rationale: Tier 1 dev-time authoring
+> (~1hr/pattern with the full test loop) dominates blind runtime generation; recurring
+> Tier 3 problems are promoted to Tier 1 instead.
+
+As designed: Tier 2 fired when a LeetCode problem did **not** match any registry entry (or matched below the 0.7 confidence bar). The extraction schema (`leetcodeAgent.js`) keeps `algorithm_key` enum-constrained to registry keys, but additionally requires a free-form **`pattern_key`** (snake_case pattern descriptor, e.g. `product_except_self`) plus a **`pattern_renderer`** whenever `algorithm_key` is null or low-confidence — these still flow to the session today: the Tier 3 intake block uses the renderer hint, and the pattern data feeds the Tier 1 promotion loop. There are no pre-defined `run: null` stubs in the registry.
 
 Mid-session, `run_algorithm` (`agentLib.js`) accepts off-registry keys: the tool schema has **no enum** on `algorithm` (a static registry enum would make pattern keys unpassable — the N-Queens incident: the model rerouted to the nearest registry key and ran the wrong algorithm). Typo protection lives server-side instead: an unknown key that is not the session's pattern key is rejected with an error (a hallucinated key must never trigger a 20-60s authoring call). When the key IS the session's Tier 2 pattern key, the handler **reuses `session._leetcodeTrace`** from the start_leetcode pre-run rather than regenerating — regeneration could stall the lesson and paint a different trace than the one already on screen. For off-registry keys generally: capability validation is skipped, empty agent input defaults to the parsed Example 1 `test_case`, the renderer comes from the generated result, and context-renderer traces get an auto-registered `algorithm_state` panel. The parser's `pattern_renderer` is honored at generation time (`context.renderer` in `runAlgorithmWithFallback`, ahead of `guessRenderer`; `recursion_tree` maps to `graph`). `applyClassification` likewise accepts the session pattern key as an execution target while still rejecting solver-hallucinated names.
 
@@ -410,9 +423,9 @@ runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
 
 **Key difference:** Tier 1 traces are guaranteed correct (hand-written, deterministic, covered by `tier1.deep.test.js`). Tier 2 traces are generated on-demand for unknown patterns — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
 
-#### Tier 3: Model-Authored Live Viz (the always-viz floor)
+#### Tier 3: Model-Authored Live Viz (the designed fallback)
 
-When neither a registry trace nor a generated trace exists (classifier returned no usable key AND Tier 2 failed/timed out), the session runs in **Tier 3 live viz** mode rather than text-only. `hasViz` stays `false`, `computeActiveTools` filters ONLY `run_algorithm` (there is no trace to load), and the intake text carries a `[LEETCODE MODE — TIER 3 LIVE VIZ]` block (or the companion `[COMPANION — OFF REGISTRY]` variant): the agent mounts the recommended renderer (`pattern_renderer` from the parser, default `array`), renders the problem's own Example 1 input, and hand-builds `viz_actions` in every `emit_segment` — the same model-authored path the on-the-fly eval suite measures at ≥95%. The renderer's manifest docs are injected into the intake block so the action contract is in context from turn 1. The enforcement ladder (loud per-action rejection, whole-call failure when everything is invalid) is what makes improvised viz safe — before it, these sessions hard-filtered the viz pipeline and opened with "I don't have a visualization for this one."
+When no registry trace exists (classifier returned no key, or below the 0.7 confidence bar), the session runs in **Tier 3 live viz** mode — the designed fallback under the 2026-06-11 viz strategy, not a degradation. `hasViz` stays `false` (`viz_tier: 3` on `lc_parsed`), the client shows a one-shot transparency toast ("drawn live, may be rougher — Looks wrong? Report it" → `/api/viz-request`, the demand signal for Tier 1 promotion), `computeActiveTools` filters ONLY `run_algorithm` (there is no trace to load), and the intake text carries a `[LEETCODE MODE — TIER 3 LIVE VIZ]` block (or the companion `[COMPANION — OFF REGISTRY]` variant): the agent mounts the recommended renderer (`pattern_renderer` from the parser, default `array`), renders the problem's own Example 1 input, and hand-builds `viz_actions` in every `emit_segment` — the same model-authored path the on-the-fly eval suite measures at ≥95%. The renderer's manifest docs are injected into the intake block so the action contract is in context from turn 1. The enforcement ladder (loud per-action rejection, whole-call failure when everything is invalid) is what makes improvised viz safe — before it, these sessions hard-filtered the viz pipeline and opened with "I don't have a visualization for this one."
 
 The same Tier 3 instruction applies on the web app when the solver classifies a problem `algorithm_execution` but out-of-scope (`applyClassification`): the agent builds the viz manually against the closest algorithm's renderer and never calls `run_algorithm`.
 
@@ -1123,14 +1136,10 @@ parseLeetcodeProblem(problemText)         ← EXTRACTION_MODEL (models.js), 10s 
     │       YES → runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput })
     │             └── sends lc_viz_ready { algorithm_key, renderer, trace, input, tier: 1 }
     │                (client can render the trace immediately, before teaching begins)
-    ├── TIER 2: else pattern_key present?
-    │       YES → sends lc_generating_viz { algorithm_key: pattern_key }   (client-optional)
-    │             runAlgorithmWithFallback(pattern_key, …) under 45s timeout
-    │             ├── success → lc_viz_ready { …, tier: 2 }, hasViz = true,
-    │             │             session._leetcodeAlgorithmKey = pattern_key
-    │             └── failure/timeout → fall through to TIER 3
-    └── TIER 3: hasViz = false → guided session runs in live-viz mode
-                (viz pipeline available, run_algorithm filtered — see Stage 2 Tier 3)
+    └── TIER 3: else hasViz = false, viz_tier = 3 → guided session runs in live-viz mode
+                (viz pipeline available, run_algorithm filtered — see Stage 2 Tier 3;
+                 client shows the VizRequestToast transparency disclosure)
+                [Tier 2 inline generation removed here 2026-06-11 — dormant, see Stage 2]
     │
     │   session._leetcodeExpectedOutput stored for reuse at agentLib.js call site
     │   session._leetcodePatternKey / _leetcodePatternRenderer stored for intake hints

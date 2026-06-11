@@ -547,52 +547,44 @@ function attachHandlers(ws, session) {
 
           const { title, algorithm_key, confidence, test_case, expected_output, pattern_key, pattern_renderer } = parsed;
           const algoEntry = ALGORITHMS[algorithm_key];
-          // ── Viz ladder ──
-          // Tier 1: registry trace (deterministic). Tier 2: AI-authored trace for the
-          // parser's free-form pattern_key (sandboxed + Example-1 correctness gate inside
-          // runAlgorithmWithFallback). Tier 3: no trace — the agent hand-builds viz_actions
-          // live through the enforcement ladder (hasViz stays false; run_algorithm filtered).
+          // ── Viz strategy (decided 2026-06-11, see TODOS.md "Viz strategy") ──
+          // Tier 1: registry trace (deterministic, the trust path — extended at dev
+          // time). Tier 3: no trace — the agent hand-builds viz_actions live through
+          // the enforcement ladder (hasViz stays false; run_algorithm filtered; the
+          // client shows a transparency toast). Tier 2 (runtime AI-authored traces)
+          // is DORMANT: do not re-enable inline generation without the revival
+          // criteria in TODOS.md — it executes LLM-generated code against user
+          // input and its correctness gate only guards caching, not serving.
           const tier1Available = !!(algorithm_key && confidence >= 0.7 && algoEntry?.run);
-          const tier2Key = !tier1Available && pattern_key ? pattern_key : null;
-          const preRunKey = tier1Available ? algorithm_key : tier2Key;
           let hasViz = false;
           let vizTier = null;
 
-          // Pre-run the trace so client gets viz immediately
-          if (preRunKey) {
+          // Pre-run the Tier 1 trace so client gets viz immediately
+          if (tier1Available) {
             try {
-              if (tier2Key) {
-                // Tier 2 generation is an LLM call (up to 3 authoring attempts). Tell the
-                // client (safely ignored if unhandled) and cap the wait — on timeout we
-                // degrade to Tier 3 rather than hang the session start.
-                ws.send(JSON.stringify({ type: 'lc_generating_viz', algorithm_key: tier2Key }));
-              }
-              const runPromise = runAlgorithmWithFallback(preRunKey, test_case, { description: title, expectedOutput: expected_output || null });
-              const result = tier2Key
-                ? await Promise.race([
-                    runPromise,
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Tier 2 generation timeout (45s)')), 45_000)),
-                  ])
-                : await runPromise;
+              const result = await runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput: expected_output || null });
               session._leetcodeTrace = result.trace;
               session._leetcodeRenderer = result.renderer;
               session._leetcodeInput = result.input;
               session._leetcodeTier = result.tier;
               vizTier = result.tier;
               hasViz = true;
-              ws.send(JSON.stringify({ type: 'lc_viz_ready', algorithm_key: preRunKey, renderer: result.renderer, trace: result.trace, input: result.input, tier: result.tier }));
+              ws.send(JSON.stringify({ type: 'lc_viz_ready', algorithm_key, renderer: result.renderer, trace: result.trace, input: result.input, tier: result.tier }));
             } catch (err) {
-              console.warn(`[LeetCode] Failed to pre-run trace (${preRunKey}):`, err.message);
+              console.warn(`[LeetCode] Failed to pre-run trace (${algorithm_key}):`, err.message);
               hasViz = false;
               vizTier = null;
             }
+          } else {
+            // Off-registry → Tier 3 live viz. pattern_key/pattern_renderer still flow
+            // to the session: the Tier 3 intake block uses the renderer hint, and the
+            // pattern data feeds the demand-driven Tier 1 promotion loop.
+            vizTier = 3;
+            console.log(`[LeetCode] Tier 3 fallback: key=${algorithm_key} conf=${confidence} pattern=${pattern_key || 'none'} renderer=${pattern_renderer || 'default'}`);
           }
 
           session.hasViz = hasViz;
-          // Tier 2 sessions teach against the pattern_key (run_algorithm resolves it via
-          // the Tier 2 cache); Tier 1 uses the registry key; Tier 3 keeps the parsed key
-          // (possibly null) — hasViz=false routes those sessions to live-viz mode.
-          session._leetcodeAlgorithmKey = hasViz && tier2Key ? tier2Key : algorithm_key;
+          session._leetcodeAlgorithmKey = algorithm_key;
           session._leetcodePatternKey = pattern_key || null;
           session._leetcodePatternRenderer = pattern_renderer || null;
           session._leetcodeTestCase = test_case;
