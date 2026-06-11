@@ -1861,6 +1861,22 @@ function mapTableStep(algo, step, state) {
         c.push(ctxUpdate('expression', {
           expression: step.description || `${algo} initialized`,
         }));
+      } else if (algo === 'board_backtracking') {
+        // Seed the Board State panel so it appears with the empty board.
+        c.push(ctxUpdate('board_state', {
+          entries: [
+            { key: 'Queens placed', value: `0 / ${step.n ?? step.rows}` },
+            { key: 'Current row', value: 0 },
+          ],
+        }));
+      } else if (algo === 'maximal_square') {
+        // Seed the Best Square panel so it appears alongside the empty grid.
+        c.push(ctxUpdate('square_state', {
+          entries: [
+            { key: 'Best side', value: 0 },
+            { key: 'Best area', value: 0 },
+          ],
+        }));
       } else if (algo === 'valid_sudoku') {
         // Pre-fill the board with starting digits. Empty cells stay 'empty';
         // pre-filled cells display the digit on a 'filled' background so they
@@ -2042,6 +2058,23 @@ function mapTableStep(algo, step, state) {
           }));
         }
         c.push(ctxLog('decisions', `dp[${step.row}][${step.col}] = ${step.value}`, 'info'));
+      } else if (algo === 'board_backtracking') {
+        // Queen placement: restore cells the previous step colored (conflict
+        // highlights / previous 'current' queen), then surface board state.
+        for (const rp of step.repaint || []) {
+          v.push(viz('table', 'highlight_cell', { row: rp.row, col: rp.col, className: rp.className }));
+        }
+        if (Array.isArray(step.state_entries)) {
+          c.push(ctxUpdate('board_state', { entries: step.state_entries }));
+        }
+      } else if (algo === 'maximal_square') {
+        c.push(ctxUpdate('square_state', {
+          entries: [
+            { key: 'Cell', value: `(${step.row}, ${step.col}) → ${step.value}` },
+            { key: 'Best side', value: step.best_side, status: step.improved ? 'updated' : 'default' },
+            { key: 'Best area', value: step.best_area, status: step.improved ? 'updated' : 'default' },
+          ],
+        }));
       }
       break;
     }
@@ -2113,6 +2146,32 @@ function mapTableStep(algo, step, state) {
             { key: 'Result', value: step.valid ? 'VALID ✓' : 'INVALID ✗', status: step.valid ? 'success' : 'error' },
           ],
         }));
+      } else if (algo === 'board_backtracking') {
+        // Only board_state is registered for this algo (no expression/decisions
+        // panels) — paint the solution green and surface it there.
+        for (const rp of step.repaint || []) {
+          v.push(viz('table', 'highlight_cell', { row: rp.row, col: rp.col, className: rp.className }));
+        }
+        for (const [r, c2] of step.solution || []) {
+          v.push(viz('table', 'highlight_cell', { row: r, col: c2, className: 'optimal' }));
+        }
+        c.push(ctxUpdate('board_state', {
+          entries: [
+            { key: 'Solution', value: step.output, status: (step.solution || []).length > 0 ? 'success' : 'error' },
+          ],
+        }));
+      } else if (algo === 'maximal_square') {
+        // Only square_state is registered for this algo — mark the winning
+        // square's cells and surface side/area there.
+        if (Array.isArray(step.square) && step.square.length > 0) {
+          v.push(viz('table', 'mark_optimal', { cells: step.square }));
+        }
+        c.push(ctxUpdate('square_state', {
+          entries: [
+            { key: 'Best side', value: step.best_side, status: 'success' },
+            { key: 'Best area', value: step.output, status: 'success' },
+          ],
+        }));
       } else {
         // Generic fallback for any table-renderer algo: surface description + output
         c.push(ctxUpdate('expression', {
@@ -2168,7 +2227,36 @@ function mapTableStep(algo, step, state) {
     }
 
     case 'conflict': {
+      if (algo === 'board_backtracking') {
+        // Restore previously colored cells, then flag the attacked square AND
+        // the attacking queens so the student sees WHY the placement fails.
+        for (const rp of step.repaint || []) {
+          v.push(viz('table', 'highlight_cell', { row: rp.row, col: rp.col, className: rp.className }));
+        }
+        v.push(viz('table', 'highlight_cell', { row: step.r, col: step.c, className: 'conflict' }));
+        for (const [ar, ac] of step.attackers || []) {
+          v.push(viz('table', 'highlight_cell', { row: ar, col: ac, className: 'conflict' }));
+        }
+        if (Array.isArray(step.state_entries)) {
+          c.push(ctxUpdate('board_state', { entries: step.state_entries }));
+        }
+        break;
+      }
       v.push(viz('table', 'highlight_cell', { row: step.r, col: step.c, className: 'conflict' }));
+      break;
+    }
+
+    // Backtracking eraser — generic: any table algorithm that needs to undo a
+    // cell write (board_backtracking today, a future sudoku solver tomorrow)
+    // emits { row, col } plus an optional `repaint` list of cells to restore.
+    case 'clear_cell': {
+      for (const rp of step.repaint || []) {
+        v.push(viz('table', 'highlight_cell', { row: rp.row, col: rp.col, className: rp.className }));
+      }
+      v.push(viz('table', 'fill_cell', { row: step.row, col: step.col, value: '', className: 'empty' }));
+      if (algo === 'board_backtracking' && Array.isArray(step.state_entries)) {
+        c.push(ctxUpdate('board_state', { entries: step.state_entries }));
+      }
       break;
     }
 

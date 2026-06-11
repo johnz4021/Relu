@@ -105,9 +105,10 @@ DISAMBIGUATION RULES:
 - word_break vs lcs/edit_distance: use lcs for longest common subsequence, edit_distance for edit distance, word_break ONLY for Word Break (LC139) with wordDict input
 - max_subarray vs divide_conquer_array: REMOVED — use max_subarray for Maximum Subarray (Kadane's); Find Peak / Count Inversions → null
 - climbing_stairs vs recursion_memoization: REMOVED — use climbing_stairs ONLY for {n} input (Climbing Stairs, Fibonacci); House Robber → house_robber (registered, { nums } input)
-- word_search vs backtrack_grid: REMOVED — use word_search ONLY for board+word grid DFS; N-Queens → null
+- word_search vs backtrack_grid: REMOVED — use word_search ONLY for board+word grid DFS; N-Queens → board_backtracking
+- board_backtracking: Use for N-Queens (LC51) and N-Queens II (LC52) — input { puzzle: "n_queens", n }. Do NOT use for Sudoku Solver (LC37): only n_queens is implemented → null
 - valid_sudoku: Use for Valid Sudoku (LC 36). Input shape: { board: string[9][9] of digits "1"-"9" or "." for empty cells }. Do NOT use for Sudoku Solver (LC 37) — that requires backtracking which is not yet supported.
-- min_path_sum vs matrix_dp: REMOVED — use min_path_sum for Minimum Path Sum and Unique Paths; Maximal Square → null
+- min_path_sum vs matrix_dp: REMOVED — use min_path_sum for Minimum Path Sum and Unique Paths; Maximal Square → maximal_square (registered, { matrix: string[][] of "0"/"1" } input)
 - rotate_array vs array_manipulation: REMOVED — use rotate_array ONLY for Rotate Array (LC189); Move Zeroes/Product Except Self → null
 - tree_depth_dfs vs tree_level_order vs tree_path: depth/balance/comparison problems → tree_depth_dfs; level-by-level output → tree_level_order; root-to-leaf sum/path → tree_path
 - bst_insert vs tree_depth_dfs: bst_insert ONLY when inserting values into a BST; tree_depth_dfs for any other binary tree operation

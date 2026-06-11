@@ -61,6 +61,26 @@ export const PSEUDOCODE = {
     '  else: right ← right - 1',                   // 5
     'return best',                                   // 6
   ],
+
+  board_backtracking: [
+    'solve(row):',                                   // 0
+    '  if row = n: all queens placed — done',       // 1
+    '  for col = 0 to n-1:',                         // 2
+    '    if (row, col) is attacked: skip col',       // 3
+    '    place queen at (row, col)',                 // 4
+    '    if solve(row + 1): return true',            // 5
+    '    remove queen (backtrack)',                  // 6
+    '  return false',                                 // 7
+  ],
+
+  maximal_square: [
+    'dp[i][j] ← side of largest square ending at (i,j)', // 0
+    'for each cell (i, j):',                              // 1
+    "  if matrix[i][j] = '0': dp[i][j] ← 0",             // 2
+    '  else if i = 0 or j = 0: dp[i][j] ← 1',            // 3
+    '  else: dp[i][j] ← min(left, up, diag) + 1',        // 4
+    'return best_side²  (largest area)',                  // 5
+  ],
   binary_search: [
     'left ← 0, right ← n-1',             // 0
     'while left ≤ right:',                 // 1

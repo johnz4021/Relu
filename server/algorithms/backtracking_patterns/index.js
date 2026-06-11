@@ -182,3 +182,5 @@ export function permutations(input) {
 }
 
 export const DEFAULT_PERMUTATIONS_INPUT = { nums: [1, 2, 3] };
+
+export { boardBacktracking, DEFAULT_BOARD_BACKTRACKING_INPUT } from './boardBacktracking.js';

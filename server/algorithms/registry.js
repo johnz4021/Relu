@@ -9,14 +9,14 @@ import { linkedListReversal, stackOperations, queueOperations, linkedListCycle, 
 // Tier 1 pattern modules
 import { hashMapGrouping, DEFAULT_HASH_MAP_GROUPING_INPUT, frequencyCount, DEFAULT_FREQUENCY_COUNT_INPUT, twoSumHash, DEFAULT_TWO_SUM_HASH_INPUT, stringHash, DEFAULT_STRING_HASH_INPUT, setOperations, DEFAULT_SET_OPERATIONS_INPUT, bitOps, DEFAULT_BIT_OPS_INPUT, mathSimulation, DEFAULT_MATH_SIMULATION_INPUT, greedyChoice, DEFAULT_GREEDY_CHOICE_INPUT, jumpGameII, DEFAULT_JUMP_GAME_II_INPUT, validParentheses, DEFAULT_VALID_PARENTHESES_INPUT, taskScheduler, DEFAULT_TASK_SCHEDULER_INPUT, lruCache, DEFAULT_LRU_CACHE_INPUT } from './hashing/index.js';
 import { prefixSum, DEFAULT_PREFIX_SUM_INPUT, differenceArray, DEFAULT_DIFFERENCE_ARRAY_INPUT } from './prefix/index.js';
-import { lis, DEFAULT_LIS_INPUT, stockDp, DEFAULT_STOCK_DP_INPUT, intervalDp, DEFAULT_INTERVAL_DP_INPUT, palindromeDp, DEFAULT_PALINDROME_DP_INPUT, bitmaskDp, DEFAULT_BITMASK_DP_INPUT, treeDP, DEFAULT_TREE_DP_INPUT, houseRobber, DEFAULT_HOUSE_ROBBER_INPUT } from './dp_patterns/index.js';
+import { lis, DEFAULT_LIS_INPUT, stockDp, DEFAULT_STOCK_DP_INPUT, intervalDp, DEFAULT_INTERVAL_DP_INPUT, palindromeDp, DEFAULT_PALINDROME_DP_INPUT, bitmaskDp, DEFAULT_BITMASK_DP_INPUT, treeDP, DEFAULT_TREE_DP_INPUT, houseRobber, DEFAULT_HOUSE_ROBBER_INPUT, maximalSquare, DEFAULT_MAXIMAL_SQUARE_INPUT } from './dp_patterns/index.js';
 import { multiSourceBfs, DEFAULT_MULTI_SOURCE_BFS_INPUT, floydWarshall, DEFAULT_FLOYD_WARSHALL_INPUT, tarjanBridges, DEFAULT_TARJAN_BRIDGES_INPUT, bipartiteCheck, DEFAULT_BIPARTITE_CHECK_INPUT, dijkstraKStops, DEFAULT_DIJKSTRA_K_STOPS_INPUT } from './graph_advanced/index.js';
 import { topKHeap, DEFAULT_TOP_K_HEAP_INPUT, medianFinder, DEFAULT_MEDIAN_FINDER_INPUT, kClosestPoints, DEFAULT_K_CLOSEST_POINTS_INPUT } from './heap_patterns/index.js';
 import { sievePrimes, DEFAULT_SIEVE_PRIMES_INPUT, fastPower, DEFAULT_FAST_POWER_INPUT, gcdAlgorithm, DEFAULT_GCD_ALGORITHM_INPUT, majorityVote, DEFAULT_MAJORITY_VOTE_INPUT } from './math_patterns/index.js';
 import { rabinKarp, DEFAULT_RABIN_KARP_INPUT, manacher, DEFAULT_MANACHER_INPUT } from './string_advanced/index.js';
 import { numberOfIslands, DEFAULT_NUMBER_OF_ISLANDS_INPUT, spiralMatrix, DEFAULT_SPIRAL_MATRIX_INPUT, rotateMatrix, DEFAULT_ROTATE_MATRIX_INPUT } from './matrix/index.js';
 import { validSudoku, DEFAULT_VALID_SUDOKU_INPUT } from './matrix/validSudoku.js';
-import { combinationSum, DEFAULT_COMBINATION_SUM_INPUT, subsets, DEFAULT_SUBSETS_INPUT, permutations, DEFAULT_PERMUTATIONS_INPUT } from './backtracking_patterns/index.js';
+import { combinationSum, DEFAULT_COMBINATION_SUM_INPUT, subsets, DEFAULT_SUBSETS_INPUT, permutations, DEFAULT_PERMUTATIONS_INPUT, boardBacktracking, DEFAULT_BOARD_BACKTRACKING_INPUT } from './backtracking_patterns/index.js';
 import { slidingWindowMax, DEFAULT_SLIDING_WINDOW_MAX_INPUT, jumpGame, DEFAULT_JUMP_GAME_INPUT } from './monotonic_deque/index.js';
 
 /**
@@ -532,6 +532,12 @@ export const ALGORITHMS = {
     defaultInput: DEFAULT_HOUSE_ROBBER_INPUT,
     capabilities: { max_array_length: 12 },
   },
+  maximal_square: {
+    run: (input) => maximalSquare(input),
+    renderer: 'table', category: 'Dynamic Programming',
+    defaultInput: DEFAULT_MAXIMAL_SQUARE_INPUT,
+    capabilities: { max_table_rows: 8, max_table_cols: 8 },
+  },
 
   // ── Advanced Graph patterns (Tier 1) ─────────────────────────────────────────
   multi_source_bfs: {
@@ -672,6 +678,14 @@ export const ALGORITHMS = {
     renderer: 'array', category: 'Backtracking',
     defaultInput: DEFAULT_PERMUTATIONS_INPUT,
     capabilities: { max_array_length: 6 },
+  },
+  board_backtracking: {
+    // Parametric board-placement backtracking; puzzle: 'n_queens' only today.
+    // The n×n table is the chessboard (a graph circle layout failed here).
+    run: (input) => boardBacktracking(input),
+    renderer: 'table', category: 'Backtracking',
+    defaultInput: DEFAULT_BOARD_BACKTRACKING_INPUT,
+    capabilities: { max_table_rows: 8, max_table_cols: 8 },
   },
 
   // ── Monotonic Deque patterns (Tier 1) ─────────────────────────────────────────

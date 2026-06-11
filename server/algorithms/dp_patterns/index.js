@@ -371,3 +371,111 @@ export function houseRobber(input) {
 }
 
 export const DEFAULT_HOUSE_ROBBER_INPUT = { nums: [2, 7, 9, 3, 1] };
+
+// ── maximal_square — Maximal Square (LC221, 2D DP) ────────────────────────────
+// dp[i][j] = side of the largest all-'1' square whose bottom-right corner is
+// (i, j): min(left, up, diag) + 1 when matrix[i][j] = '1', else 0.
+// Renderer: table — knapsack-shaped steps (init_table / fill_cell {row, col,
+// value, from} / result {output}) so the generic mapTableStep cases handle the
+// grid; an algo-gated branch surfaces best side/area on the square_state panel.
+export function maximalSquare(input) {
+  const matrix = input.matrix || DEFAULT_MAXIMAL_SQUARE_INPUT.matrix;
+  const rows = matrix.length;
+  const cols = matrix[0]?.length || 0;
+  const dp = Array.from({ length: rows }, () => new Array(cols).fill(0));
+  const trace = [];
+
+  trace.push({
+    type: 'init_table',
+    pseudocode_line: 0,
+    rows,
+    cols,
+    rowLabels: Array.from({ length: rows }, (_, i) => `r${i}`),
+    colLabels: Array.from({ length: cols }, (_, i) => `c${i}`),
+    description: `Maximal Square: dp[i][j] = side of the largest all-1 square ending (bottom-right) at (i,j) in the ${rows}×${cols} matrix.`,
+  });
+
+  let bestSide = 0;
+  let bestCell = null;
+
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      let from = [];
+      let line;
+      let explain;
+      if (matrix[i][j] !== '1') {
+        dp[i][j] = 0;
+        line = 2;
+        explain = `matrix[${i}][${j}] = '0' → dp[${i}][${j}] = 0 (no square ends here)`;
+      } else if (i === 0 || j === 0) {
+        dp[i][j] = 1;
+        line = 3;
+        explain = `matrix[${i}][${j}] = '1' on the border → dp[${i}][${j}] = 1 (1×1 square)`;
+      } else {
+        const left = dp[i][j - 1];
+        const up = dp[i - 1][j];
+        const diag = dp[i - 1][j - 1];
+        dp[i][j] = Math.min(left, up, diag) + 1;
+        const minVal = Math.min(left, up, diag);
+        from = [
+          { row: i, col: j - 1, role: left === minVal ? 'optimal' : 'skip' },
+          { row: i - 1, col: j, role: up === minVal ? 'optimal' : 'skip' },
+          { row: i - 1, col: j - 1, role: diag === minVal ? 'optimal' : 'skip' },
+        ];
+        line = 4;
+        explain = `dp[${i}][${j}] = min(left ${left}, up ${up}, diag ${diag}) + 1 = ${dp[i][j]}`;
+      }
+
+      const improved = dp[i][j] > bestSide;
+      if (improved) {
+        bestSide = dp[i][j];
+        bestCell = [i, j];
+      }
+
+      trace.push({
+        type: 'fill_cell',
+        pseudocode_line: line,
+        row: i,
+        col: j,
+        value: dp[i][j],
+        from,
+        best_side: bestSide,
+        best_area: bestSide * bestSide,
+        improved,
+        description: `${explain}.${improved ? ` New best side ${bestSide} → area ${bestSide * bestSide}.` : ''}`,
+      });
+    }
+  }
+
+  // Cells of the best square (for the result-step optimal highlight).
+  const square = [];
+  if (bestCell) {
+    for (let r = bestCell[0] - bestSide + 1; r <= bestCell[0]; r++) {
+      for (let c = bestCell[1] - bestSide + 1; c <= bestCell[1]; c++) {
+        square.push({ row: r, col: c });
+      }
+    }
+  }
+
+  trace.push({
+    type: 'result',
+    pseudocode_line: 5,
+    best_side: bestSide,
+    square,
+    output: String(bestSide * bestSide),
+    description: bestSide > 0
+      ? `Largest square has side ${bestSide}${bestCell ? `, ending at (${bestCell[0]},${bestCell[1]})` : ''} → area ${bestSide * bestSide}.`
+      : 'No 1s in the matrix → maximal square area 0.',
+  });
+
+  return trace;
+}
+
+export const DEFAULT_MAXIMAL_SQUARE_INPUT = {
+  matrix: [
+    ['1', '0', '1', '0', '0'],
+    ['1', '0', '1', '1', '1'],
+    ['1', '1', '1', '1', '1'],
+    ['1', '0', '0', '1', '0'],
+  ],
+};

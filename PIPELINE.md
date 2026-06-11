@@ -47,7 +47,7 @@ guidedAgent.js
        ▼
   algorithms/registry.js
   ┌────┴──────────────────────────────────────┐
-  │ Tier 1: hand-written run() (92 algorithms) │
+  │ Tier 1: hand-written run() (96 algorithms) │
   │ Tier 2: authorAgent.js (unknown patterns)  │
   └────────────────────────────────────────────┘
        │
@@ -361,13 +361,13 @@ Every algorithm in the registry has:
 
 `run` is a synchronous JS function that executes the real algorithm and emits a step-by-step trace array. Deterministic, instant, no network call. Every algorithm in the registry is Tier 1 — there are no `run: null` stubs.
 
-**Tier 1 algorithms by renderer (92 total):**
+**Tier 1 algorithms by renderer (96 total):**
 
 | Renderer | Algorithms |
 |---|---|
 | `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, poly_reduction, trie, union_find, topological_sort, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
-| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
-| `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum, stock_dp, interval_dp, palindrome_dp, bitmask_dp |
+| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array, container_water, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
+| `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum, stock_dp, interval_dp, palindrome_dp, bitmask_dp, valid_sudoku, board_backtracking, maximal_square |
 | `tree` | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path, tree_dp, top_k_heap, median_finder, k_closest_points, lca_tree, validate_bst, linked_list_cycle, merge_k_sorted |
 | `linked` | linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
 | `interval` | interval_merge, interval_scheduling |
@@ -737,16 +737,16 @@ Algorithm categories (all Tier 1):
 |---|---|
 | Graph Algorithms | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, union_find, topological_sort, trie, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
 | Sorting | mergesort |
-| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, max_subarray, word_break, climbing_stairs, min_path_sum, lis, stock_dp, interval_dp, palindrome_dp, bitmask_dp, tree_dp, house_robber |
+| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, max_subarray, word_break, climbing_stairs, min_path_sum, lis, stock_dp, interval_dp, palindrome_dp, bitmask_dp, tree_dp, house_robber, maximal_square |
 | Divide and Conquer | quickselect |
 | Greedy Algorithms | huffman, interval_merge, interval_scheduling, greedy_choice, jump_game, jump_game_ii |
 | Data Structures | heap_ops, bst_insert, linked_list_reversal, stack_operations, queue_operations, monotonic_stack, top_k_heap, median_finder, k_closest_points, lru_cache, trie |
 | Trees | tree_depth_dfs, tree_level_order, tree_path, tree_dp, lca_tree, validate_bst |
 | Linked Lists | linked_list_cycle, merge_k_sorted |
-| Searching / Two Pointers | binary_search, two_pointers, sliding_window, sliding_window_max |
+| Searching / Two Pointers | binary_search, two_pointers, sliding_window, sliding_window_max, container_water |
 | Prefix / Difference Arrays | prefix_sum, difference_array |
 | Matrix | spiral_matrix, rotate_matrix, number_of_islands |
-| Backtracking | backtracking, word_search, combination_sum, subsets, permutations |
+| Backtracking | backtracking, word_search, combination_sum, subsets, permutations, board_backtracking (table renderer; N-Queens — `{ puzzle: 'n_queens', n }`, parametric for future board puzzles) |
 | String Algorithms | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
 | Hashing / Sets | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, valid_parentheses, task_scheduler |
 | Math / Bit Manipulation | sieve_primes, fast_power, gcd_algorithm, majority_vote, bit_ops, math_simulation |
@@ -1319,7 +1319,7 @@ Student pastes problem
     │  create_visualization / create_graph ─────────────────────► client: mount renderer
     │                                                             │
     │  run_algorithm ───────────────────────────────────────────► registry.js
-    │      └── Tier 1: hand-written run() (all 92 known algos)    │
+    │      └── Tier 1: hand-written run() (all 96 known algos)    │
     │          Tier 2: cache.js → sandbox.js → authorAgent.js     │
     │                 (only for unknown LeetCode patterns)         │
     │          returns: { trace, renderer, input, tier }          │

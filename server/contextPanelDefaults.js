@@ -156,6 +156,16 @@ const PANEL_DEFAULTS = {
       initial_data: { lines: PSEUDOCODE.container_water } },
     { id: 'search_state', type: 'key_value', title: 'Container State' },
   ],
+  board_backtracking: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.board_backtracking } },
+    { id: 'board_state', type: 'key_value', title: 'Board State' },
+  ],
+  maximal_square: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.maximal_square } },
+    { id: 'square_state', type: 'key_value', title: 'Best Square' },
+  ],
   interval_merge: [
     { id: 'stats', type: 'key_value', title: 'State' },
   ],
