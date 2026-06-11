@@ -151,8 +151,12 @@ export const tools = [
       properties: {
         algorithm: {
           type: 'string',
-          enum: algorithmEnum,
-          description: 'Algorithm to execute',
+          // No enum: Tier 2 sessions legally pass an off-registry pattern key
+          // (e.g. "n_queens_backtracking" from the [TIER 2 TRACE] session context).
+          // Server-side validation in agentLib rejects anything that is neither a
+          // registry key nor the session's pattern key, preserving the typo
+          // protection the enum used to provide.
+          description: `Algorithm to execute. One of the registered algorithms (${algorithmEnum.join(', ')}) — or, in sessions with a generated (Tier 2) trace, the exact pattern key named in your session context.`,
         },
         source: {
           type: 'string',

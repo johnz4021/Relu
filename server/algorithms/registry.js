@@ -745,7 +745,9 @@ export async function runAlgorithmWithFallback(algorithmId, input, context) {
   const { executeTraceInSandbox } = await import('./sandbox.js');
 
   // Renderer: use registry entry if available, otherwise guess from name
-  const renderer = algo?.renderer || guessRenderer(algorithmId);
+  // Renderer priority: registry entry → caller's explicit hint (the LC parser's
+  // pattern_renderer, passed via context) → name-based heuristic.
+  const renderer = algo?.renderer || context?.renderer || guessRenderer(algorithmId);
   // Merge default input from registry with provided input
   const actualInput = algo?.defaultInput ? { ...algo.defaultInput, ...input } : input;
 

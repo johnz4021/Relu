@@ -120,3 +120,18 @@ describe('tools.js emit_segment schema ↔ manifest parity', () => {
     expect(missing).toEqual([]);
   });
 });
+
+// ── run_algorithm schema: pattern keys must not be enum-blocked ──────────────
+// Regression (N-Queens incident 2026-06-11): a static registry enum on the
+// algorithm param made Tier 2 pattern keys unpassable — the model rerouted to
+// the nearest registry key and ran the wrong algorithm. Typo protection now
+// lives server-side in agentLib (unknown key ≠ session pattern key → error).
+describe('run_algorithm tool schema — no algorithm enum', () => {
+  it('algorithm param is free-form with the registry list in the description', () => {
+    const runAlgo = tools.find((t) => t.name === 'run_algorithm');
+    const param = runAlgo.input_schema.properties.algorithm;
+    expect(param.enum).toBeUndefined();
+    expect(param.description).toContain('pattern key');
+    expect(param.description).toContain('dijkstra');
+  });
+});
