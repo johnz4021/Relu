@@ -15,6 +15,7 @@ import { createConversation, listConversations, loadConversationMessages, loadAg
 import { parseLeetcodeProblem } from './leetcodeAgent.js';
 import { ALGORITHMS, runRegisteredAlgorithm, runAlgorithmWithFallback } from './algorithms/registry.js';
 import { encrypt, decrypt } from './crypto.js';
+import { KEY_VALIDATION_MODEL } from './models.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -421,7 +422,7 @@ function attachHandlers(ws, session) {
           try {
             const testClient = new Anthropic({ apiKey: key });
             await testClient.messages.create({
-              model: 'claude-haiku-4-5-20251001',
+              model: KEY_VALIDATION_MODEL,
               max_tokens: 1,
               messages: [{ role: 'user', content: 'hi' }],
             });

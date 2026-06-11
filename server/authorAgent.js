@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { buildRendererDocs } from './rendererManifest.js';
+import { AUTHOR_MODEL } from './models.js';
 
 const anthropic = new Anthropic({ maxRetries: 5 });
 
@@ -170,7 +171,7 @@ ${buildRendererDocs([renderer])}`;
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: AUTHOR_MODEL,
     max_tokens: 4096,
     system: AUTHOR_SYSTEM_PROMPT,
     messages: [

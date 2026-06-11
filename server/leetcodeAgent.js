@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ALGORITHMS } from './algorithms/registry.js';
+import { EXTRACTION_MODEL } from './models.js';
 
 const client = new Anthropic();
 
@@ -132,7 +133,7 @@ export async function parseLeetcodeProblem(problemText, anthropicClient) {
 
   const extraction = await Promise.race([
     apiClient.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: EXTRACTION_MODEL,
       max_tokens: 1024,
       system: EXTRACTION_SYSTEM_PROMPT,
       tools: [EXTRACTION_TOOL],

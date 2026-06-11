@@ -3,6 +3,7 @@
 // Single Claude API call with structured tool output.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { RENDERER_ADVISOR_MODEL } from './models.js';
 
 const defaultAnthropicClient = new Anthropic({ maxRetries: 3 });
 
@@ -145,7 +146,7 @@ export async function adviseRenderer(problemText, solverResult, reasoningMode, s
     userContent.push({ type: 'text', text: textPart });
 
     const responsePromise = (anthropicClient || defaultAnthropicClient).messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: RENDERER_ADVISOR_MODEL,
       max_tokens: 4000,
       system: DESIGN_VIZ_PLANNER_PROMPT,
       tools: [SUBMIT_DESIGN_VIZ_PLAN_TOOL],

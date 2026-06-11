@@ -177,7 +177,7 @@ This ensures design-mode teaching stays focused on the design task (writing the 
 ### Stage 0: Solver (Pre-teaching Analysis)
 
 **File:** `server/solver.js`  
-**Model:** `claude-opus-4-6` with `thinking: { type: 'adaptive' }` (extended thinking)  
+**Model:** `SOLVER_MODEL` (see `server/models.js` — the single source of truth for per-role models) with `thinking: { type: 'adaptive' }` (extended thinking)  
 **Triggered by:** `run_solver` tool call inside the agent loop  
 **Timeout:** 5 minutes
 
@@ -526,7 +526,7 @@ After the per-renderer mapper returns, `mapTraceStep` appends one universal acti
 ### Stage 5: Teaching Loop (LLM-driven)
 
 **File:** `server/guidedAgent.js`  
-**Model:** `claude-opus-4-6`, `max_tokens: 4096`  
+**Model:** `TEACHING_MODEL` (`server/models.js`), `max_tokens: 4096`  
 **Max API calls per session:** 150
 
 The guided agent runs this loop structure:
@@ -1110,7 +1110,7 @@ The LeetCode path has an extra pre-processing step before the guided session:
 start_leetcode message
     │
     ▼
-parseLeetcodeProblem(problemText)         ← claude-haiku-4-5-20251001, 10s timeout
+parseLeetcodeProblem(problemText)         ← EXTRACTION_MODEL (models.js), 10s timeout
     │
     ▼
 { title, algorithm_key, confidence, test_case, test_case_source, expected_output,
@@ -1296,7 +1296,7 @@ Student pastes problem
           │
           ▼
     ┌─────────────────────────────────────────────────────────────┐
-    │             LLM Loop (claude-opus-4-6)                      │
+    │             LLM Loop (TEACHING_MODEL, models.js)            │
     │                                                             │
     │  [guided only] conversational_reply → intake question       │
     │                                                             │
@@ -1352,6 +1352,7 @@ Student pastes problem
 | `server/solver.js` | Pre-teaching solver: `solveProblem` (opus + thinking) and `solveLeetcodeProblem` (sonnet, 60s) |
 | `server/graphBuilder.js` | Example graph constructor for algorithm_execution mode |
 | `server/algorithms/registry.js` | Algorithm registry, Tier 1/2 dispatch, renderer fallback |
+| `server/models.js` | Single source of truth for per-role model IDs (teaching, solver, author, builder, extraction) — swap models here only |
 | `server/authorAgent.js` | Tier 2 trace generator code writer |
 | `server/sandbox.js` | Sandboxed execution for Tier 2 generated code |
 | `server/algorithms/cache.js` | Tier 2 code cache — compound keys, correctness gate (`outputMatchesExpected`), L1+L2 storage |

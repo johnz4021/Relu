@@ -38,8 +38,9 @@ import { tools } from './tools.js';
 import { buildRendererDocs } from './rendererManifest.js';
 
 const ENABLED = process.env.RELU_EVAL === '1' && !!process.env.ANTHROPIC_API_KEY;
-// Production teaching model (guidedAgent.js); override with RELU_EVAL_MODEL for cheap runs.
-const MODEL = process.env.RELU_EVAL_MODEL || 'claude-opus-4-6';
+// Production teaching model (models.js); override with RELU_EVAL_MODEL to test candidates.
+import { TEACHING_MODEL } from './models.js';
+const MODEL = process.env.RELU_EVAL_MODEL || TEACHING_MODEL;
 
 const TOOL_NAMES = ['create_graph', 'create_visualization', 'emit_segment'];
 const evalTools = tools.filter((t) => TOOL_NAMES.includes(t.name));

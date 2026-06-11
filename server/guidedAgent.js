@@ -11,6 +11,7 @@ import { RENDERER_MANIFEST, buildRendererDocs } from './rendererManifest.js';
 import { solveProblem, solveLeetcodeProblem, solveProblems } from './solver.js';
 import { buildExampleGraph } from './graphBuilder.js';
 import { saveMessage, saveAgentState, completeConversation } from './db.js';
+import { TEACHING_MODEL } from './models.js';
 
 // Build algorithm list dynamically from registry
 function buildAlgorithmList() {
@@ -1404,7 +1405,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
     try {
       apiCallCount++;
       response = await getClient(session).messages.create({
-        model: 'claude-opus-4-6',
+        model: TEACHING_MODEL,
         max_tokens: 4096,
         system: systemPrompt,
         tools: computeActiveTools(session, guidedTools),
