@@ -784,7 +784,10 @@ export default function App() {
       </header>
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Below md (the 520px companion rail) the viz+chat split stacks vertically —
+          viz top, tutor below (design review 2026-06-11; the 06-04 doc's intent).
+          The other branches are single flex-1 children, indifferent to direction. */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {showSelector ? (
           <div className="flex-1 relative">
             {gateStatus && !gateStatus.allowed ? (
@@ -905,8 +908,8 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Left: visualization + optional pseudocode section */}
-            <div className="w-2/3 h-full overflow-hidden border-r border-border flex flex-col">
+            {/* Left (stacked: top): visualization + optional pseudocode section */}
+            <div className="w-full md:w-2/3 h-[45%] md:h-full overflow-hidden border-b md:border-b-0 md:border-r border-border flex flex-col">
               {/* Viz — expands to fill when no pseudocode, or takes ~62% when pseudocode exists */}
               <div className="overflow-hidden min-h-0" style={{ flex: pseudocodePanel ? '3 3 0' : '1 1 0' }}>
                 {useVizLayout ? (
@@ -955,8 +958,8 @@ export default function App() {
               )}
             </div>
 
-            {/* Right: state panels (capped) + transcript + controls */}
-            <div className="w-1/3 flex flex-col overflow-hidden bg-surface-1">
+            {/* Right (stacked: bottom): state panels (capped) + transcript + controls */}
+            <div className="w-full md:w-1/3 flex-1 md:flex-none min-h-0 flex flex-col overflow-hidden bg-surface-1">
               {statePanels.length > 0 && (
                 <div className="flex-shrink-0 border-b border-border overflow-y-auto" style={{ maxHeight: 200 }}>
                   <ContextPanelHost panels={statePanels} />

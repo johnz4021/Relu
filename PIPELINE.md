@@ -1135,6 +1135,20 @@ session, parameterized by `session.companionMode` (set from `msg.companionMode` 
 `start_leetcode`, chosen by the overlay's two-choice opener: "Nudge me — no spoilers"
 → `companionMode: true`; "Show me how it works" → `false`, the normal walkthrough).
 
+**Surface geometry (form factor v2, design review 2026-06-11):** a docked right
+rail that **pushes** the leetcode page (margin-right on `<html>`, restored on
+close/SPA-nav) instead of occluding the editor — description AND code stay visible
+beside the tutor. The rail is **resizable** (left-edge grip in `content.js`: pointer
+drag or arrow keys, clamped to [420px, 60vw], persisted to `localStorage
+relu_rail_width`) and keeps the expand-to-fullscreen toggle for dense graph/tree viz.
+Inside the embed, below Tailwind's `md` (768px) the viz+chat split **stacks
+vertically** (viz top ~45%, state strip, transcript, controls — `App.jsx`), so the
+default rail gets the designed viz-first column instead of a crushed ~173px chat.
+A floating/draggable overlay window was evaluated and rejected (occludes the user's
+own code nondeterministically, breaks `highlight_problem_text` visibility, adds
+window management mid-struggle); approved mockup:
+`~/.gstack/projects/johnz4021-ReLU/designs/companion-formfactor-20260611/`.
+
 Companion mode is a **parameterized mode of the ONE guided prompt**, not a second
 agent. The seams (all in `server/guidedAgent.js`):
 

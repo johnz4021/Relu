@@ -47,6 +47,48 @@
   let overlayExpanded = false; // sidebar (false) vs fullscreen (true) — feeds the highlight ack's `visible`
   let activeMark = null;     // <mark> fallback node when the Highlight API is unavailable — unwrapped on clear
 
+  // ----- rail geometry (design review 2026-06-11: push-don't-cover + resizable rail)
+  // The sidebar PUSHES the leetcode layout left (margin-right on <html>) instead of
+  // occluding the editor. Fixed-position page chrome (top nav) doesn't reflow and
+  // slides under our opaque rail — accepted; the flow content (description, editor)
+  // is what must stay visible.
+  const RAIL_MIN = 420;          // below this the embed's chat column is unusable
+  const RAIL_MAX_FRACTION = 0.6; // never take more than 60% of the window from the page
+  const RAIL_DEFAULT = 520;
+  let railWidth = RAIL_DEFAULT;
+  try {
+    const saved = parseInt(localStorage.getItem('relu_rail_width'), 10);
+    if (Number.isFinite(saved)) railWidth = saved;
+  } catch { /* storage blocked — default stands */ }
+  let pagePushed = false;      // whether <html> currently carries our margin/transition
+  let prevHtmlMargin = '';     // <html>'s prior inline margin-right, restored on close
+  let prevHtmlTransition = ''; // <html>'s prior inline transition, restored on close
+  let winResizeHandler = null; // re-clamps the rail when the window shrinks
+
+  function clampRail(w) {
+    const max = Math.max(RAIL_MIN, Math.round(window.innerWidth * RAIL_MAX_FRACTION));
+    return Math.round(Math.min(Math.max(w, RAIL_MIN), max));
+  }
+
+  function pushPage(px, { animate = true } = {}) {
+    const html = document.documentElement;
+    if (!pagePushed) {
+      pagePushed = true;
+      prevHtmlMargin = html.style.marginRight || '';
+      prevHtmlTransition = html.style.transition || '';
+    }
+    html.style.transition = animate ? 'margin-right 0.2s ease' : 'none';
+    html.style.marginRight = px + 'px';
+  }
+
+  function unpushPage() {
+    if (!pagePushed) return;
+    const html = document.documentElement;
+    html.style.marginRight = prevHtmlMargin;
+    html.style.transition = prevHtmlTransition;
+    pagePushed = false;
+  }
+
   // ----- design tokens + a11y styles (Step 8) -------------------------------
   // A minimal CSS-variable token set, scoped with relu-* names so it can't clash
   // with leetcode's chrome, plus focus-visible rings on our controls. The font is
@@ -75,6 +117,11 @@
       #relu-overlay button:focus-visible {
         outline: 2px solid var(--relu-accent);
         outline-offset: 2px;
+      }
+      #relu-rail-grip:hover,
+      #relu-rail-grip:focus-visible {
+        background: rgba(99, 102, 241, 0.35);
+        outline: none;
       }
       ::highlight(relu-hint) {
         background-color: rgba(99, 102, 241, 0.32);
@@ -260,13 +307,14 @@
     if (readyHandler) { window.removeEventListener('message', readyHandler); readyHandler = null; }
     if (authPort) { try { authPort.close(); } catch { /* already closed */ } authPort = null; }
     if (keydownHandler) { document.removeEventListener('keydown', keydownHandler); keydownHandler = null; }
+    if (winResizeHandler) { window.removeEventListener('resize', winResizeHandler); winResizeHandler = null; }
   }
 
   function openOverlay(problem) {
     if (overlayEl) { overlayEl.remove(); overlayEl = null; }
     clearReadyHandler();
 
-    const SIDEBAR_WIDTH = 'min(520px, 90vw)';
+    railWidth = clampRail(railWidth); // re-clamp against the current window
     const wrap = document.createElement('div');
     wrap.id = 'relu-overlay';
     // a11y: a labelled modal dialog; distinct white panel + dark bar, not leetcode chrome.
@@ -274,7 +322,7 @@
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', 'ReLU helper');
     Object.assign(wrap.style, {
-      position: 'fixed', top: '0', right: '0', height: '100vh', width: SIDEBAR_WIDTH,
+      position: 'fixed', top: '0', right: '0', height: '100vh', width: railWidth + 'px',
       zIndex: '2147483647', boxShadow: '-8px 0 24px rgba(0,0,0,.3)', background: '#fff',
       display: 'flex', flexDirection: 'column', font: '400 14px var(--relu-font)',
       transition: 'width 0.2s ease', // D2: hybrid sidebar <-> fullscreen
@@ -291,6 +339,7 @@
     function closeOverlay() {
       track('extension_overlay_closed');
       clearPageHighlight(); // no orphan highlight (or <mark>) after the companion leaves
+      unpushPage();         // give the page its width back
       wrap.remove();
       overlayEl = null;
       clearReadyHandler();
@@ -313,7 +362,8 @@
     expandBtn.addEventListener('click', () => {
       expanded = !expanded;
       overlayExpanded = expanded; // module-level mirror for the highlight ack's `visible`
-      wrap.style.width = expanded ? '100vw' : SIDEBAR_WIDTH;
+      wrap.style.width = expanded ? '100vw' : railWidth + 'px';
+      grip.style.display = expanded ? 'none' : ''; // no resize affordance over a fullscreen panel
       expandBtn.textContent = expanded ? '⤡' : '⤢';
       const label = expanded ? 'Collapse to sidebar' : 'Expand to full screen';
       expandBtn.title = label;
@@ -348,10 +398,65 @@
       if (!loaded) warn('iframe did NOT fire load within 4s — leetcode CSP may be blocking relu.run. Try enabling the DNR rule (see README).');
     }, 4000);
 
+    // Resizable rail (design review 2026-06-11): drag the left edge to trade page
+    // width for panel width. Pointer events on the grip, not the iframe — the
+    // cross-origin iframe swallows the pointer, so it's disabled during the drag.
+    const grip = document.createElement('div');
+    grip.id = 'relu-rail-grip';
+    grip.setAttribute('role', 'separator');
+    grip.setAttribute('aria-orientation', 'vertical');
+    grip.setAttribute('aria-label', 'Resize the ReLU panel (arrow keys or drag)');
+    grip.tabIndex = 0;
+    Object.assign(grip.style, {
+      position: 'absolute', left: '0', top: '0', bottom: '0', width: '8px',
+      cursor: 'ew-resize', zIndex: '1', touchAction: 'none',
+    });
+
+    function applyRail(w, { animate = false } = {}) {
+      railWidth = clampRail(w);
+      if (expanded) return; // fullscreen owns the width; railWidth applies on collapse
+      wrap.style.width = railWidth + 'px';
+      pushPage(railWidth, { animate });
+    }
+    function persistRail() {
+      try { localStorage.setItem('relu_rail_width', String(railWidth)); } catch { /* storage blocked */ }
+    }
+
+    grip.addEventListener('pointerdown', (e) => {
+      if (expanded) return;
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      iframe.style.pointerEvents = 'none';
+      wrap.style.transition = 'none'; // live-track the pointer, no easing lag
+      const move = (ev) => applyRail(window.innerWidth - ev.clientX);
+      const up = () => {
+        grip.removeEventListener('pointermove', move);
+        iframe.style.pointerEvents = '';
+        wrap.style.transition = 'width 0.2s ease';
+        persistRail();
+        track('extension_rail_resized', { width: railWidth });
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up, { once: true });
+      grip.addEventListener('pointercancel', up, { once: true });
+    });
+    grip.addEventListener('keydown', (e) => {
+      if (expanded) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); applyRail(railWidth + 32, { animate: true }); persistRail(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); applyRail(railWidth - 32, { animate: true }); persistRail(); }
+    });
+
     wrap.appendChild(bar);
     wrap.appendChild(iframe);
+    wrap.appendChild(grip);
     document.body.appendChild(wrap);
     overlayEl = wrap;
+
+    // Push-don't-cover: shrink the page into the remaining width so the problem
+    // description AND the editor stay visible next to the rail.
+    pushPage(railWidth);
+    winResizeHandler = () => { if (!expanded) applyRail(railWidth); };
+    window.addEventListener('resize', winResizeHandler);
 
     // a11y: move focus into the panel on open, and Escape closes. A full focus
     // TRAP is not possible from here — the panel body is a cross-origin iframe whose
@@ -608,7 +713,7 @@
     log('problem switch →', slug);
     // tear down a stale overlay so the frame never talks about the old problem
     clearPageHighlight(); // never leave a highlight anchored to the OLD problem's text
-    if (overlayEl) { overlayEl.remove(); overlayEl = null; clearReadyHandler(); }
+    if (overlayEl) { overlayEl.remove(); overlayEl = null; clearReadyHandler(); unpushPage(); }
     injectButton();
   }
 
