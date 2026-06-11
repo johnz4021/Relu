@@ -184,3 +184,29 @@ describe('highlight_problem_text handler', () => {
     expect(result.message).toContain('prose');
   }, 4000);
 });
+
+// ── run_algorithm graph auto-create: edge field normalization ────────────────
+// Regression (N-Queens incident 2026-06-11, second bug at this synthesis site —
+// see graph-positions-trace0-collapse): backtracking's trace[0] edges are
+// {from, to}; the client GraphRenderer reads {source, target} and cytoscape
+// hard-crashes on `undefined-undefined`, taking down the whole renderer tree.
+describe('run_algorithm — trace0 graph edge normalization (client-crash regression)', () => {
+  it("backtracking's {from,to} edges reach the client as {source,target}", async () => {
+    const s = fakeSession();
+    const result = await handleToolCall(
+      s,
+      { name: 'run_algorithm', input: { algorithm: 'backtracking' } },
+      null, null, null,
+    );
+    expect(result.success).toBe(true);
+    const createGraph = s.sent.find((m) => m.type === 'create_graph');
+    expect(createGraph).toBeDefined();
+    expect(createGraph.graph.edges.length).toBeGreaterThan(0);
+    for (const edge of createGraph.graph.edges) {
+      expect(edge.source, `edge missing source: ${JSON.stringify(edge)}`).toBeDefined();
+      expect(edge.target, `edge missing target: ${JSON.stringify(edge)}`).toBeDefined();
+      expect(edge.from).toBeUndefined();
+      expect(edge.to).toBeUndefined();
+    }
+  });
+});

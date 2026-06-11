@@ -65,7 +65,7 @@ function fakeSession(extra = {}) {
 
 describe('run_algorithm — off-registry key (Tier 2 path)', () => {
   it('runs the fallback, stores the trace, and registers the algorithm_state panel', async () => {
-    const s = fakeSession({ _leetcodeTitle: 'Product of Array Except Self', _leetcodeTestCase: { nums: [1, 2, 3, 4] } });
+    const s = fakeSession({ _leetcodeTitle: 'Product of Array Except Self', _leetcodePatternKey: 'product_except_self', _leetcodeTestCase: { nums: [1, 2, 3, 4] } });
     const result = await handleToolCall(
       s,
       { name: 'run_algorithm', input: { algorithm: 'product_except_self' } },
@@ -84,7 +84,7 @@ describe('run_algorithm — off-registry key (Tier 2 path)', () => {
   });
 
   it('defaults empty agent input to the parsed LC test case', async () => {
-    const s = fakeSession({ _leetcodeTestCase: { nums: [1, 2, 3, 4] } });
+    const s = fakeSession({ _leetcodePatternKey: 'product_except_self', _leetcodeTestCase: { nums: [1, 2, 3, 4] } });
     await handleToolCall(
       s,
       { name: 'run_algorithm', input: { algorithm: 'product_except_self' } },
@@ -94,8 +94,51 @@ describe('run_algorithm — off-registry key (Tier 2 path)', () => {
     expect(callInput).toEqual({ nums: [1, 2, 3, 4] });
   });
 
+  // Regression (N-Queens incident 2026-06-11): a hallucinated/misspelled off-registry
+  // key must be rejected server-side — the tool schema no longer has an enum, and an
+  // unknown key would otherwise trigger a 20-60s authoring call mid-lesson.
+  it('rejects an off-registry key that is not the session pattern key', async () => {
+    const s = fakeSession({ _leetcodePatternKey: 'product_except_self' });
+    const result = await handleToolCall(
+      s,
+      { name: 'run_algorithm', input: { algorithm: 'product_except_slef' } },
+      null, null, null,
+    );
+    expect(result.error).toContain("Unknown algorithm 'product_except_slef'");
+    expect(result.error).toContain("pattern key 'product_except_self'");
+    expect(runAlgorithmWithFallback).not.toHaveBeenCalledWith('product_except_slef', expect.anything(), expect.anything());
+  });
+
+  // Regression (N-Queens incident 2026-06-11): the pre-run trace must be REUSED, not
+  // regenerated — regeneration stalls the lesson and can paint a different trace than
+  // the one lc_viz_ready already showed the student.
+  it('reuses the pre-run Tier 2 trace instead of regenerating', async () => {
+    const storedTrace = [
+      { type: 'init', description: 'stored', viz_actions: [{ renderer: 'context', action: 'update', params: { panel_id: 'algorithm_state', entries: [] } }] },
+      { type: 'result', description: 'stored', output: 'x' },
+    ];
+    const s = fakeSession({
+      _leetcodeTier: 2,
+      _leetcodeAlgorithmKey: 'product_except_self',
+      _leetcodePatternKey: 'product_except_self',
+      _leetcodeTrace: storedTrace,
+      _leetcodeRenderer: 'context',
+      _leetcodeInput: { nums: [1, 2, 3, 4] },
+    });
+    const callsBefore = runAlgorithmWithFallback.mock.calls.length;
+    const result = await handleToolCall(
+      s,
+      { name: 'run_algorithm', input: { algorithm: 'product_except_self' } },
+      null, null, null,
+    );
+    expect(result.success).toBe(true);
+    expect(result.step_count).toBe(2);
+    expect(s.currentTrace).toBe(storedTrace);
+    expect(runAlgorithmWithFallback.mock.calls.length).toBe(callsBefore); // no regeneration
+  });
+
   it('emit_segment delivers the Tier 2 embedded viz_actions end-to-end', async () => {
-    const s = fakeSession({ _leetcodeTestCase: { nums: [1, 2, 3, 4] } });
+    const s = fakeSession({ _leetcodePatternKey: 'product_except_self', _leetcodeTestCase: { nums: [1, 2, 3, 4] } });
     await handleToolCall(
       s,
       { name: 'run_algorithm', input: { algorithm: 'product_except_self' } },

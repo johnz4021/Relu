@@ -424,6 +424,19 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
       const algoInfo = ALGORITHMS[algo];
       const graphId = input.graph_id || null;
 
+      // Off-registry keys are only legal when they match this session's pattern key —
+      // this replaces the typo protection the run_algorithm tool enum used to provide
+      // (a hallucinated/misspelled key must not trigger a 20-60s authoring call).
+      if (!algoInfo) {
+        const sessionKeys = [session._leetcodePatternKey, session._leetcodeAlgorithmKey].filter(Boolean);
+        if (!sessionKeys.includes(algo)) {
+          return {
+            error: `Unknown algorithm '${algo}'. Use a registered algorithm (${Object.keys(ALGORITHMS).join(', ')})` +
+              (sessionKeys.length ? ` or this session's pattern key '${sessionKeys[0]}'.` : '.'),
+          };
+        }
+      }
+
       {
         // Registry algorithms take the Tier 1 fast path inside runAlgorithmWithFallback;
         // off-registry keys (Tier 2 pattern keys) go through the author-agent fallback
@@ -462,7 +475,13 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             Object.assign(registryInput, session._leetcodeTestCase);
           }
 
-          const result = await runAlgorithmWithFallback(algo, registryInput, { description: session._leetcodeTitle, expectedOutput: session._leetcodeExpectedOutput || null });
+          // Tier 2 pattern key: reuse the trace pre-run at start_leetcode. Regenerating
+          // here would stall the lesson 20-60s (the generator may not have been cached —
+          // e.g. output-format mismatch) and could produce a DIFFERENT trace than the one
+          // lc_viz_ready already painted on the student's screen.
+          const result = (!algoInfo && session._leetcodeTier === 2 && algo === session._leetcodeAlgorithmKey && Array.isArray(session._leetcodeTrace))
+            ? { trace: session._leetcodeTrace, renderer: session._leetcodeRenderer, input: session._leetcodeInput || registryInput, tier: 2 }
+            : await runAlgorithmWithFallback(algo, registryInput, { description: session._leetcodeTitle, expectedOutput: session._leetcodeExpectedOutput || null });
           console.log(`[Agent] run_algorithm '${algo}' returned ${result.trace.length} steps, renderer: ${result.renderer}, tier: ${result.tier}`);
           // Off-registry: renderer comes from the generated result, not a registry entry.
           const rendererType = algoInfo?.renderer || result.renderer;
@@ -526,6 +545,16 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               || trace0Graph;
             if (graphData) {
               const directed = graphData.directed !== undefined ? graphData.directed : true;
+              // Normalize edge field names. Some trace producers (backtracking) emit
+              // {from, to} edges; the client GraphRenderer reads {source, target} and
+              // cytoscape hard-crashes on an edge with undefined source ("Can not
+              // create edge undefined-undefined"). Same synthesis path that previously
+              // shipped position-less graphs — normalize EVERYTHING here, like the
+              // create_graph/update_graph tool paths do.
+              const edges = (graphData.edges || []).map((e) => {
+                const { from, to, ...rest } = e;
+                return { ...rest, source: e.source ?? from, target: e.target ?? to };
+              });
               // Synthesize node positions when the trace didn't supply them. The
               // client's cytoscape uses a 'preset' layout — it never auto-lays-out —
               // so a graph with no positions collapses every node onto (0,0) and
@@ -539,9 +568,9 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
                 for (const n of graphData.nodes || []) {
                   if (n.position) seed[n.id] = n.position;
                 }
-                positions = autoLayout(graphData.nodes || [], graphData.edges || [], seed);
+                positions = autoLayout(graphData.nodes || [], edges, seed);
               }
-              const finalGraph = { ...graphData, positions, directed };
+              const finalGraph = { ...graphData, edges, positions, directed };
               console.log(`[Agent] Auto-creating graph: ${finalGraph.nodes?.length} nodes, directed=${directed}`);
               const autoGraphMsg = { type: 'create_graph', graph: finalGraph };
               sendJSON(ws, autoGraphMsg);

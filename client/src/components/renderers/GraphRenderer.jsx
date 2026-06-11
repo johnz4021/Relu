@@ -480,12 +480,21 @@ export default function GraphRenderer({
       });
     }
     for (const edge of graphData.edges) {
+      // Accept {from, to} as aliases and skip malformed edges — cytoscape throws
+      // an uncatchable-by-design error on an edge with undefined source, which
+      // takes down the whole renderer tree (and the session's WS with it).
+      const source = edge.source ?? edge.from;
+      const target = edge.target ?? edge.to;
+      if (source == null || target == null) {
+        console.warn('[GraphRenderer] Skipping malformed edge (missing source/target):', edge);
+        continue;
+      }
       elements.push({
         group: 'edges',
         data: {
-          id: `${edge.source}-${edge.target}`,
-          source: edge.source,
-          target: edge.target,
+          id: `${source}-${target}`,
+          source,
+          target,
           weight: edge.weight ?? '',
           ...(edge.color ? { color: edge.color } : {}),
         },

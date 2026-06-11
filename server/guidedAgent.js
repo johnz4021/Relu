@@ -103,7 +103,8 @@ export function buildIntakeUserText(session, problemText) {
     } else if (session._leetcodeTier === 2) {
       const trace = session._leetcodeTrace;
       const traceLen = trace ? trace.length : 0;
-      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm — this mounts the "algorithm_state" context panel (it is NOT visible until run_algorithm is called). After run_algorithm returns, narrate every trace step using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panel will stay blank. Each trace step carries embedded viz_actions that update the panel automatically when referenced via trace_step_indices.`;
+      const t2Renderer = session._leetcodeRenderer || 'context';
+      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}, renderer: ${t2Renderer}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" EXACTLY — this mounts the visualization panels (they are NOT visible until run_algorithm is called) and loads the trace without regenerating it. After run_algorithm returns, narrate the trace using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panels will stay blank. Steps may carry embedded viz_actions that play automatically when referenced via trace_step_indices.`;
     }
   }
 
@@ -1140,7 +1141,7 @@ RULES:
  * and returns { success, message } for inclusion in a tool result.
  * vizState = { vizActive, segmentsWithoutVizActions } — mutable refs updated in place.
  */
-function applyClassification(plan, session, ws, vizState) {
+export function applyClassification(plan, session, ws, vizState) {
   // If a LeetCode algorithm key is already known, the solver may misclassify the problem
   // (e.g. calling Two Sum "greedy_design"). Force algorithm_execution so the right panels load.
   if (session._leetcodeAlgorithmKey && plan.reasoning_mode !== 'algorithm_execution') {
@@ -1159,7 +1160,14 @@ function applyClassification(plan, session, ws, vizState) {
   console.log(`[GuidedAgent] Classification: mode=${plan.reasoning_mode}, target=${plan.target_algorithm}, closest=${plan.closest_algorithm}, in_scope=${plan.is_in_scope}`);
 
   const validAlgorithms = Object.keys(ALGORITHMS);
-  if (plan.reasoning_mode === 'algorithm_execution' && plan.is_in_scope && plan.target_algorithm && !validAlgorithms.includes(plan.target_algorithm)) {
+  // Off-registry targets are legal when they're this session's Tier 2 pattern key
+  // (the LC override above sets target_algorithm = _leetcodeAlgorithmKey, which IS
+  // the pattern key in Tier 2 sessions). Anything else off-registry is a solver
+  // hallucination — reject it before the agent teaches against a phantom trace.
+  const sessionPatternKeys = [session._leetcodePatternKey, session._leetcodeAlgorithmKey].filter(Boolean);
+  if (plan.reasoning_mode === 'algorithm_execution' && plan.is_in_scope && plan.target_algorithm
+      && !validAlgorithms.includes(plan.target_algorithm)
+      && !sessionPatternKeys.includes(plan.target_algorithm)) {
     return {
       success: false,
       error: `Unknown algorithm: ${plan.target_algorithm}. Available: ${validAlgorithms.join(', ')}`,
@@ -1186,7 +1194,9 @@ function applyClassification(plan, session, ws, vizState) {
   if (plan.reasoning_mode === 'algorithm_execution') {
     const targetAlgo = plan.target_algorithm || plan.closest_algorithm;
     const algoInfo = targetAlgo ? ALGORITHMS[targetAlgo] : null;
-    let rendererType = algoInfo?.renderer || 'graph';
+    // Tier 2 pattern keys have no registry entry — the generated trace's renderer
+    // (stored at start_leetcode) is authoritative for the docs we inject.
+    let rendererType = algoInfo?.renderer || session._leetcodeRenderer || 'graph';
     const algoLower = (targetAlgo || '').toLowerCase();
     if (algoLower.includes('interval') || algoLower.includes('schedule') ||
         algoLower.includes('machine') || algoLower.includes('job') ||

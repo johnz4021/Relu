@@ -393,3 +393,37 @@ describe('companionSelfReport (eng-2 — self-report seam)', () => {
     });
   });
 });
+
+// ── applyClassification: Tier 2 pattern-key targets (N-Queens regression) ────
+// The LC override sets target_algorithm = session._leetcodeAlgorithmKey, which in
+// Tier 2 sessions is an off-registry pattern key. The registry check must accept
+// it (the generated trace exists) while still rejecting solver hallucinations.
+import { applyClassification } from './guidedAgent.js';
+
+describe('applyClassification — off-registry targets', () => {
+  const fakeWs = { OPEN: 1, readyState: 1, send: () => {} };
+
+  it('accepts the session pattern key as an execution target (Tier 2)', () => {
+    const session = {
+      _leetcodeAlgorithmKey: 'n_queens_backtracking',
+      _leetcodePatternKey: 'n_queens_backtracking',
+      _leetcodeRenderer: 'graph',
+    };
+    const result = applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'n_queens_backtracking' },
+      session, fakeWs, null,
+    );
+    expect(result.success).toBe(true);
+    // Renderer docs come from the generated trace's renderer, not the 'graph' default.
+    expect(result.message).toContain('RENDERER REFERENCE (graph)');
+  });
+
+  it('still rejects an off-registry target that is not the session pattern key', () => {
+    const result = applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'made_up_algorithm' },
+      {}, fakeWs, null,
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Unknown algorithm: made_up_algorithm');
+  });
+});
