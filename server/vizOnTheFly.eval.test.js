@@ -343,3 +343,43 @@ describe.skipIf(!ENABLED)('on-the-fly viz — live model accuracy eval', () => {
     expect(acc).toBeGreaterThanOrEqual(0.95);
   });
 });
+
+// ── Tier 2 live authoring (always-viz ladder) ───────────────────────────────
+// Exercises the real authorAgent → sandbox → correctness-gate path for an
+// off-registry pattern key, exactly as start_leetcode's Tier 2 rung invokes it.
+describe.skipIf(!ENABLED)('viz Tier 2 — live trace authoring for an off-registry pattern', () => {
+  it('authors a correct, mappable trace for product_except_self', async () => {
+    const { runAlgorithmWithFallback } = await import('./algorithms/registry.js');
+    const { validateVizActionSchemas } = await import('./vizValidator.js');
+
+    const result = await runAlgorithmWithFallback(
+      'product_except_self',
+      { nums: [1, 2, 3, 4] },
+      { description: 'Product of Array Except Self', expectedOutput: '[24,12,8,6]' },
+    );
+
+    expect(result.tier).toBe(2);
+    expect(result.trace.length).toBeGreaterThanOrEqual(3);
+
+    // Correctness: the result step's output must match Example 1.
+    const resultStep = [...result.trace].reverse().find((s) => s.type === 'result');
+    expect(resultStep?.output?.replace(/\s/g, '')).toBe('[24,12,8,6]');
+
+    // Every embedded viz_action must pass the manifest schema validation the
+    // emit_segment ladder applies (lenient mode, panels as run_algorithm registers them).
+    const panels = {
+      algorithm_state: { renderer: 'context', type: 'context' },
+      [result.renderer]: { renderer: result.renderer, type: 'renderer' },
+    };
+    let checked = 0;
+    for (const [idx, step] of result.trace.entries()) {
+      if (!Array.isArray(step.viz_actions) || step.viz_actions.length === 0) continue;
+      const { valid, errors } = validateVizActionSchemas(step.viz_actions, panels, { lenientUnknownRenderer: true });
+      checked += step.viz_actions.length;
+      expect(errors, `step ${idx} embedded actions invalid: ${errors.join('; ')}`).toHaveLength(0);
+      expect(valid.length).toBe(step.viz_actions.length);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[tier2 AUTHOR] renderer=${result.renderer} steps=${result.trace.length} embeddedActionsChecked=${checked}`);
+  }, 240000);
+});

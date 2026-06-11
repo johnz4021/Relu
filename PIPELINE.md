@@ -376,7 +376,9 @@ Every algorithm in the registry has:
 
 #### Tier 2: AI-Generated Trace Generators (dynamic only)
 
-Tier 2 fires only when a LeetCode problem is submitted with an `algorithm_key` that does **not** match any registry entry — i.e. it's a pattern variant or niche algorithm outside the known 92. There are no pre-defined `run: null` stubs in the registry.
+Tier 2 fires when a LeetCode problem does **not** match any registry entry (or matches below the 0.7 confidence bar). The extraction schema (`leetcodeAgent.js`) keeps `algorithm_key` enum-constrained to registry keys, but additionally requires a free-form **`pattern_key`** (snake_case pattern descriptor, e.g. `product_except_self`) plus a **`pattern_renderer`** whenever `algorithm_key` is null or low-confidence. `start_leetcode` (`index.js`) then calls `runAlgorithmWithFallback(pattern_key, …)` — the author-agent path — under a 45s timeout; on success the session is `viz_tier: 2`, on failure/timeout it degrades to **Tier 3 live viz** (see below), never to text-only. There are no pre-defined `run: null` stubs in the registry.
+
+Mid-session, `run_algorithm` (`agentLib.js`) accepts off-registry keys through the same fallback: capability validation is skipped (no declared capabilities), empty agent input defaults to the parsed Example 1 `test_case`, the renderer comes from the generated result, and context-renderer traces get an auto-registered `algorithm_state` panel (no `PANEL_DEFAULTS` entry exists for a pattern key).
 
 **Flow:**
 ```
@@ -398,13 +400,19 @@ runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
 
 **Correctness gate** (`outputMatchesExpected`): the generated trace's last `result`-typed step must have an `output` field matching the `expectedOutput` string extracted from the problem's Example 1. If `expectedOutput` is absent (student pasted a partial problem), the gate passes through and caching falls back to length-only. Comparison is plain string — false negatives possible for array outputs (e.g. `[0,1]` vs `0,1`) but never false positives, so no bad trace can be persisted.
 
-**`authorAgent.js`:** Writes a JS function `run(input) { return trace; }` for the given algorithm + renderer. Each step must include `type`, `description`, and renderer-specific fields. The final `result` step must include `output: "<answer as plain string>"`. For `context` renderer, every step must include `viz_actions` that update the `algorithm_state` panel.
+**`authorAgent.js`:** Writes a JS function `run(input) { return trace; }` for the given algorithm + renderer. Each step must include `type`, `description`, and renderer-specific fields. The final `result` step must include `output: "<answer as plain string>"`. For `context` renderer, every step must include `viz_actions` that update the `algorithm_state` panel. The generation prompt embeds `buildRendererDocs([renderer])` from `rendererManifest.js` as the authoritative action reference: any step on any renderer MAY embed `viz_actions` (they take precedence over the step-field mapping and are schema-checked by the emit_segment enforcement ladder), but for non-context renderers the standard step fields are preferred.
 
 **`sandbox.js`:** Executes generated code in isolation with a 5-second timeout.
 
 **`cache.js`:** Two-level cache (L1 in-memory Map, L2 Supabase `generated_traces` table). Persists generated code keyed by compound `algorithmId:title` so it doesn't regenerate on every request. Hit count tracked per key. Exports `buildCacheKey`, `outputMatchesExpected`, `getCachedGenerator`, `cacheGenerator`, `incrementHitCount`.
 
 **Key difference:** Tier 1 traces are guaranteed correct (hand-written, deterministic, covered by `tier1.deep.test.js`). Tier 2 traces are generated on-demand for unknown patterns — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
+
+#### Tier 3: Model-Authored Live Viz (the always-viz floor)
+
+When neither a registry trace nor a generated trace exists (classifier returned no usable key AND Tier 2 failed/timed out), the session runs in **Tier 3 live viz** mode rather than text-only. `hasViz` stays `false`, `computeActiveTools` filters ONLY `run_algorithm` (there is no trace to load), and the intake text carries a `[LEETCODE MODE — TIER 3 LIVE VIZ]` block (or the companion `[COMPANION — OFF REGISTRY]` variant): the agent mounts the recommended renderer (`pattern_renderer` from the parser, default `array`), renders the problem's own Example 1 input, and hand-builds `viz_actions` in every `emit_segment` — the same model-authored path the on-the-fly eval suite measures at ≥95%. The renderer's manifest docs are injected into the intake block so the action contract is in context from turn 1. The enforcement ladder (loud per-action rejection, whole-call failure when everything is invalid) is what makes improvised viz safe — before it, these sessions hard-filtered the viz pipeline and opened with "I don't have a visualization for this one."
+
+The same Tier 3 instruction applies on the web app when the solver classifies a problem `algorithm_execution` but out-of-scope (`applyClassification`): the agent builds the viz manually against the closest algorithm's renderer and never calls `run_algorithm`.
 
 #### Renderer Fallback Heuristic
 
@@ -1103,17 +1111,27 @@ start_leetcode message
 parseLeetcodeProblem(problemText)         ← claude-haiku-4-5-20251001, 10s timeout
     │
     ▼
-{ title, algorithm_key, confidence, test_case, test_case_source, expected_output, fallback_reason }
+{ title, algorithm_key, confidence, test_case, test_case_source, expected_output,
+  pattern_key, pattern_renderer, fallback_reason }
     │   expected_output: Example 1 answer as plain string ("MMMDCCXLIX", "3", "[0,1]")
     │   or null if student only pasted partial problem (no example output visible)
+    │   pattern_key/pattern_renderer: required when algorithm_key is null or confidence < 0.7
     │
-    ├── confidence >= 0.7 AND algo has run/tier2 entry?
+    ├── TIER 1: confidence >= 0.7 AND registry entry with run()?
     │       YES → runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput })
-    │             ├── returns { trace, renderer, input, tier }
-    │             └── sends lc_viz_ready { algorithm_key, renderer, trace, input, tier } to client
+    │             └── sends lc_viz_ready { algorithm_key, renderer, trace, input, tier: 1 }
     │                (client can render the trace immediately, before teaching begins)
+    ├── TIER 2: else pattern_key present?
+    │       YES → sends lc_generating_viz { algorithm_key: pattern_key }   (client-optional)
+    │             runAlgorithmWithFallback(pattern_key, …) under 45s timeout
+    │             ├── success → lc_viz_ready { …, tier: 2 }, hasViz = true,
+    │             │             session._leetcodeAlgorithmKey = pattern_key
+    │             └── failure/timeout → fall through to TIER 3
+    └── TIER 3: hasViz = false → guided session runs in live-viz mode
+                (viz pipeline available, run_algorithm filtered — see Stage 2 Tier 3)
     │
     │   session._leetcodeExpectedOutput stored for reuse at agentLib.js call site
+    │   session._leetcodePatternKey / _leetcodePatternRenderer stored for intake hints
     │
     ▼
 sends lc_parsed { title, algorithm_key, confidence, has_viz, viz_tier } to client
@@ -1173,13 +1191,16 @@ agent. The seams (all in `server/guidedAgent.js`):
   events (nudge_given, solution-reveal) off it instead of guessing from viz.
 - **`buildIntakeUserText(session, problemText)`** — pure assembly of the first user
   turn; swaps the closing instruction to the companion opener. Off-registry companion
-  gets a `[COMPANION — OFF REGISTRY]` block (structure viz still works; only the trace
-  rung degrades to text) instead of the standard `[LEETCODE MODE — OUT OF SCOPE]` block.
-- **`computeActiveTools(session, allTools)`** — two-level viz (eng D3). Off-registry
-  companion filters ONLY `run_algorithm` (the trace rung), keeping `build_example_graph`
-  + `create_visualization` so the **zero-spoiler structure view** of the problem's own
-  input renders on ANY problem. The standard walkthrough still filters the whole viz
-  pipeline off-registry (the Sudoku empty-graph + phantom-narration bug).
+  gets a `[COMPANION — OFF REGISTRY]` block (structure viz works; the terminal reveal
+  is a HAND-BUILT animated walkthrough — "YOU are the trace") instead of the standard
+  `[LEETCODE MODE — TIER 3 LIVE VIZ]` block. Both blocks embed the recommended
+  renderer's manifest docs.
+- **`computeActiveTools(session, allTools)`** — off-registry (companion AND standard)
+  filters ONLY `run_algorithm` (the trace rung), keeping `build_example_graph` +
+  `create_visualization` + the rest of the viz pipeline so the **zero-spoiler structure
+  view** and the Tier 3 hand-built walkthrough render on ANY problem. (The old
+  whole-pipeline filter for standard sessions — the Sudoku empty-graph bug — predates
+  the enforcement ladder, which now rejects improvised invalid actions loudly instead.)
 - **Solver warming** — on companion open, `startGuidedSession` fires the solve in the
   background (`session._warmSolver = { text, promise }`, fire-and-forget). The hint path
   and structure viz never await it; `run_solver` reuses the warmed result when the
@@ -1229,7 +1250,8 @@ agent. The seams (all in `server/guidedAgent.js`):
   must skip to the full reveal rather than emit them under `reveals_key_insight: false`.
   Behavioral pin: `companionMode.eval.test.js` case 6; doctrine pins in
   `guidedAgent.test.js`. An explicit give-up may still jump straight to the full trace.
-  Off-registry, rungs 2-3 degrade to text.
+  Off-registry, rungs 2-3 become a hand-built animated walkthrough (Tier 3): the model
+  authors the viz_actions itself on the structure view instead of loading a trace.
 
 **Instrumentation (eng D4):** the background worker is the funnel poster. Extension-side
 rungs (`extension_button_shown`, `_button_clicked`, `_extraction`, `_overlay_opened`,

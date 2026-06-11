@@ -544,32 +544,56 @@ function attachHandlers(ws, session) {
             return;
           }
 
-          const { title, algorithm_key, confidence, test_case, expected_output } = parsed;
+          const { title, algorithm_key, confidence, test_case, expected_output, pattern_key, pattern_renderer } = parsed;
           const algoEntry = ALGORITHMS[algorithm_key];
+          // ── Viz ladder ──
+          // Tier 1: registry trace (deterministic). Tier 2: AI-authored trace for the
+          // parser's free-form pattern_key (sandboxed + Example-1 correctness gate inside
+          // runAlgorithmWithFallback). Tier 3: no trace — the agent hand-builds viz_actions
+          // live through the enforcement ladder (hasViz stays false; run_algorithm filtered).
           const tier1Available = !!(algorithm_key && confidence >= 0.7 && algoEntry?.run);
-          const tier2Available = !!(algorithm_key && confidence >= 0.7 && algoEntry && !algoEntry.run);
-          let hasViz = tier1Available || tier2Available;
+          const tier2Key = !tier1Available && pattern_key ? pattern_key : null;
+          const preRunKey = tier1Available ? algorithm_key : tier2Key;
+          let hasViz = false;
           let vizTier = null;
 
           // Pre-run the trace so client gets viz immediately
-          if (hasViz) {
+          if (preRunKey) {
             try {
-              const result = await runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput: expected_output || null });
+              if (tier2Key) {
+                // Tier 2 generation is an LLM call (up to 3 authoring attempts). Tell the
+                // client (safely ignored if unhandled) and cap the wait — on timeout we
+                // degrade to Tier 3 rather than hang the session start.
+                ws.send(JSON.stringify({ type: 'lc_generating_viz', algorithm_key: tier2Key }));
+              }
+              const runPromise = runAlgorithmWithFallback(preRunKey, test_case, { description: title, expectedOutput: expected_output || null });
+              const result = tier2Key
+                ? await Promise.race([
+                    runPromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Tier 2 generation timeout (45s)')), 45_000)),
+                  ])
+                : await runPromise;
               session._leetcodeTrace = result.trace;
               session._leetcodeRenderer = result.renderer;
               session._leetcodeInput = result.input;
               session._leetcodeTier = result.tier;
               vizTier = result.tier;
-              ws.send(JSON.stringify({ type: 'lc_viz_ready', algorithm_key, renderer: result.renderer, trace: result.trace, input: result.input, tier: result.tier }));
+              hasViz = true;
+              ws.send(JSON.stringify({ type: 'lc_viz_ready', algorithm_key: preRunKey, renderer: result.renderer, trace: result.trace, input: result.input, tier: result.tier }));
             } catch (err) {
-              console.warn('[LeetCode] Failed to pre-run trace:', err.message);
+              console.warn(`[LeetCode] Failed to pre-run trace (${preRunKey}):`, err.message);
               hasViz = false;
               vizTier = null;
             }
           }
 
           session.hasViz = hasViz;
-          session._leetcodeAlgorithmKey = algorithm_key;
+          // Tier 2 sessions teach against the pattern_key (run_algorithm resolves it via
+          // the Tier 2 cache); Tier 1 uses the registry key; Tier 3 keeps the parsed key
+          // (possibly null) — hasViz=false routes those sessions to live-viz mode.
+          session._leetcodeAlgorithmKey = hasViz && tier2Key ? tier2Key : algorithm_key;
+          session._leetcodePatternKey = pattern_key || null;
+          session._leetcodePatternRenderer = pattern_renderer || null;
           session._leetcodeTestCase = test_case;
           session._leetcodeTitle = title;
           session._leetcodeExpectedOutput = expected_output || null;
@@ -637,6 +661,8 @@ function attachHandlers(ws, session) {
             session._leetcodeTestCase = null;
             session._leetcodeTitle = null;
             session._leetcodeConfidence = null;
+            session._leetcodePatternKey = null;
+            session._leetcodePatternRenderer = null;
             session._solverSucceeded = false;
             if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type: 'session_ended' }));
           } else {

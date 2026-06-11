@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateInputFormats } from './leetcodeAgent.js';
+import { generateInputFormats, EXTRACTION_TOOL } from './leetcodeAgent.js';
 import { ALGORITHMS } from './algorithms/registry.js';
+import { RENDERER_MANIFEST } from './rendererManifest.js';
 
 // Mirror the LC classifier filter: exclude poly_reduction (CS theory, not on LC)
 // and `broken: true` algos (renderer mounts but never paints — kept out of
@@ -37,5 +38,33 @@ describe('generateInputFormats', () => {
     for (const key of VALID_ALGORITHM_KEYS) {
       expect(result).toContain(`${key}:`);
     }
+  });
+});
+
+// Tier 2 entry contract (always-viz ladder): the extraction schema must carry the
+// free-form pattern_key + pattern_renderer alongside the registry-constrained
+// algorithm_key, or off-registry problems can never reach trace generation.
+describe('EXTRACTION_TOOL schema — pattern key (Tier 2 gate)', () => {
+  const props = EXTRACTION_TOOL.input_schema.properties;
+
+  it('algorithm_key stays enum-constrained to registry keys + null', () => {
+    expect(props.algorithm_key.enum).toEqual([...VALID_ALGORITHM_KEYS, null]);
+  });
+
+  it('pattern_key is free-form (no enum) and documented as required when off-registry', () => {
+    expect(props.pattern_key).toBeDefined();
+    expect(props.pattern_key.enum).toBeUndefined();
+    expect(props.pattern_key.description).toContain('algorithm_key is null');
+  });
+
+  it('pattern_renderer enum = manifest renderers + context (context panels live outside the manifest)', () => {
+    expect([...props.pattern_renderer.enum].sort()).toEqual(
+      [...Object.keys(RENDERER_MANIFEST), 'context'].sort()
+    );
+  });
+
+  it('pattern fields are not in required[] — confident Tier 1 extractions omit them', () => {
+    expect(EXTRACTION_TOOL.input_schema.required).not.toContain('pattern_key');
+    expect(EXTRACTION_TOOL.input_schema.required).not.toContain('pattern_renderer');
   });
 });

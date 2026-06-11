@@ -45,19 +45,19 @@ describe('isOutOfScopeSession', () => {
 });
 
 describe('computeActiveTools', () => {
-  // Regression target: the Sudoku console log showed `create_graph` called with
-  // empty nodes/edges + segment_start with viz_actions:[] + narration referencing
-  // Sudoku cells that never reached the canvas. Filtering the pipeline at the tool
-  // layer makes that sequence structurally impossible regardless of prompt drift.
-  it('out-of-scope LC session (literal null key): filters the full viz pipeline', () => {
+  // Tier 3 live viz (always-viz ladder): out-of-scope sessions keep the full viz
+  // pipeline — the enforcement ladder rejects invalid improvised actions loudly, so
+  // the old Sudoku phantom-narration failure mode is caught at the action layer, not
+  // by stripping the tools. Only run_algorithm is filtered (no trace exists to load).
+  it('out-of-scope LC session (literal null key): keeps viz pipeline, filters only run_algorithm', () => {
     const session = { mode: 'leetcode', _leetcodeAlgorithmKey: null, hasViz: false };
     const active = names(computeActiveTools(session, ALL_TOOLS));
 
-    expect(active.has('create_graph')).toBe(false);
-    expect(active.has('create_visualization')).toBe(false);
-    expect(active.has('update_graph')).toBe(false);
+    expect(active.has('create_graph')).toBe(true);
+    expect(active.has('create_visualization')).toBe(true);
+    expect(active.has('update_graph')).toBe(true);
+    expect(active.has('build_example_graph')).toBe(true);
     expect(active.has('run_algorithm')).toBe(false);
-    expect(active.has('build_example_graph')).toBe(false);
 
     // The agent must still be able to talk to the user and end the lesson.
     expect(active.has('emit_segment')).toBe(true);
@@ -67,20 +67,19 @@ describe('computeActiveTools', () => {
     expect(active.has('run_solver')).toBe(true);
   });
 
-  // The variant that bit me in the smoke test: Haiku picked a plausible-looking
-  // name that isn't in the registry, so _leetcodeAlgorithmKey is truthy but hasViz
-  // is false. The gate must catch this too — not just literal-null keys.
-  it('LC session with unregistered key (Haiku invention): also filters viz pipeline', () => {
+  // Unregistered/low-confidence keys (truthy _leetcodeAlgorithmKey, hasViz false)
+  // get the same Tier 3 treatment — only the trace rung is filtered.
+  it('LC session with unregistered key: same Tier 3 filter (run_algorithm only)', () => {
     const session = { mode: 'leetcode', _leetcodeAlgorithmKey: 'valid_sudoku', hasViz: false };
     const active = names(computeActiveTools(session, ALL_TOOLS));
-    expect(active.has('create_graph')).toBe(false);
-    expect(active.has('build_example_graph')).toBe(false);
+    expect(active.has('create_graph')).toBe(true);
+    expect(active.has('build_example_graph')).toBe(true);
     expect(active.has('run_algorithm')).toBe(false);
   });
 
   // eng D3: companion mode off-registry keeps the zero-spoiler STRUCTURE viz
   // (build_example_graph renders the problem's own input — no solving) and filters
-  // ONLY the trace rung, which degrades to a text reveal.
+  // ONLY the trace rung; the reveal is a hand-built animated walkthrough (Tier 3).
   it('companion off-registry: keeps structure viz, filters only the trace rung', () => {
     const session = { mode: 'leetcode', hasViz: false, companionMode: true };
     const active = names(computeActiveTools(session, ALL_TOOLS));
@@ -88,7 +87,7 @@ describe('computeActiveTools', () => {
     expect(active.has('create_visualization')).toBe(true);
     expect(active.has('create_graph')).toBe(true);
     expect(active.has('update_graph')).toBe(true);
-    // the solution trace cannot load without a registry entry → degrade to text.
+    // the solution trace cannot load without a registry/generated entry.
     expect(active.has('run_algorithm')).toBe(false);
   });
 
@@ -168,23 +167,36 @@ describe('buildIntakeUserText', () => {
     );
   });
 
-  it('out-of-scope LC session: emits the OUT OF SCOPE block + standard instruction', () => {
+  it('out-of-scope LC session: emits the TIER 3 LIVE VIZ block + standard instruction', () => {
     const text = buildIntakeUserText({ mode: 'leetcode', hasViz: false }, PROBLEM);
-    expect(text).toContain('[LEETCODE MODE — OUT OF SCOPE]');
-    expect(text).toContain('no visualization is available');
+    expect(text).toContain('[LEETCODE MODE — TIER 3 LIVE VIZ]');
+    expect(text).toContain('you build it yourself');
+    expect(text).toContain('run_algorithm is unavailable');
+    // Renderer docs are injected so the agent has the action contract up front.
+    expect(text).toContain('RENDERER REFERENCE (array)');
     expect(text.endsWith(STANDARD_TAIL)).toBe(true);
     // No solution-mode/companion framing leaks into the standard path.
     expect(text).not.toContain('[STUCK COMPANION MODE]');
   });
 
-  // eng D3: companion off-registry must NOT claim "no viz available" (the standard
-  // out-of-scope text) — the structure viz works; only the trace degrades to text.
-  it('companion off-registry: structure-viz-works framing, not the no-viz block', () => {
+  it('out-of-scope LC session: pattern_renderer steers the recommended renderer + docs', () => {
+    const text = buildIntakeUserText(
+      { mode: 'leetcode', hasViz: false, _leetcodePatternRenderer: 'table' },
+      PROBLEM,
+    );
+    expect(text).toContain('Recommended renderer: "table"');
+    expect(text).toContain('RENDERER REFERENCE (table)');
+  });
+
+  // eng D3 + Tier 3: companion off-registry keeps the structure-viz framing and the
+  // reveal is a hand-built animated walkthrough, never a text-only one.
+  it('companion off-registry: structure-viz framing + hand-built reveal, not text-only', () => {
     const text = buildIntakeUserText({ mode: 'leetcode', hasViz: false, companionMode: true }, PROBLEM);
     expect(text).toContain('[COMPANION — OFF REGISTRY]');
     expect(text).toContain('build_example_graph');
     expect(text).toContain('run_algorithm is unavailable');
-    expect(text).not.toContain('[LEETCODE MODE — OUT OF SCOPE]');
+    expect(text).toContain('YOU are the trace');
+    expect(text).not.toContain('[LEETCODE MODE — TIER 3 LIVE VIZ]');
     expect(text).toContain('[STUCK COMPANION MODE]'); // still the companion instruction
   });
 

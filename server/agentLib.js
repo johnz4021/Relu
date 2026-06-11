@@ -2,8 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { tools } from './tools.js';
-import { runAlgorithm } from './algorithms.js';
-import { runRegisteredAlgorithm, runAlgorithmWithFallback, ALGORITHMS } from './algorithms/registry.js';
+import { runAlgorithmWithFallback, ALGORITHMS } from './algorithms/registry.js';
 import { validateAlgorithmInput } from './algorithms/validateInput.js';
 import { adaptAlgorithmInput } from './algorithms/adaptInput.js';
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
@@ -425,13 +424,15 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
       const algoInfo = ALGORITHMS[algo];
       const graphId = input.graph_id || null;
 
-      if (algoInfo) {
-        // Use the registry for all registered algorithms
+      {
+        // Registry algorithms take the Tier 1 fast path inside runAlgorithmWithFallback;
+        // off-registry keys (Tier 2 pattern keys) go through the author-agent fallback
+        // (cache → generate → sandbox → correctness gate).
         try {
           const registryInput = { ...input.input };
           // For graph algorithms, only inject session/tool-call overrides when present.
           // Otherwise let the registry's defaultInput provide the correct graph/source/sink.
-          if (algoInfo.renderer === 'graph') {
+          if (algoInfo?.renderer === 'graph') {
             // Use graph_id-specific graph if available, else fall back to currentGraph
             const targetGraph = (graphId && session.graphs?.[graphId]) || session.currentGraph;
             if (targetGraph && !registryInput.graph) {
@@ -444,17 +445,27 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               registryInput.sink = input.sink;
             }
           }
-          // Validate and adapt input against algorithm capabilities
-          const validation = validateAlgorithmInput(algo, registryInput, session.modelContract);
-          if (!validation.valid) {
-            return { error: validation.errors.join('; '), warnings: validation.warnings };
-          }
-          if (validation.adaptations.length > 0) {
-            adaptAlgorithmInput(algo, registryInput, validation.adaptations);
+          // Validate and adapt input against algorithm capabilities (registry only —
+          // off-registry keys have no declared capabilities to validate against)
+          let validation = { adaptations: [], warnings: [] };
+          if (algoInfo) {
+            validation = validateAlgorithmInput(algo, registryInput, session.modelContract);
+            if (!validation.valid) {
+              return { error: validation.errors.join('; '), warnings: validation.warnings };
+            }
+            if (validation.adaptations.length > 0) {
+              adaptAlgorithmInput(algo, registryInput, validation.adaptations);
+            }
+          } else if (Object.keys(registryInput).length === 0 && session._leetcodeTestCase) {
+            // Off-registry with no input from the agent: generated trace functions expect
+            // the problem's own input shape — default to the parsed Example 1 test case.
+            Object.assign(registryInput, session._leetcodeTestCase);
           }
 
           const result = await runAlgorithmWithFallback(algo, registryInput, { description: session._leetcodeTitle, expectedOutput: session._leetcodeExpectedOutput || null });
           console.log(`[Agent] run_algorithm '${algo}' returned ${result.trace.length} steps, renderer: ${result.renderer}, tier: ${result.tier}`);
+          // Off-registry: renderer comes from the generated result, not a registry entry.
+          const rendererType = algoInfo?.renderer || result.renderer;
 
           // ── Store trace on session for deterministic mapping ──
           session.currentTrace = result.trace;
@@ -475,14 +486,19 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           }
 
           // ── Auto-configure visualization + context panels ──
-          const contextPanels = getDefaultContextPanels(algo);
-          console.log(`[Agent] Auto-setup for '${algo}': renderer=${algoInfo.renderer}, contextPanels=${contextPanels.map(p => p.id).join(',')}, sessionGraph=${!!session.currentGraph}`);
+          let contextPanels = getDefaultContextPanels(algo);
+          // Off-registry context traces embed viz_actions targeting 'algorithm_state' —
+          // there's no PANEL_DEFAULTS entry for a pattern key, so register the panel here.
+          if (!algoInfo && rendererType === 'context' && contextPanels.length === 0) {
+            contextPanels = [{ id: 'algorithm_state', type: 'key_value', title: 'Algorithm State' }];
+          }
+          console.log(`[Agent] Auto-setup for '${algo}': renderer=${rendererType}, contextPanels=${contextPanels.map(p => p.id).join(',')}, sessionGraph=${!!session.currentGraph}`);
 
           // Notify frontend which algorithm is running (enables algorithm-specific UI like residual toggle).
           // Use 'algorithm_step' instead of 'lesson_start' to avoid wiping transcript/viz state.
           sendJSON(ws, { type: 'algorithm_step', algorithm: algo });
 
-          if (algoInfo.renderer === 'context') {
+          if (rendererType === 'context') {
             // Context-only (Tier 2 hash map / data structure algorithms): no main viz panel
             const autoVizMsg = {
               type: 'create_visualization',
@@ -492,7 +508,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             sendJSON(ws, autoVizMsg);
             registerPanels(session, [], contextPanels);
             session._lastVizMessage = autoVizMsg;
-          } else if (algoInfo.renderer === 'graph') {
+          } else if (rendererType === 'graph') {
             // Always send the graph for the current algorithm run.
             // Fall back to the trace's first step's graph for algorithms that
             // generate their graph dynamically from other input (trie, backtracking,
@@ -506,7 +522,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             const trace0Graph = firstStep?.graph
               || (firstStep?.nodes ? { nodes: firstStep.nodes, edges: firstStep.edges || [] } : null);
             const graphData = registryInput.graph
-              || algoInfo.defaultInput?.graph
+              || algoInfo?.defaultInput?.graph
               || trace0Graph;
             if (graphData) {
               const directed = graphData.directed !== undefined ? graphData.directed : true;
@@ -566,9 +582,9 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             // type (e.g. "array") — which would break subsequent viz_actions targeting the
             // original name.
             const existingEntry = Object.entries(session._panels || {}).find(
-              ([, p]) => p.renderer === algoInfo.renderer && p.type === 'renderer'
+              ([, p]) => p.renderer === rendererType && p.type === 'renderer'
             );
-            const rendererPanelId = existingEntry ? existingEntry[0] : algoInfo.renderer;
+            const rendererPanelId = existingEntry ? existingEntry[0] : rendererType;
             // Store so emit_segment can rewrite Tier 2 viz_action renderer targets
             session._rendererPanelId = rendererPanelId;
             const autoVizMsg = {
@@ -576,19 +592,19 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               // If the agent already registered a named panel (e.g. 'string_main'), send
               // panels:[] so the client preserves the existing mounted panel rather than
               // remounting it — which would strip its title and reset renderer state.
-              panels: existingEntry ? [] : [{ id: rendererPanelId, renderer: algoInfo.renderer, config: {} }],
+              panels: existingEntry ? [] : [{ id: rendererPanelId, renderer: rendererType, config: {} }],
               context_panels: contextPanels,
             };
             sendJSON(ws, autoVizMsg);
-            registerPanels(session, existingEntry ? [] : [{ id: rendererPanelId, renderer: algoInfo.renderer }], contextPanels);
+            registerPanels(session, existingEntry ? [] : [{ id: rendererPanelId, renderer: rendererType }], contextPanels);
             if (!existingEntry) session._lastVizMessage = autoVizMsg;
             if (!session._rendererVizHistory) session._rendererVizHistory = {};
-            session._rendererVizHistory[algoInfo.renderer] = [];
+            session._rendererVizHistory[rendererType] = [];
           }
 
           const panelNames = contextPanels.map((p) => p.id);
-          const tier2Note = result.tier === 2 ? ' The trace was AI-generated — each step has embedded viz_actions that update the context panels automatically.' : '';
-          const contextNote = algoInfo.renderer === 'context' ? ' Context-only algorithm: no main visualization panel. Use trace_step_indices to drive context panel updates via the embedded viz_actions in each step.' : '';
+          const tier2Note = result.tier === 2 ? ' The trace was AI-generated — each step has embedded viz_actions that update the panels automatically.' : '';
+          const contextNote = rendererType === 'context' ? ' Context-only algorithm: no main visualization panel. Use trace_step_indices to drive context panel updates via the embedded viz_actions in each step.' : '';
           return {
             success: true,
             algorithm: algo,
@@ -599,7 +615,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             visualization_auto_configured: true,
             context_panels: panelNames,
             tier: result.tier,
-            capabilities: algoInfo.capabilities,
+            capabilities: algoInfo?.capabilities || {},
             adaptations_applied: validation.adaptations,
             warnings: validation.warnings,
             message: `Algorithm executed. Visualization and context panels auto-configured. Use emit_segment with trace_step_indices to teach. You have ${result.trace.length} trace steps available (indices 0 to ${result.trace.length - 1}).${tier2Note}${contextNote}`,
@@ -608,21 +624,6 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           return { error: err.message };
         }
       }
-
-      // Fallback: legacy path for unregistered algorithms
-      const src = input.source || source;
-      const trace = runAlgorithm(algo, session.currentGraph || graph, src);
-      session.currentTrace = trace;
-      session.currentAlgorithm = algo;
-      session.mapperState = {};
-      return {
-        success: true,
-        algorithm: algo,
-        source: src,
-        trace,
-        step_count: trace.length,
-        message: `Algorithm executed successfully. ${trace.length} steps in trace. Use emit_segment with trace_step_indices to narrate each step.`,
-      };
     }
 
     case 'emit_segment': {

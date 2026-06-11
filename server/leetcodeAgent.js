@@ -31,7 +31,7 @@ export function generateInputFormats(algorithms) {
     .join('\n\n');
 }
 
-const EXTRACTION_TOOL = {
+export const EXTRACTION_TOOL = {
   name: 'extract_leetcode_problem',
   description: 'Extract structured information from a LeetCode problem statement.',
   input_schema: {
@@ -53,6 +53,15 @@ const EXTRACTION_TOOL = {
       confidence: {
         type: 'number',
         description: 'Confidence score 0.0-1.0 that the algorithm_key is correct',
+      },
+      pattern_key: {
+        type: 'string',
+        description: 'REQUIRED whenever algorithm_key is null or confidence < 0.7: a free-form snake_case descriptor of the solving pattern (e.g. "product_except_self", "n_queens_backtracking", "merge_intervals_variant"). Name the pattern honestly — it seeds an AI-authored trace generator. Null only when algorithm_key is confident.',
+      },
+      pattern_renderer: {
+        type: 'string',
+        enum: ['graph', 'array', 'table', 'tree', 'linked', 'interval', 'string', 'context', 'recursion_tree'],
+        description: 'REQUIRED alongside pattern_key: the renderer that best fits the data the algorithm manipulates (array → "array", 2D DP grid → "table", hash map/counting state → "context", etc.).',
       },
       test_case: {
         type: 'object',
@@ -110,7 +119,8 @@ RULES:
 - For graphs with more than 12 nodes: BFS from source node, keep only the first 12 reachable nodes and edges between them
 - If the problem has multiple valid algorithms, pick the most canonical one
 - Each Tier 1 key is specific: route ONLY the named canonical problem to it; prefer null over routing a mismatched problem to a wrong visualization
-- Use null algorithm_key when the problem doesn't fit any registered key — a missing visualization is better than a wrong one`;
+- Use null algorithm_key when the problem doesn't fit any registered key — but ALWAYS supply pattern_key + pattern_renderer in that case (and when confidence < 0.7). Downstream, pattern_key seeds an AI-authored trace generator whose output is validated before display, so an honest pattern name is strictly better than nothing.
+- When emitting pattern_key, still extract test_case from Example 1 using the problem's own natural input fields (e.g. { "nums": [1,2,3,4] }, { "s": "abcabcbb" }, { "intervals": [[1,3],[2,6]] }) and expected_output as usual — both gate the generated trace's correctness.`;
 
 /**
  * Parse a LeetCode problem statement into structured extraction.

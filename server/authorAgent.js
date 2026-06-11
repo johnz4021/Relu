@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { buildRendererDocs } from './rendererManifest.js';
 
 const anthropic = new Anthropic({ maxRetries: 5 });
 
@@ -27,11 +28,13 @@ For renderer 'graph':
   Input: { graph: { nodes: [{id}], edges: [{source, target, weight}] }, source: string }
 
 For renderer 'array':
-  Steps should include: init, compare, swap, partition, mark_sorted, result
+  Steps should include: init, compare, swap, mark_sorted, result (also handled generically:
+  fill, compute, update, build, mark, found, insert, visit, push, pop, slide, traverse, record)
   Each step should have: { indices?, values?, array? (snapshot) }
-  Input: { array: number[] }
-  IMPORTANT: Do NOT add viz_actions to array renderer steps. viz_actions are for context renderer ONLY.
-  The array renderer visualizes the 'array' field automatically.
+  Input: { array: number[] } (or the problem's natural field, e.g. nums)
+  Prefer these standard step fields — the server maps them to renderer actions automatically.
+  Only add embedded viz_actions (see RENDERER ACTION REFERENCE in the request) when a step's
+  visual intent cannot be expressed through the standard fields.
 
 For renderer 'table':
   Steps should include: init_table, fill_cell, skip_cell, traceback, result
@@ -129,6 +132,15 @@ For renderer 'context':
     return trace;
   }
 
+EMBEDDED viz_actions (all renderers):
+  Any step MAY carry a viz_actions array targeting its renderer. When present, these take
+  precedence over the automatic step-field mapping for that step, and they are
+  schema-validated server-side against the renderer's documented actions — use ONLY action
+  names and params from the RENDERER ACTION REFERENCE included in the request. Format:
+  viz_actions: [{ renderer: "<renderer type>", action: "<documented action>", params: { ... } }]
+  For renderer 'context' this is MANDATORY on every step (see above). For other renderers
+  prefer the standard step fields and embed actions only when those can't express the step.
+
 Output ONLY the function wrapped in: \`\`\`javascript ... \`\`\`
 No explanation. No imports. Pure function.`;
 
@@ -140,7 +152,10 @@ export async function generateTraceGenerator(algorithmName, renderer, descriptio
   let userContent = `Write a trace generator for: ${algorithmName}
 Target renderer: ${renderer}
 Description: ${description || algorithmName}
-Input format: The function receives an object with algorithm-specific fields.`;
+Input format: The function receives an object with algorithm-specific fields.
+
+RENDERER ACTION REFERENCE (the only legal embedded viz_actions for this renderer):
+${buildRendererDocs([renderer])}`;
 
   if (context) {
     if (context.modelContract) {

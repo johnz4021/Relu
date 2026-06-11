@@ -21,37 +21,24 @@ function buildAlgorithmList() {
 
 const MAX_API_CALLS_PER_SESSION = 100;
 
-// True when an LC session reached the guided loop with no viz capability. Covers
-// both shapes: classifier returned null deliberately (Sudoku/N-Queens/etc. per the
-// leetcodeAgent.js disambiguation rules) AND classifier picked an unregistered or
-// low-confidence key (Haiku improvises a name; algoEntry resolves to undefined;
-// hasViz is set false at server/index.js:537). In either state no viz can be built —
-// viz tools must be hard-filtered, otherwise the agent improvises empty create_graph
-// calls + phantom narration referencing state that never reaches the canvas.
+// True when an LC session reached the guided loop with no pre-built or generated
+// trace: classifier returned null deliberately (per the leetcodeAgent.js
+// disambiguation rules), picked a low-confidence key, or the Tier 2 pattern-key
+// generation failed/timed out (hasViz set false at server/index.js). These sessions
+// run in TIER 3 LIVE VIZ mode: the full viz pipeline stays available and the agent
+// hand-builds viz_actions through the enforcement ladder — only run_algorithm is
+// filtered, because no trace exists for it to load. (Historical note: before the
+// enforcement ladder these sessions were text-only with all viz tools hard-filtered;
+// the ladder's loud per-action rejection made improvised viz safe to allow.)
 export const isOutOfScopeSession = (session) =>
   session.mode === 'leetcode' && session.hasViz === false;
 
-// Tools that create or mutate visualization state. Filtered when isOutOfScopeSession
-// is true so the agent literally cannot improvise a viz with no algorithm backing.
-// build_example_graph is included because it's the head of the viz pipeline — leaving
-// it available with the downstream tools filtered would strand the agent mid-plan.
-const VIZ_PIPELINE_TOOLS = new Set([
-  'create_graph',
-  'create_visualization',
-  'update_graph',
-  'run_algorithm',
-  'build_example_graph',
-]);
-
 // The trace-loading rung only. It needs a registered/generated trace, so off-registry
-// it cannot work and is filtered — even in companion mode, where the rest of the viz
-// pipeline stays available for the zero-spoiler STRUCTURE view (eng D3).
+// it cannot work and is filtered. Everything else in the viz pipeline stays available
+// for Tier 3 hand-built viz (structure view + live walkthrough).
 const TRACE_TOOLS = new Set(['run_algorithm']);
 
 // Pure helper exported for tests: derives the API-facing tool list from session state.
-// The earlier soft-filter (removing create_visualization when hasViz===false) became
-// redundant once isOutOfScopeSession started gating on hasViz directly — non-LC paths
-// never set hasViz so they never hit the soft branch in practice anyway.
 export function computeActiveTools(session, allTools) {
   // highlight_problem_text is COMPANION-ONLY (eng review 2026-06-09 D1). Strip it
   // up front so BOTH non-companion paths below — the out-of-scope filter AND the
@@ -61,13 +48,7 @@ export function computeActiveTools(session, allTools) {
     ? allTools
     : allTools.filter((t) => t.name !== 'highlight_problem_text');
   if (isOutOfScopeSession(session)) {
-    // STUCK COMPANION MODE keeps the structure viz off-registry: build_example_graph
-    // + create_visualization render the problem's OWN input (no solving, works on any
-    // problem — eng D3). Only the trace rung is filtered; the solution reveal degrades
-    // to text. The standard walkthrough has no such rung, so it filters the whole
-    // pipeline (the Sudoku empty-create_graph + phantom-narration bug).
-    const filtered = session.companionMode ? TRACE_TOOLS : VIZ_PIPELINE_TOOLS;
-    return active.filter((t) => !filtered.has(t.name));
+    return active.filter((t) => !TRACE_TOOLS.has(t.name));
   }
   return active;
 }
@@ -92,20 +73,21 @@ export function buildIntakeUserText(session, problemText) {
     : 'See the attached image for the problem the student wants to solve.';
 
   let lcContext = '';
+  // Tier 3 renderer hint: the parser's pattern_renderer when available, else array
+  // (the most broadly applicable renderer for LC inputs).
+  const tier3Renderer = session._leetcodePatternRenderer || 'array';
   if (isOutOfScopeSession(session) && session.companionMode) {
-    // Companion mode off-registry (eng D3): the hint ladder needs no registry, and
-    // the zero-spoiler STRUCTURE view still renders from the problem's own input
-    // (build_example_graph + create_visualization are AVAILABLE). Only the animated
-    // SOLUTION TRACE is missing — run_algorithm is filtered — so the terminal reveal
-    // degrades to a text walkthrough (plus the structure view). Never promise an
-    // animated solution that won't appear.
-    lcContext = '\n\n[COMPANION — OFF REGISTRY] This problem has no pre-built solution trace, which is fine: your hints come from your own reasoning and work on any problem, and you can still render the zero-spoiler STRUCTURE view of the problem\'s own input with build_example_graph + create_visualization. What you do NOT have is an animated solution trace (run_algorithm is unavailable). So when the student reaches the terminal reveal, walk the solution in TEXT alongside the structure view — do not narrate as if an animated trace will appear.';
+    // Companion mode off-registry: the hint ladder needs no registry, the zero-spoiler
+    // STRUCTURE view renders from the problem's own input, and (post enforcement
+    // ladder) the terminal reveal is a HAND-BUILT animated walkthrough — the agent
+    // authors viz_actions itself; only run_algorithm (trace loading) is unavailable.
+    lcContext = `\n\n[COMPANION — OFF REGISTRY] This problem has no pre-built solution trace, which is fine: your hints come from your own reasoning and work on any problem, and you can still render the zero-spoiler STRUCTURE view of the problem's own input with build_example_graph + create_visualization. There is no automatic solution trace (run_algorithm is unavailable) — at the terminal reveal YOU are the trace: walk the solution with emit_segment, hand-building viz_actions on the structure view step by step (exactly how you build illustrate-mode examples). Never narrate state you have not drawn with a viz_action in the same segment. Recommended renderer: "${tier3Renderer}".\n\nRENDERER REFERENCE (${tier3Renderer}):\n${buildRendererDocs([tier3Renderer])}`;
   } else if (isOutOfScopeSession(session)) {
-    // Classifier intentionally returned null (see leetcodeAgent.js disambiguation:
-    // "REMOVED → null" rules for problems whose old umbrella algos were retired).
-    // Viz tools are filtered from the API call; this block tells the agent why and
-    // what to do instead so it doesn't try to narrate around a missing viz.
-    lcContext = '\n\n[LEETCODE MODE — OUT OF SCOPE] This problem does not match any registered algorithm — no visualization is available for it. Visualization tools (create_graph, create_visualization, run_algorithm, build_example_graph) are unavailable in this session. Walk the student through the problem conceptually in text only. Do not narrate as if a visualization exists — none will appear. Begin your first spoken message with: "I don\'t have a visualization for this one, but let\'s walk through it together."';
+    // Tier 3 live viz: no registry match and no generated trace (classifier returned
+    // null, or Tier 2 generation failed/timed out). The viz pipeline is available —
+    // only run_algorithm is filtered — and the agent hand-builds every visual through
+    // the enforcement ladder, which rejects invalid actions loudly.
+    lcContext = `\n\n[LEETCODE MODE — TIER 3 LIVE VIZ] This problem has no pre-built or generated trace, but you MUST still deliver a visual walkthrough — you build it yourself. Flow: (1) call run_solver for the verified approach, (2) render the problem's own Example 1 input with create_visualization using the recommended renderer (or build_example_graph for graph-shaped problems), (3) teach with emit_segment, hand-building viz_actions in EVERY segment to animate the solution step by step — exactly how you build illustrate-mode examples. run_algorithm is unavailable (there is no trace to load); never call it and never narrate state you have not drawn with a viz_action in the same segment. Recommended renderer: "${tier3Renderer}".\n\nRENDERER REFERENCE (${tier3Renderer}):\n${buildRendererDocs([tier3Renderer])}`;
   } else if (session._leetcodeAlgorithmKey) {
     // Reached only when hasViz === true (truly out-of-scope keys are caught by
     // isOutOfScopeSession above). The previous `if (session.hasViz === false)`
@@ -1187,7 +1169,7 @@ function applyClassification(plan, session, ws, vizState) {
   let message = plan.reasoning_mode === 'algorithm_execution'
     ? (plan.is_in_scope
       ? `Classification: algorithm_execution. Target: ${plan.target_algorithm}. Internal model contract stored (NOT shown to student). Now offer a refresher via send_options, then proceed to the reduction sketch. If the problem has sample I/O, remember to call verify_result at the end.`
-      : `Problem is out of scope. Closest algorithm: ${plan.closest_algorithm}. Guide the student with the closest available algorithm.`)
+      : `Classification: algorithm_execution, but no registered trace exists (closest registered algorithm: ${plan.closest_algorithm}). Build the visualization yourself: create_visualization with the most fitting renderer, then teach with emit_segment, hand-building viz_actions in every segment to animate the approach step by step (exactly how you build illustrate-mode examples). Do NOT call run_algorithm — there is no trace to load. Never narrate state you have not drawn with a viz_action in the same segment.`)
     : plan.reasoning_mode === 'modeling'
     ? `Classification: MODELING MODE. Two context panels are auto-configured: "formulation" (expression, for Variables/Objective/Constraints) and "algorithm_state" (key_value, for tracking intermediate state as you walk through examples — e.g., growing hash map entries, running totals, set membership). No visualization renderer is pre-created — call create_visualization if a graph, table, or other renderer would help the student visualize the structure. Update "algorithm_state" via emit_segment viz_actions as the student traces through examples. Do NOT call run_algorithm unless the student explicitly asks. Related algorithm: ${plan.closest_algorithm || plan.target_algorithm}.`
     : plan.reasoning_mode === 'greedy_design'
@@ -1198,8 +1180,10 @@ function applyClassification(plan, session, ws, vizState) {
     ? `Classification: DIVIDE-AND-CONQUER MODE. Context panels (dc_structure, recurrence) are auto-configured. No visualization renderer is pre-created — choose one based on the problem: (A) If the problem has a clean recurrence T(n)=aT(n/b)+O(n^d), call create_visualization with panels:[{renderer:"recursion_tree"}], then use set_recurrence_tree({a, b, d, n:16}) via viz_actions to populate it. Do this as soon as you know a, b, d — even if learned early from intake. (B) If the problem involves case analysis or branching logic (e.g. different test outcomes lead to different paths), call create_visualization with panels:[{renderer:"graph"}], then use update_graph to build a decision tree (nodes=states, edges labeled with conditions via weight field). (C) If no visualization adds value, skip it. Guide: (1) identify split, (2) define subproblems, (3) combine step, (4) analyze runtime.`
     : `Classification: RUNTIME/ASYMPTOTICS MODE. A Runtime Analysis context panel is auto-configured (no renderer yet). Guide through the proof structure: identify the bound, prove upper/lower, or solve the recurrence. For recurrences, FIRST guide the student to identify a, b, d, THEN call create_visualization with panels:[{renderer:"recursion_tree"}] and IMMEDIATELY populate it with set_recurrence_tree({a, b, d, n:16}) in the same emit_segment. Never create an empty recursion tree.`;
 
-  // Inject renderer docs for algorithm_execution (same pattern as non-execution modes)
-  if (plan.reasoning_mode === 'algorithm_execution' && plan.is_in_scope) {
+  // Inject renderer docs for algorithm_execution (same pattern as non-execution modes).
+  // Out-of-scope execution problems get docs too — they hand-build viz (Tier 3) against
+  // the closest algorithm's renderer.
+  if (plan.reasoning_mode === 'algorithm_execution') {
     const targetAlgo = plan.target_algorithm || plan.closest_algorithm;
     const algoInfo = targetAlgo ? ALGORITHMS[targetAlgo] : null;
     let rendererType = algoInfo?.renderer || 'graph';
