@@ -11,7 +11,8 @@ import { resolveHighlightResult, abortHighlightWait } from './agentLib.js';
 import { resetTTSDisabled } from './tts.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyJWT } from './supabase.js';
-import { createConversation, listConversations, loadConversationMessages, loadAgentState, countConversations, getUserSettings, saveUserSettings, saveFeedback, createLcSession, masterLcSession, listLcSessions } from './db.js';
+import { createConversation, listConversations, loadConversationMessages, loadAgentState, countConversations, getUserSettings, saveUserSettings, saveFeedback, createLcSession, masterLcSession, listLcSessions, getSubscription } from './db.js';
+import { registerStripeWebhook, registerStripeRoutes, isSubscriptionActive, billingEnabled } from './stripe.js';
 import { parseLeetcodeProblem } from './leetcodeAgent.js';
 import { ALGORITHMS, runRegisteredAlgorithm, runAlgorithmWithFallback } from './algorithms/registry.js';
 import { encrypt, decrypt } from './crypto.js';
@@ -21,9 +22,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const server = createServer(app);
 
+// Stripe webhook needs the raw body for signature verification, so it must
+// be registered before express.json() consumes it.
+registerStripeWebhook(app);
+
 // Serve static client build
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'client', 'dist')));
+
+// Checkout + billing portal (JSON routes, Supabase JWT in Authorization header)
+registerStripeRoutes(app);
 
 // Feedback / help request endpoint
 app.post('/api/feedback', (req, res) => {
@@ -129,6 +137,9 @@ async function checkSessionGate(session) {
   if (!session.userId) return { allowed: true };
   const count = await countConversations(session.userId);
   if (count < FREE_SESSION_LIMIT) return { allowed: true, remaining: FREE_SESSION_LIMIT - count };
+  // Paid subscribers run on the server's API key
+  const sub = await getSubscription(session.userId);
+  if (isSubscriptionActive(sub)) return { allowed: true, subscribed: true };
   const settings = await getUserSettings(session.userId);
   if (settings?.anthropic_api_key_encrypted) return { allowed: true, byok: true };
   return { allowed: false, count };
@@ -361,7 +372,7 @@ function attachHandlers(ws, session) {
           {
             const gate = await checkSessionGate(session);
             if (!gate.allowed) {
-              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT }));
+              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT, billingEnabled }));
               return;
             }
             if (gate.byok) {
@@ -490,13 +501,16 @@ function attachHandlers(ws, session) {
           const count = await countConversations(session.userId);
           const settings = await getUserSettings(session.userId);
           const hasByok = !!settings?.anthropic_api_key_encrypted;
-          const allowed = count < FREE_SESSION_LIMIT || hasByok;
+          const subscribed = isSubscriptionActive(await getSubscription(session.userId));
+          const allowed = count < FREE_SESSION_LIMIT || subscribed || hasByok;
           ws.send(JSON.stringify({
             type: 'session_status',
             allowed,
             count,
             limit: FREE_SESSION_LIMIT,
             hasByok,
+            subscribed,
+            billingEnabled,
           }));
           break;
         }
@@ -524,7 +538,7 @@ function attachHandlers(ws, session) {
           {
             const gate = await checkSessionGate(session);
             if (!gate.allowed) {
-              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT }));
+              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT, billingEnabled }));
               return;
             }
             if (gate.byok) {
@@ -566,7 +580,15 @@ function attachHandlers(ws, session) {
                 // degrade to Tier 3 rather than hang the session start.
                 ws.send(JSON.stringify({ type: 'lc_generating_viz', algorithm_key: tier2Key }));
               }
-              const runPromise = runAlgorithmWithFallback(preRunKey, test_case, { description: title, expectedOutput: expected_output || null });
+              // Honor the parser's renderer recommendation for Tier 2 generation.
+              // recursion_tree maps to graph: authorAgent has no recursion-tree trace
+              // shape, and decision trees render as graphs (autoLayout arranges them).
+              const tier2Renderer = pattern_renderer === 'recursion_tree' ? 'graph' : pattern_renderer;
+              const runPromise = runAlgorithmWithFallback(preRunKey, test_case, {
+                description: title,
+                expectedOutput: expected_output || null,
+                ...(tier2Key && tier2Renderer ? { renderer: tier2Renderer } : {}),
+              });
               const result = tier2Key
                 ? await Promise.race([
                     runPromise,

@@ -45,6 +45,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [ttsToast, setTtsToast] = useState(null);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [checkoutToast, setCheckoutToast] = useState(null);
   const [lcParsed, setLcParsed] = useState(null);
   const [lcSessions, setLcSessions] = useState([]);
   const [vizTier, setVizTier] = useState(null);
@@ -227,7 +228,7 @@ export default function App() {
         setGateStatus(msg);
       }
       if (msg.type === 'session_limit_reached') {
-        setGateStatus({ allowed: false, count: msg.count, limit: msg.limit });
+        setGateStatus({ allowed: false, count: msg.count, limit: msg.limit, billingEnabled: msg.billingEnabled });
         reset();
       }
       if (msg.type === 'api_key_result') {
@@ -344,6 +345,23 @@ export default function App() {
   useEffect(() => {
     if (connected && user) send({ type: 'check_session_status' });
   }, [connected, user, send]);
+
+  // Returning from Stripe Checkout (?checkout=success|cancel). The webhook has
+  // already synced the subscription in the success case; the on-connect
+  // check_session_status above refreshes the gate. Just acknowledge + clean URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get('checkout');
+    if (!checkout) return;
+    track(checkout === 'success' ? 'checkout_completed' : 'checkout_canceled', {});
+    if (checkout === 'success') {
+      setCheckoutToast('Subscription active — welcome to ReLU Pro!');
+      setTimeout(() => setCheckoutToast(null), 6000);
+    }
+    params.delete('checkout');
+    const rest = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+  }, []);
 
   const handleSelectAlgorithm = useCallback(
     (algorithm, data) => {
@@ -798,6 +816,7 @@ export default function App() {
                 apiKeyResult={apiKeyResult}
                 onKeySuccess={() => setGateStatus((prev) => ({ ...prev, allowed: true, hasByok: true }))}
                 lastProblemText={lcParsed?.problemText || null}
+                billingEnabled={!!gateStatus.billingEnabled}
               />
             ) : embedMode ? (
               // Embed mode: never show the landing. Show the two-choice opener
@@ -1015,6 +1034,7 @@ export default function App() {
             limit={0}
             send={send}
             apiKeyResult={apiKeyResult}
+            billingEnabled={!!gateStatus?.billingEnabled}
             lastProblemText={lcParsed?.problemText || null}
             onKeySuccess={() => {
               setShowCreditsModal(false);
@@ -1036,11 +1056,18 @@ export default function App() {
         {ttsToast}
       </div>
     )}
+    {checkoutToast && (
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-surface-2 border border-accent/40 text-text-primary text-sm px-4 py-2.5 rounded-lg shadow-lg animate-fade-in">
+        {checkoutToast}
+      </div>
+    )}
     <SettingsModal
       open={showSettings}
       onClose={() => setShowSettings(false)}
       send={send}
       hasByok={!!gateStatus?.hasByok}
+      subscribed={!!gateStatus?.subscribed}
+      billingEnabled={!!gateStatus?.billingEnabled}
       deletionResult={keyDeletionResult}
       onKeyDeleted={() => setKeyDeletionResult(null)}
       saveResult={apiKeyResult}

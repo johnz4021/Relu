@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { posthog, POSTHOG_KEY } from '../lib/posthog';
+import { startCheckout } from '../lib/billing';
 
 const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
@@ -16,11 +17,25 @@ const WEDGE_OPTIONS = [
   { id: 'team_license',      label: 'Team or class license' },
 ];
 
-export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyResult, lastProblemText }) {
+export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyResult, lastProblemText, billingEnabled }) {
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [keySuccess, setKeySuccess] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState(null);
+
+  const handleSubscribe = async () => {
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+    track('gate_subscribe_clicked', { count, limit });
+    try {
+      await startCheckout(); // navigates away to Stripe on success
+    } catch (err) {
+      setCheckoutError(err.message);
+      setCheckoutLoading(false);
+    }
+  };
 
   // React to api_key_result from server
   useEffect(() => {
@@ -102,9 +117,30 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
           </p>
         </div>
 
-        {/* Section A: BYOK */}
+        {/* Section A: Subscribe via Stripe (only when billing is configured server-side) */}
+        {billingEnabled && (
+          <>
+            <div className="mb-8">
+              <h3 className="text-sm font-semibold text-text-primary mb-3">Option 1: Upgrade to ReLU Pro</h3>
+              <p className="text-xs text-text-tertiary mb-3">
+                Unlimited tutoring sessions on our API key. Cancel any time from Settings.
+              </p>
+              <button
+                onClick={handleSubscribe}
+                disabled={checkoutLoading}
+                className="w-full px-4 py-2.5 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {checkoutLoading ? 'Redirecting to Stripe...' : 'Subscribe — $20/month'}
+              </button>
+              {checkoutError && <p className="mt-2 text-xs text-red-400">{checkoutError}</p>}
+            </div>
+            <div className="border-t border-border my-6" />
+          </>
+        )}
+
+        {/* Section B: BYOK */}
         <div className="mb-8">
-          <h3 className="text-sm font-semibold text-text-primary mb-3">Option 1: Use your own API key</h3>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">{billingEnabled ? 'Option 2' : 'Option 1'}: Use your own API key</h3>
           <p className="text-xs text-text-tertiary mb-3">
             Your key is AES-256 encrypted and never logged.{' '}
             <a
@@ -148,9 +184,9 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
 
         <div className="border-t border-border my-6" />
 
-        {/* Section B: Interest Survey */}
+        {/* Section C: Interest Survey */}
         <div>
-          <h3 className="text-sm font-semibold text-text-primary mb-3">Option 2: Fill out the form to request credits</h3>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">{billingEnabled ? 'Option 3' : 'Option 2'}: Fill out the form to request credits</h3>
 
           {interestSent ? (
             <div className="text-center py-4">

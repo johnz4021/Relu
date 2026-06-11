@@ -232,6 +232,66 @@ export async function listLcSessions(userId) {
 }
 
 /**
+ * Get a user's Stripe subscription row, or null if they've never subscribed.
+ */
+export async function getSubscription(userId) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null; // not found
+    console.error('[DB] getSubscription error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Upsert subscription state for a user. Called from the Stripe webhook on
+ * checkout.session.completed.
+ */
+export async function upsertSubscription(userId, fields) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .upsert(
+      { user_id: userId, ...fields, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    )
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[DB] upsertSubscription error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Update subscription state by Stripe customer id. Called from the webhook on
+ * customer.subscription.updated/deleted, where we only have Stripe's ids.
+ */
+export async function updateSubscriptionByCustomer(stripeCustomerId, fields) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq('stripe_customer_id', stripeCustomerId)
+    .select();
+
+  if (error) {
+    console.error('[DB] updateSubscriptionByCustomer error:', error.message);
+    return null;
+  }
+  return data?.[0] || null;
+}
+
+/**
  * Upsert user settings.
  */
 export async function saveUserSettings(userId, fields) {
