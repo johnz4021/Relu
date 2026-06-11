@@ -3155,6 +3155,22 @@ function mapStringStep(algo, step, state) {
       break;
     }
 
+    // Variable-window best-window tracking (min_window_substring). Not algo-
+    // gated: any sliding-window string algorithm that records a new best
+    // window can emit { window_start, window_end, best_window, have, need }.
+    case 'new_best': {
+      s('set_window', { start: step.window_start, end: step.window_end, windowClass: 'active' });
+      c.push(ctxUpdate('window_state', {
+        entries: [
+          { key: 'Need', value: step.need },
+          { key: 'Have', value: step.have },
+          { key: 'Best window', value: step.best_window, status: 'updated' },
+          { key: 'Best length', value: step.best_window?.length ?? 0, status: 'updated' },
+        ],
+      }));
+      break;
+    }
+
     case 'compare': {
       s('set_char_state', { index: step.L, state: 'active' });
       s('set_char_state', { index: step.R, state: 'active' });
@@ -3267,6 +3283,13 @@ function mapStringStep(algo, step, state) {
     case 'result': {
       if (algo === 'sliding_window_string') {
         s('set_window', { start: step.longest_start, end: step.longest_end, windowClass: 'found' });
+      } else if (algo === 'min_window_substring') {
+        if (step.best_start !== undefined && step.best_start >= 0) {
+          s('set_window', { start: step.best_start, end: step.best_end, windowClass: 'found' });
+        }
+        c.push(ctxUpdate('window_state', {
+          entries: [{ key: 'Result', value: step.output ? `"${step.output}"` : '(no window)', status: 'updated' }],
+        }));
       } else if (algo === 'valid_palindrome') {
         s('set_all_state', { state: step.is_palindrome ? 'match' : 'mismatch' });
       } else if (algo === 'expand_palindrome') {

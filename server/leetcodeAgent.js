@@ -99,6 +99,8 @@ DISAMBIGUATION RULES:
 - two_pointers vs sliding_window: two_pointers is for pair-sum on sorted array; sliding_window is for fixed/variable window on unsorted array
 - container_water: Use for Container With Most Water (LC11) — converging two-pointer area maximization on { heights }. NOT two_pointers (no target sum) and NOT Trapping Rain Water (→ trapping_rain_water)
 - trapping_rain_water: Use for Trapping Rain Water (LC42) — two-pointer water accumulation on { heights }. LC42 SUMS water trapped above every bar; container_water (LC11) maximizes one container's area
+- min_window_substring vs sliding_window_string: min_window_substring for Minimum Window Substring (LC76) — TWO strings { s, t }, window must cover ALL chars of t (need/have counts); sliding_window_string ONLY for Longest Substring Without Repeating Characters (LC3) — single string { s }, no required-chars map
+- longest_consecutive: Use for Longest Consecutive Sequence (LC128) — { nums } UNSORTED, hash-set streak walk for the longest run of consecutive integers. NOT max_subarray (no sums) and NOT sorting-based
 - binary_search vs two_pointers: binary_search for finding a value; two_pointers for finding a pair summing to target
 - search_rotated vs binary_search: binary_search ONLY for a sorted, untouched array; Search in Rotated Sorted Array (LC33) → search_rotated ({ nums, target })
 - find_peak vs binary_search: find_peak for Find Peak Element (LC162) — { nums } is unsorted and there is NO target; the slope at mid drives the halving

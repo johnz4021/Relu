@@ -47,7 +47,7 @@ guidedAgent.js
        ▼
   algorithms/registry.js
   ┌────┴──────────────────────────────────────┐
-  │ Tier 1: hand-written run() (96 algorithms) │
+  │ Tier 1: hand-written run() (103 algorithms) │
   │ Tier 2: authorAgent.js (unknown patterns)  │
   └────────────────────────────────────────────┘
        │
@@ -361,18 +361,18 @@ Every algorithm in the registry has:
 
 `run` is a synchronous JS function that executes the real algorithm and emits a step-by-step trace array. Deterministic, instant, no network call. Every algorithm in the registry is Tier 1 — there are no `run: null` stubs.
 
-**Tier 1 algorithms by renderer (96 total):**
+**Tier 1 algorithms by renderer (103 total):**
 
 | Renderer | Algorithms |
 |---|---|
 | `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, poly_reduction, trie, union_find, topological_sort, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
-| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array, container_water, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
+| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array, container_water, trapping_rain_water, product_except_self, move_zeroes, find_peak, search_rotated, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
 | `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum, stock_dp, interval_dp, palindrome_dp, bitmask_dp, valid_sudoku, board_backtracking, maximal_square |
 | `tree` | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path, tree_dp, top_k_heap, median_finder, k_closest_points, lca_tree, validate_bst, linked_list_cycle, merge_k_sorted |
 | `linked` | linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
 | `interval` | interval_merge, interval_scheduling |
-| `string` | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
-| `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, bit_ops, math_simulation, greedy_choice, jump_game_ii, valid_parentheses, task_scheduler, lru_cache, fast_power, gcd_algorithm, majority_vote |
+| `string` | sliding_window_string, min_window_substring, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
+| `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, longest_consecutive, bit_ops, math_simulation, greedy_choice, jump_game_ii, valid_parentheses, task_scheduler, lru_cache, fast_power, gcd_algorithm, majority_vote |
 
 #### Tier 2: AI-Generated Trace Generators (DORMANT)
 

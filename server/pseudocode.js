@@ -133,6 +133,23 @@ export const PSEUDOCODE = {
     '    else: right ← mid - 1',                    // 9
     'return -1',                                      // 10
   ],
+  longest_consecutive: [
+    'insert all nums into a hash set; best ← 0',     // 0
+    'for each num in set:',                            // 1
+    '  if num-1 in set: skip — not a streak start',  // 2
+    '  else: walk num, num+1, … while in set',       // 3
+    '  best ← max(best, streak length)',             // 4
+    'return best',                                     // 5
+  ],
+
+  min_window_substring: [
+    'need ← char counts of t; have ← 0; left ← 0', // 0
+    'for right in 0..n-1: add s[right] to window',    // 1
+    '  while have == |need|:',                         // 2
+    '    best ← window if smaller than best',         // 3
+    '    drop s[left] from window; left ← left + 1', // 4
+    'return best window',                               // 5
+  ],
   binary_search: [
     'left ← 0, right ← n-1',             // 0
     'while left ≤ right:',                 // 1

@@ -209,6 +209,12 @@ const PANEL_DEFAULTS = {
   sliding_window_string: [
     { id: 'char_freq', type: 'key_value', title: 'Char Freq' },
   ],
+  min_window_substring: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.min_window_substring } },
+    { id: 'window_state', type: 'key_value', title: 'Window State' },
+    { id: 'char_freq', type: 'key_value', title: 'Required Chars (have/need)' },
+  ],
   valid_palindrome: [
     { id: 'pointer_state', type: 'key_value', title: 'Pointers' },
   ],
@@ -261,6 +267,11 @@ const PANEL_DEFAULTS = {
   ],
   lru_cache: [
     { id: 'algorithm_state', type: 'key_value', title: 'Cache State' },
+  ],
+  longest_consecutive: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.longest_consecutive } },
+    { id: 'algorithm_state', type: 'key_value', title: 'Set & Streaks' },
   ],
 
   // --- Math patterns ---

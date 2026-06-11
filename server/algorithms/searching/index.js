@@ -17,3 +17,4 @@ export { productExceptSelf, DEFAULT_PRODUCT_EXCEPT_SELF_INPUT } from './productE
 export { moveZeroes, DEFAULT_MOVE_ZEROES_INPUT } from './moveZeroes.js';
 export { findPeak, DEFAULT_FIND_PEAK_INPUT } from './findPeak.js';
 export { searchRotated, DEFAULT_SEARCH_ROTATED_INPUT } from './searchRotated.js';
+export { minWindowSubstring, DEFAULT_MIN_WINDOW_SUBSTRING_INPUT } from './minWindowSubstring.js';

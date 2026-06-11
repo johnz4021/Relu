@@ -2,12 +2,12 @@ import { dijkstra, bfs, dfs, DEFAULT_GRAPH, kruskal, prim, DEFAULT_UNDIRECTED_GR
 import { mergesort } from './sorting/index.js';
 import { knapsack, editDistance, lcs, coinChange, maxSubarray, DEFAULT_MAX_SUBARRAY_INPUT, wordBreak, DEFAULT_WORD_BREAK_INPUT, climbingStairs, DEFAULT_CLIMBING_STAIRS_INPUT, minPathSum, DEFAULT_MIN_PATH_SUM_INPUT } from './dp/index.js';
 import { polyReduction, DEFAULT_REDUCTION_FORMULA } from './complexity/index.js';
-import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT, rotateArray, DEFAULT_ROTATE_ARRAY_INPUT, containerWater, DEFAULT_CONTAINER_WATER_INPUT, trappingRainWater, DEFAULT_TRAPPING_RAIN_WATER_INPUT, productExceptSelf, DEFAULT_PRODUCT_EXCEPT_SELF_INPUT, moveZeroes, DEFAULT_MOVE_ZEROES_INPUT, findPeak, DEFAULT_FIND_PEAK_INPUT, searchRotated, DEFAULT_SEARCH_ROTATED_INPUT } from './searching/index.js';
+import { quickselect, slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT, binarySearch, twoPointers, intervalMerge, intervalScheduling, monotonicStack, slidingWindowString, DEFAULT_SLIDING_WINDOW_STRING_INPUT, validPalindrome, DEFAULT_VALID_PALINDROME_INPUT, expandPalindrome, DEFAULT_EXPAND_PALINDROME_INPUT, kmpSearch, DEFAULT_KMP_SEARCH_INPUT, findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT, rotateArray, DEFAULT_ROTATE_ARRAY_INPUT, containerWater, DEFAULT_CONTAINER_WATER_INPUT, trappingRainWater, DEFAULT_TRAPPING_RAIN_WATER_INPUT, productExceptSelf, DEFAULT_PRODUCT_EXCEPT_SELF_INPUT, moveZeroes, DEFAULT_MOVE_ZEROES_INPUT, findPeak, DEFAULT_FIND_PEAK_INPUT, searchRotated, DEFAULT_SEARCH_ROTATED_INPUT, minWindowSubstring, DEFAULT_MIN_WINDOW_SUBSTRING_INPUT } from './searching/index.js';
 import { huffman } from './compression/index.js';
 import { heapOperations, trie, DEFAULT_TRIE_INPUT, bstInsert, treeDfs, DEFAULT_TREE_DFS_INPUT, treeLevelOrder, DEFAULT_TREE_LEVEL_ORDER_INPUT, treePath, DEFAULT_TREE_PATH_INPUT, lcaTree, DEFAULT_LCA_TREE_INPUT, validateBst, DEFAULT_VALIDATE_BST_INPUT } from './tree/index.js';
 import { linkedListReversal, stackOperations, queueOperations, linkedListCycle, DEFAULT_LINKED_LIST_CYCLE_INPUT, mergeKSorted, DEFAULT_MERGE_K_SORTED_INPUT } from './linked/index.js';
 // Tier 1 pattern modules
-import { hashMapGrouping, DEFAULT_HASH_MAP_GROUPING_INPUT, frequencyCount, DEFAULT_FREQUENCY_COUNT_INPUT, twoSumHash, DEFAULT_TWO_SUM_HASH_INPUT, stringHash, DEFAULT_STRING_HASH_INPUT, setOperations, DEFAULT_SET_OPERATIONS_INPUT, bitOps, DEFAULT_BIT_OPS_INPUT, mathSimulation, DEFAULT_MATH_SIMULATION_INPUT, greedyChoice, DEFAULT_GREEDY_CHOICE_INPUT, jumpGameII, DEFAULT_JUMP_GAME_II_INPUT, validParentheses, DEFAULT_VALID_PARENTHESES_INPUT, taskScheduler, DEFAULT_TASK_SCHEDULER_INPUT, lruCache, DEFAULT_LRU_CACHE_INPUT } from './hashing/index.js';
+import { hashMapGrouping, DEFAULT_HASH_MAP_GROUPING_INPUT, frequencyCount, DEFAULT_FREQUENCY_COUNT_INPUT, twoSumHash, DEFAULT_TWO_SUM_HASH_INPUT, stringHash, DEFAULT_STRING_HASH_INPUT, setOperations, DEFAULT_SET_OPERATIONS_INPUT, bitOps, DEFAULT_BIT_OPS_INPUT, mathSimulation, DEFAULT_MATH_SIMULATION_INPUT, greedyChoice, DEFAULT_GREEDY_CHOICE_INPUT, jumpGameII, DEFAULT_JUMP_GAME_II_INPUT, validParentheses, DEFAULT_VALID_PARENTHESES_INPUT, taskScheduler, DEFAULT_TASK_SCHEDULER_INPUT, lruCache, DEFAULT_LRU_CACHE_INPUT, longestConsecutive, DEFAULT_LONGEST_CONSECUTIVE_INPUT } from './hashing/index.js';
 import { prefixSum, DEFAULT_PREFIX_SUM_INPUT, differenceArray, DEFAULT_DIFFERENCE_ARRAY_INPUT } from './prefix/index.js';
 import { lis, DEFAULT_LIS_INPUT, stockDp, DEFAULT_STOCK_DP_INPUT, intervalDp, DEFAULT_INTERVAL_DP_INPUT, palindromeDp, DEFAULT_PALINDROME_DP_INPUT, bitmaskDp, DEFAULT_BITMASK_DP_INPUT, treeDP, DEFAULT_TREE_DP_INPUT, houseRobber, DEFAULT_HOUSE_ROBBER_INPUT, maximalSquare, DEFAULT_MAXIMAL_SQUARE_INPUT } from './dp_patterns/index.js';
 import { multiSourceBfs, DEFAULT_MULTI_SOURCE_BFS_INPUT, floydWarshall, DEFAULT_FLOYD_WARSHALL_INPUT, tarjanBridges, DEFAULT_TARJAN_BRIDGES_INPUT, bipartiteCheck, DEFAULT_BIPARTITE_CHECK_INPUT, dijkstraKStops, DEFAULT_DIJKSTRA_K_STOPS_INPUT } from './graph_advanced/index.js';
@@ -314,6 +314,13 @@ export const ALGORITHMS = {
     defaultInput: DEFAULT_SLIDING_WINDOW_STRING_INPUT,
     capabilities: { max_string_length: 20 },
   },
+  min_window_substring: {
+    run: (input) => minWindowSubstring(input),
+    renderer: 'string',
+    category: 'String Algorithms',
+    defaultInput: DEFAULT_MIN_WINDOW_SUBSTRING_INPUT,
+    capabilities: { max_string_length: 20 },
+  },
   valid_palindrome: {
     run: (input) => validPalindrome(input.s),
     renderer: 'string',
@@ -507,6 +514,12 @@ export const ALGORITHMS = {
     renderer: 'context', category: 'Data Structures',
     defaultInput: DEFAULT_LRU_CACHE_INPUT,
     capabilities: {},
+  },
+  longest_consecutive: {
+    run: (input) => longestConsecutive(input),
+    renderer: 'context', category: 'Hashing / Sets',
+    defaultInput: DEFAULT_LONGEST_CONSECUTIVE_INPUT,
+    capabilities: { max_array_length: 15 },
   },
 
   // ── Prefix Sum patterns (Tier 1) ──────────────────────────────────────────────

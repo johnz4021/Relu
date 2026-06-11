@@ -704,6 +704,101 @@ export function lruCache(input) {
   return trace;
 }
 
+// ── longest_consecutive — Longest Consecutive Sequence (LC128) ───────────────
+// Build a hash set, then walk streaks only from streak starts (numbers whose
+// num-1 is NOT in the set). Each streak is summarized in ONE trace step (not
+// one per increment) so the trace stays short. Context-renderer: every step
+// embeds viz_actions targeting the 'algorithm_state' panel and re-emits the
+// full current state (Set / Current streak / Best streak) each step.
+export function longestConsecutive(input) {
+  const nums = input.nums || [];
+  const trace = [];
+  const set = new Set();
+
+  trace.push({
+    type: 'init',
+    pseudocode_line: 0,
+    description: `Find the longest run of consecutive integers in [${nums.join(', ')}] using a hash set — O(n), no sorting`,
+    viz_actions: ctxUpdate([]),
+  });
+
+  for (const num of nums) {
+    const dup = set.has(num);
+    set.add(num);
+    trace.push({
+      type: 'add',
+      pseudocode_line: 0,
+      description: dup
+        ? `${num} is already in the set — duplicates don't change streak lengths`
+        : `Insert ${num} into the set (size ${set.size})`,
+      num,
+      viz_actions: ctxUpdate([
+        entry('Set', `{${[...set].join(', ')}}`, true),
+        entry('Current streak', '—'),
+        entry('Best streak', 0),
+      ]),
+    });
+  }
+
+  let best = 0;
+  let bestStart = null;
+  const setStr = `{${[...set].join(', ')}}`;
+
+  for (const num of set) {
+    if (set.has(num - 1)) {
+      trace.push({
+        type: 'scan',
+        pseudocode_line: 2,
+        description: `${num}: ${num - 1} is in the set, so ${num} sits inside some streak — skip (it gets counted from that streak's start)`,
+        num, streak_start: false,
+        viz_actions: ctxUpdate([
+          entry('Set', setStr),
+          entry('Current streak', `skip ${num} (${num - 1} in set)`, true),
+          entry('Best streak', best),
+        ]),
+      });
+      continue;
+    }
+
+    let length = 1;
+    while (set.has(num + length)) length++;
+    const improved = length > best;
+    if (improved) {
+      best = length;
+      bestStart = num;
+    }
+    trace.push({
+      type: 'scan',
+      pseudocode_line: improved ? 4 : 3,
+      description: `${num - 1} not in set → ${num} starts a streak. Walk ${num}..${num + length - 1}: length ${length}${improved ? ' — new best!' : ` (best stays ${best})`}`,
+      num, streak_start: true, length, best,
+      viz_actions: ctxUpdate([
+        entry('Set', setStr),
+        entry('Current streak', `${num} → ${num + length - 1} (length ${length})`, true),
+        entry('Best streak', best, improved),
+      ]),
+    });
+  }
+
+  trace.push({
+    type: 'result',
+    pseudocode_line: 5,
+    description: best > 0
+      ? `Longest consecutive sequence: ${bestStart} → ${bestStart + best - 1}, length ${best}`
+      : 'Empty input — longest consecutive sequence has length 0',
+    output: String(best),
+    viz_actions: ctxUpdate([
+      entry('Set', setStr),
+      entry('Current streak', '—'),
+      entry('Best streak', `${best}${bestStart !== null ? ` (${bestStart} → ${bestStart + best - 1})` : ''}`, true),
+    ]),
+  });
+
+  return trace;
+}
+
+export const DEFAULT_LONGEST_CONSECUTIVE_INPUT = { nums: [100, 4, 200, 1, 3, 2] };
+
 export const DEFAULT_LRU_CACHE_INPUT = {
   capacity: 2,
   operations: [
