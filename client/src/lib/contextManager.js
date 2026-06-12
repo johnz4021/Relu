@@ -14,9 +14,18 @@ export function initContextManager(dispatch) {
         case 'update':
           dispatchFn({ type: 'UPDATE_CONTEXT_PANEL', panel_id: p.panel_id, data: p });
           break;
-        case 'append_log':
-          dispatchFn({ type: 'APPEND_CONTEXT_LOG', panel_id: p.panel_id, entries: p.entries });
+        case 'append_log': {
+          // Canonical shape is entries: [{text, type}], but live-tutor-built
+          // actions sometimes carry a bare `text`/`message` string or a single
+          // entry object. Normalize here so the reducer always sees an array.
+          const entries = Array.isArray(p.entries) ? p.entries
+            : p.entries != null ? [p.entries]
+            : p.text != null ? [{ text: p.text, type: p.type || 'info' }]
+            : p.message != null ? [{ text: p.message, type: 'info' }]
+            : [];
+          dispatchFn({ type: 'APPEND_CONTEXT_LOG', panel_id: p.panel_id, entries });
           break;
+        }
         case 'clear':
           dispatchFn({ type: 'UPDATE_CONTEXT_PANEL', panel_id: p.panel_id, data: {} });
           break;

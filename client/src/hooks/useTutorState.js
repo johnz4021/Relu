@@ -39,7 +39,8 @@ export function normalizeVizActions(actions) {
   });
 }
 
-function reducer(state, action) {
+// Exported for regression tests (pure function — see server/clientReducer.regression.test.js).
+export function reducer(state, action) {
   switch (action.type) {
     case 'LESSON_START':
       return {
@@ -210,16 +211,25 @@ function reducer(state, action) {
       };
     }
 
-    case 'APPEND_CONTEXT_LOG':
+    case 'APPEND_CONTEXT_LOG': {
+      // Agent-built append_log actions pass server validation with arbitrary
+      // param shapes (only the action NAME is checked) — a missing/non-array
+      // `entries` here used to throw mid-reducer and blank the whole app.
+      const appended = Array.isArray(action.entries)
+        ? action.entries
+        : action.entries != null ? [action.entries] : [];
+      if (appended.length === 0) return state;
       return {
         ...state,
         contextPanels: state.contextPanels.map((p) => {
           if (p.id !== action.panel_id || p.type !== 'log') return p;
-          const maxVisible = p.data.max_visible || 50;
-          const newEntries = [...(p.data.entries || []), ...action.entries].slice(-maxVisible);
-          return { ...p, data: { ...p.data, entries: newEntries } };
+          const data = p.data || {};
+          const maxVisible = data.max_visible || 50;
+          const newEntries = [...(data.entries || []), ...appended].slice(-maxVisible);
+          return { ...p, data: { ...data, entries: newEntries } };
         }),
       };
+    }
 
     case 'GUIDED_START':
       return { ...initialState, status: 'teaching', mode: action.mode || 'guided', guidedPhase: 'analyzing' };
