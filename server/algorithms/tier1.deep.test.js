@@ -8,6 +8,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { ALGORITHMS } from './registry.js';
+import { mapTraceStep } from '../vizMapper.js';
+import { validateAlgorithmInput } from './validateInput.js';
+import { adaptAlgorithmInput } from './adaptInput.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -381,6 +384,24 @@ describe('tree_dp (tree renderer)', () => {
   it('init step has node field', () => {
     expect(initHasNodeField(runDefault('tree_dp'))).toBe(true);
   });
+  it('init carries serialized tree; null holes skipped', () => {
+    const init = runDefault('tree_dp')[0];
+    expect(init.tree.nodes.map(n => n.id)).toEqual(['0', '1', '2', '5', '6']);
+    expect(init.tree.edges).toContainEqual({ from: '2', to: '5', side: 'left' });
+    expect(init.tree.root).toBe('0');
+  });
+  it('every traverse node id exists in the init tree', () => {
+    const trace = runDefault('tree_dp');
+    const ids = new Set(trace[0].tree.nodes.map(n => n.id));
+    for (const s of trace.filter(s => s.type === 'traverse')) {
+      expect(ids.has(s.node)).toBe(true);
+    }
+  });
+  it('single node → that value, tree has one node', () => {
+    const trace = ALGORITHMS.tree_dp.run({ nodes: [5] });
+    expect(getResult(trace)?.output).toBe('5');
+    expect(trace[0].tree.nodes.length).toBe(1);
+  });
 });
 
 describe('house_robber (array renderer)', () => {
@@ -511,6 +532,31 @@ describe('top_k_heap (tree renderer)', () => {
     const trace = runDefault('top_k_heap');
     expect(lastStep(trace).type).toBe('result');
   });
+  it('insert/evict steps carry {value,label} heap snapshots with the min-heap property', () => {
+    const trace = runDefault('top_k_heap');
+    const snaps = trace.filter(s => s.heap);
+    expect(snaps.length).toBeGreaterThan(0);
+    for (const s of snaps) {
+      for (const e of s.heap) {
+        expect(typeof e.value).toBe('number');
+        expect(typeof e.label).toBe('string');
+      }
+    }
+    // root of a freq-min-heap is always the lowest frequency present
+    const evict = trace.find(s => s.type === 'extract_min');
+    expect(evict.description).toContain('evict lowest freq');
+  });
+  it('k ≥ distinct elements → no eviction occurs', () => {
+    const trace = ALGORITHMS.top_k_heap.run({ nums: [1, 1, 2], k: 5 });
+    expect(trace.some(s => s.type === 'extract_min')).toBe(false);
+    expect(JSON.parse(getResult(trace).output).sort()).toEqual([1, 2]);
+  });
+  it('negative numbers are handled (no encoding hacks)', () => {
+    const trace = ALGORITHMS.top_k_heap.run({ nums: [-5, -5, -5, 3, 3, 7], k: 2 });
+    const out = JSON.parse(getResult(trace).output);
+    expect(out).toContain(-5);
+    expect(out).toContain(3);
+  });
 });
 
 describe('median_finder (tree renderer)', () => {
@@ -535,6 +581,94 @@ describe('k_closest_points (tree renderer)', () => {
     const out = JSON.parse(getResult(trace).output);
     const flat = out.map(p => JSON.stringify(p));
     expect(flat).not.toContain('[5,-1]');
+  });
+  it('max-heap property: the evicted point is always the current farthest', () => {
+    const trace = ALGORITHMS.k_closest_points.run({ points: [[1,1],[10,10],[2,2],[0,3]], k: 2 });
+    const evictions = trace.filter(s => s.type === 'extract_min');
+    expect(evictions.length).toBe(2);
+    expect(evictions[0].description).toContain('(10,10)');
+    const out = JSON.parse(getResult(trace).output).map(p => JSON.stringify(p));
+    expect(out).toContain('[1,1]');
+    expect(out).toContain('[2,2]');
+  });
+  it('k ≥ point count → no eviction, all points returned', () => {
+    const trace = ALGORITHMS.k_closest_points.run({ points: [[1,0],[0,2]], k: 5 });
+    expect(trace.some(s => s.type === 'extract_min')).toBe(false);
+    expect(JSON.parse(getResult(trace).output).length).toBe(2);
+  });
+  it('equal distances do not crash and keep k results', () => {
+    const trace = ALGORITHMS.k_closest_points.run({ points: [[1,0],[0,1],[-1,0]], k: 2 });
+    expect(JSON.parse(getResult(trace).output).length).toBe(2);
+  });
+});
+
+describe('heapToTree contract (vizMapper)', () => {
+  it('REGRESSION PIN: heap_ops raw-number heaps map to numeric node values + numeric heap_array', () => {
+    const trace = ALGORITHMS.heap_ops.run(ALGORITHMS.heap_ops.defaultInput);
+    const place = trace.find(s => s.type === 'place' && s.heap);
+    const out = mapTraceStep('heap_ops', 'tree', place, {});
+    const setTree = out.viz.find(a => a.action === 'set_tree');
+    expect(setTree).toBeDefined();
+    expect(setTree.params.nodes.every(n => typeof n.value === 'number')).toBe(true);
+    expect(setTree.params.heap_array.every(v => typeof v === 'number')).toBe(true);
+  });
+  it('{value,label} entries display the label on nodes, keep numeric heap_array', () => {
+    const trace = ALGORITHMS.top_k_heap.run(ALGORITHMS.top_k_heap.defaultInput);
+    const insert = trace.find(s => s.type === 'insert' && s.heap);
+    const out = mapTraceStep('top_k_heap', 'tree', insert, {});
+    const setTree = out.viz.find(a => a.action === 'set_tree');
+    expect(setTree.params.nodes[0].value).toMatch(/×/);          // label shown
+    expect(typeof setTree.params.nodes[0].raw).toBe('number');   // data kept
+    expect(setTree.params.heap_array.every(v => typeof v === 'number')).toBe(true);
+  });
+  it('insert highlights the settled heap index, not the value id', () => {
+    const trace = ALGORITHMS.top_k_heap.run(ALGORITHMS.top_k_heap.defaultInput);
+    const insert = trace.find(s => s.type === 'insert' && s.heap_index !== undefined);
+    const out = mapTraceStep('top_k_heap', 'tree', insert, {});
+    const hl = out.viz.find(a => a.action === 'highlight_node');
+    expect(hl.params.id).toBe(`n${insert.heap_index}`);
+  });
+  it('empty heap maps to an empty tree (no crash)', () => {
+    const out = mapTraceStep('top_k_heap', 'tree', { type: 'extract_min', heap: [] }, {});
+    const setTree = out.viz.find(a => a.action === 'set_tree');
+    expect(setTree.params.nodes).toEqual([]);
+    expect(setTree.params.root).toBe(null);
+  });
+});
+
+describe('linear input clamping (validateInput + adaptInput)', () => {
+  it('oversized nums → clamp adaptation + warning, adapt truncates to cap', () => {
+    const nums = Array.from({ length: 50 }, (_, i) => i % 7);
+    const v = validateAlgorithmInput('top_k_heap', { nums, k: 2 });
+    expect(v.valid).toBe(true);
+    expect(v.adaptations).toContain('clamp_linear_inputs');
+    expect(v.warnings.some(w => w.includes('clamping'))).toBe(true);
+    const input = { nums: [...nums], k: 2 };
+    adaptAlgorithmInput('top_k_heap', input, v.adaptations);
+    expect(input.nums.length).toBe(20);
+  });
+  it('merge_k_sorted lists clamped by count and per-list length', () => {
+    const lists = Array.from({ length: 6 }, () => Array.from({ length: 10 }, (_, i) => i));
+    const v = validateAlgorithmInput('merge_k_sorted', { lists });
+    expect(v.adaptations).toContain('clamp_linear_inputs');
+    const input = { lists: lists.map(l => [...l]) };
+    adaptAlgorithmInput('merge_k_sorted', input, v.adaptations);
+    expect(input.lists.length).toBe(4);
+    expect(input.lists.every(l => l.length <= 6)).toBe(true);
+  });
+  it('oversized level-order nodes on tree_dp clamped to max_nodes', () => {
+    const nodes = Array.from({ length: 31 }, (_, i) => i);
+    const v = validateAlgorithmInput('tree_dp', { nodes });
+    expect(v.adaptations).toContain('clamp_linear_inputs');
+    const input = { nodes: [...nodes] };
+    adaptAlgorithmInput('tree_dp', input, v.adaptations);
+    expect(input.nodes.length).toBe(15);
+    expect(getResult(ALGORITHMS.tree_dp.run(input))).toBeDefined();
+  });
+  it('within-cap input → no adaptation, no warning', () => {
+    const v = validateAlgorithmInput('top_k_heap', { nums: [1, 2, 3], k: 1 });
+    expect(v.adaptations).toEqual([]);
+    expect(v.warnings).toEqual([]);
   });
 });
 

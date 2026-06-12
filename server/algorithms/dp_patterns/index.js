@@ -1,5 +1,7 @@
 // Tier 1 implementations for DP pattern variants not covered by existing dp/ files.
 
+import { buildTree, serializeTree } from '../tree/lcaTree.js';
+
 // ── lis — Longest Increasing Subsequence (O(n²) DP) ──────────────────────────
 export function lis(input) {
   const nums = input.nums || [];
@@ -287,8 +289,13 @@ export function treeDP(input) {
   const trace = [];
   let maxSum = -Infinity;
 
+  // The tree renderer's empty-state guard only clears on a structural action,
+  // so init must carry the serialized tree (same contract as lca_tree).
+  const nodeMap = buildTree(nodes);
+
   trace.push({
     type: 'init',
+    tree: serializeTree(nodeMap),
     description: `Binary Tree Max Path Sum over ${tree.filter(Boolean).length} nodes (level-order: [${nodes.join(', ')}])`,
     node: '0',
   });

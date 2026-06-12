@@ -1,5 +1,20 @@
 import { ALGORITHMS } from './registry.js';
 
+// Linear input fields and the capability that caps each. Oversized inputs are
+// clamped (lesson teaches on a prefix) via the 'clamp_linear_inputs'
+// adaptation rather than erroring. Shared with adaptInput.js.
+// `nodes` is a level-order tree array on tree algos — a prefix of a
+// level-order array is still a valid tree. Graph algos pass input.graph, not
+// input.nodes, so the graph checks above are unaffected.
+export const LINEAR_FIELD_CAPS = [
+  ['nums', 'max_array_length'],
+  ['values', 'max_array_length'],
+  ['nodes', 'max_nodes'],
+  ['stream', 'max_stream_length'],
+  ['points', 'max_points'],
+  ['lists', 'max_lists'],
+];
+
 /**
  * Validate algorithm input against the algorithm's declared capabilities.
  * Returns { valid, warnings, errors, adaptations }.
@@ -61,6 +76,20 @@ export function validateAlgorithmInput(algorithmId, input, modelContract) {
     if (input.array.length > caps.max_array_length) {
       warnings.push(`Array has ${input.array.length} elements (max ${caps.max_array_length} for visualization)`);
     }
+  }
+
+  // Linear input size checks (clamped, not errored)
+  for (const [field, capName] of LINEAR_FIELD_CAPS) {
+    const arr = input?.[field];
+    if (Array.isArray(arr) && caps[capName] && arr.length > caps[capName]) {
+      warnings.push(`${field} has ${arr.length} elements (max ${caps[capName]} for visualization) — clamping to the first ${caps[capName]}`);
+      if (!adaptations.includes('clamp_linear_inputs')) adaptations.push('clamp_linear_inputs');
+    }
+  }
+  if (Array.isArray(input?.lists) && caps.max_list_length &&
+      input.lists.some(l => Array.isArray(l) && l.length > caps.max_list_length)) {
+    warnings.push(`a list exceeds ${caps.max_list_length} elements (max for visualization) — clamping each list`);
+    if (!adaptations.includes('clamp_linear_inputs')) adaptations.push('clamp_linear_inputs');
   }
 
   // Table size checks

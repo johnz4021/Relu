@@ -4,7 +4,7 @@
  * Build a tree node lookup from level-order array.
  * Returns: { nodes: Map<index, {id, val, left, right, parent}>, root: 0 }
  */
-function buildTree(levelOrder) {
+export function buildTree(levelOrder) {
   const nodes = new Map();
   for (let i = 0; i < levelOrder.length; i++) {
     if (levelOrder[i] !== null) {
@@ -20,7 +20,7 @@ function buildTree(levelOrder) {
   return nodes;
 }
 
-function serializeTree(nodeMap) {
+export function serializeTree(nodeMap) {
   const nodes = [];
   const edges = [];
   if (nodeMap.size === 0) return { nodes, edges, root: null };

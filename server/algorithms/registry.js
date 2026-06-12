@@ -33,9 +33,11 @@ import { slidingWindowMax, DEFAULT_SLIDING_WINDOW_MAX_INPUT, jumpGame, DEFAULT_J
 // leetcodeAgent.js so users never land on a silently-empty viz.
 //
 // Drain to zero. When fixing one of these:
-//   1. Remove `broken: true` from this entry
-//   2. Remove the algo from WIP_NO_STRUCTURAL_ACTION in
-//      server/algorithms/pipeline.coverage.test.js
+//   1. Make the runner emit structural data (tree:{nodes,edges} on init, or
+//      heap:[...] arrays the mapper converts via heapToTree)
+//   2. Remove `broken: true` from this entry — the coverage gates derive from
+//      the flag and enforce automatically in BOTH directions (a flagged algo
+//      that paints fails the test, and vice versa)
 //   3. Verify visually with `/qa` or by re-running the LC problem in browser
 export const ALGORITHMS = {
   dijkstra: {
@@ -579,8 +581,7 @@ export const ALGORITHMS = {
     run: (input) => treeDP(input),
     renderer: 'tree', category: 'Dynamic Programming',
     defaultInput: DEFAULT_TREE_DP_INPUT,
-    capabilities: {},
-    broken: true,
+    capabilities: { max_nodes: 15 },
   },
   house_robber: {
     run: (input) => houseRobber(input),
@@ -632,22 +633,20 @@ export const ALGORITHMS = {
     run: (input) => topKHeap(input),
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_TOP_K_HEAP_INPUT,
-    capabilities: {},
-    broken: true,
+    capabilities: { max_array_length: 20 },
   },
   median_finder: {
     run: (input) => medianFinder(input),
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_MEDIAN_FINDER_INPUT,
-    capabilities: {},
+    capabilities: { max_stream_length: 12 },
     broken: true,
   },
   k_closest_points: {
     run: (input) => kClosestPoints(input),
     renderer: 'tree', category: 'Algorithms',
     defaultInput: DEFAULT_K_CLOSEST_POINTS_INPUT,
-    capabilities: {},
-    broken: true,
+    capabilities: { max_points: 12 },
   },
 
   // ── Math patterns (Tier 1) ────────────────────────────────────────────────────
@@ -777,14 +776,14 @@ export const ALGORITHMS = {
     run: (input) => linkedListCycle(input),
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_LINKED_LIST_CYCLE_INPUT,
-    capabilities: {},
+    capabilities: { max_array_length: 10 },
     broken: true,
   },
   merge_k_sorted: {
     run: (input) => mergeKSorted(input),
     renderer: 'tree', category: 'Data Structures',
     defaultInput: DEFAULT_MERGE_K_SORTED_INPUT,
-    capabilities: {},
+    capabilities: { max_lists: 4, max_list_length: 6 },
     broken: true,
   },
 };

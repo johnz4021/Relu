@@ -2,7 +2,10 @@
 // Uses a simple array-backed min-heap for correctness.
 
 class MinHeap {
-  constructor() { this.data = []; }
+  // cmp(a, b) → true when `a` belongs above `b`. The default preserves the
+  // plain numeric min-heap; pair-valued heaps (top_k_heap, k_closest_points)
+  // pass a comparator instead of encoding pairs into a single number.
+  constructor(cmp = (a, b) => a < b) { this.data = []; this.cmp = cmp; }
   push(val) {
     this.data.push(val);
     this._siftUp(this.data.length - 1);
@@ -18,7 +21,7 @@ class MinHeap {
   _siftUp(i) {
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.data[p] > this.data[i]) { [this.data[p], this.data[i]] = [this.data[i], this.data[p]]; i = p; }
+      if (this.cmp(this.data[i], this.data[p])) { [this.data[p], this.data[i]] = [this.data[i], this.data[p]]; i = p; }
       else break;
     }
   }
@@ -27,8 +30,8 @@ class MinHeap {
     while (true) {
       let s = i;
       const l = 2*i+1, r = 2*i+2;
-      if (l < n && this.data[l] < this.data[s]) s = l;
-      if (r < n && this.data[r] < this.data[s]) s = r;
+      if (l < n && this.cmp(this.data[l], this.data[s])) s = l;
+      if (r < n && this.cmp(this.data[r], this.data[s])) s = r;
       if (s === i) break;
       [this.data[s], this.data[i]] = [this.data[i], this.data[s]]; i = s;
     }
@@ -69,6 +72,14 @@ class MaxHeap {
   }
 }
 
+// Snapshot an array-backed heap into the {value, label} wire entries that
+// vizMapper's heapToTree consumes (label is display-only; value stays data),
+// plus the display string runners interpolate into step descriptions.
+export function heapSnapshot(items, toEntry) {
+  const entries = items.map(toEntry);
+  return { entries, show: entries.map(e => e.label ?? String(e.value)).join(', ') };
+}
+
 // ── top_k_heap — Top K Frequent Elements (min-heap of size K) ─────────────────
 export function topKHeap(input) {
   const nums = input.nums || [];
@@ -85,36 +96,39 @@ export function topKHeap(input) {
     node: null,
   });
 
-  // Build min-heap of [freq, num] pairs, keeping only top k
-  // Represented as sorted array for trace clarity
-  const heap = new MinHeap();
-  // heap stores [frequency, num]; compare by frequency
-  // Use custom heap with pair comparator by storing freq*1000+num to simplify
-  const freqPairs = Object.entries(freq).map(([n, c]) => [c, Number(n)]);
+  // Min-heap of [freq, num] pairs — lowest frequency at the root, first to
+  // evict. Snapshot-only traces: each insert/evict carries the resulting heap
+  // (heapToTree draws it); sift mechanics are heap_ops' lesson, not this one's.
+  const heap = new MinHeap((a, b) => (a[0] !== b[0] ? a[0] < b[0] : a[1] < b[1]));
+  const toEntry = ([c, n]) => ({ value: n, label: `${n}(×${c})` });
 
-  const heapData = [];
-  for (const [c, n] of freqPairs) {
-    heapData.push([c, n]);
-    heapData.sort((a, b) => a[0] - b[0]);
-
-    const show = [...heapData].map(([c,n]) => `${n}(×${c})`).join(', ');
+  for (const [nStr, c] of Object.entries(freq)) {
+    const n = Number(nStr);
+    heap.push([c, n]);
+    const snap = heapSnapshot(heap.data, toEntry);
     trace.push({
       type: 'insert',
-      description: `Add num=${n} freq=${c} to heap: [${show}]`,
+      description: `Add num=${n} freq=${c} to heap: [${snap.show}]`,
       node: String(n),
+      heap: snap.entries,
+      heap_index: heap.data.findIndex(([, num]) => num === n),
     });
 
-    if (heapData.length > k) {
-      const evicted = heapData.shift();
+    if (heap.size() > k) {
+      const [ec, en] = heap.pop();
+      const snap2 = heapSnapshot(heap.data, toEntry);
       trace.push({
         type: 'extract_min',
-        description: `Heap exceeds ${k} — evict lowest freq: ${evicted[0]}(num=${evicted[1]})`,
-        node: String(evicted[1]),
+        description: `Heap exceeds ${k} — evict lowest freq: ${en}(×${ec})`,
+        node: String(en),
+        value: `${en}(×${ec})`,
+        heap: snap2.entries,
       });
     }
   }
 
-  const result = heapData.map(([, n]) => n);
+  // Most frequent first in the answer.
+  const result = [...heap.data].sort((a, b) => b[0] - a[0]).map(([, n]) => n);
 
   trace.push({
     type: 'result',
@@ -190,8 +204,10 @@ export function kClosestPoints(input) {
   const k = input.k ?? 2;
   const trace = [];
 
-  // Max-heap by distance; evict farthest when > k
-  const heapData = []; // [dist2, point]
+  // Max-heap by distance — farthest point at the root, first to evict.
+  // Snapshot-only traces, same contract as top_k_heap.
+  const heap = new MinHeap((a, b) => a[0] > b[0]); // [dist2, point]
+  const toEntry = ([d, p]) => ({ value: d, label: `(${p}) d²=${d}` });
 
   trace.push({
     type: 'init',
@@ -201,26 +217,30 @@ export function kClosestPoints(input) {
 
   for (const [x, y] of points) {
     const d2 = x*x + y*y;
-    heapData.push([d2, [x, y]]);
-    heapData.sort((a, b) => b[0] - a[0]);
-
+    heap.push([d2, [x, y]]);
+    const snap = heapSnapshot(heap.data, toEntry);
     trace.push({
       type: 'insert',
-      description: `Add (${x},${y}) dist²=${d2} → heap: [${heapData.map(([d,p]) => `(${p})d²=${d}`).join(', ')}]`,
+      description: `Add (${x},${y}) dist²=${d2} → heap: [${snap.show}]`,
       node: `${x},${y}`,
+      heap: snap.entries,
+      heap_index: heap.data.findIndex(([d, p]) => p[0] === x && p[1] === y && d === d2),
     });
 
-    if (heapData.length > k) {
-      const evicted = heapData.shift();
+    if (heap.size() > k) {
+      const [ed, ep] = heap.pop();
+      const snap2 = heapSnapshot(heap.data, toEntry);
       trace.push({
         type: 'extract_min',
-        description: `Evict farthest point (${evicted[1]}) d²=${evicted[0]}`,
-        node: `${evicted[1]}`,
+        description: `Evict farthest point (${ep}) d²=${ed}`,
+        node: `${ep}`,
+        value: `(${ep}) d²=${ed}`,
+        heap: snap2.entries,
       });
     }
   }
 
-  const result = heapData.map(([, p]) => p);
+  const result = heap.data.map(([, p]) => p);
   trace.push({
     type: 'result',
     description: `${k} closest points: ${result.map(p => `(${p})`).join(', ')}`,

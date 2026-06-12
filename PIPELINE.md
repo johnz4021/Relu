@@ -372,6 +372,22 @@ appear; the mapper coverage test only sees step types the default produces.
 
 `run` is a synchronous JS function that executes the real algorithm and emits a step-by-step trace array. Deterministic, instant, no network call. Every algorithm in the registry is Tier 1 — there are no `run: null` stubs.
 
+**`broken: true` drain (eng review 2026-06-12).** Six entries whose runners
+emitted only scalar step fields (renderer mounted but never painted) are being
+drained in three phases. Phase 1 (shipped): `tree_dp` carries
+`tree:{nodes,edges}` on init (shared `buildTree`/`serializeTree` from
+`tree/lcaTree.js`); `top_k_heap` and `k_closest_points` rewritten on a real
+comparator `MinHeap` with snapshot-only traces — each insert/evict step carries
+`heap: [{value, label}]` entries plus `heap_index`, converted by the mapper's
+`heapToTree()` (label is display-only; `node.raw` and `heap_array` keep the
+numeric key). Oversized linear inputs (`nums`/`values`/`nodes`/`stream`/
+`points`/`lists`) are clamped via the `clamp_linear_inputs` adaptation against
+per-entry capabilities caps. Classifier routing for all six problems is guarded
+by `leetcodeRouting.eval.test.js` (RELU_EVAL=1; phase-aware — flips from
+must-not-route to must-route as flags come off). Still flagged: `median_finder`
+and `merge_k_sorted` (Phase 2: two-tree-panel work) and `linked_list_cycle`
+(Phase 3: linked-renderer move with `set_arrows` back-edge).
+
 **Tier 1 algorithms by renderer (103 total):**
 
 | Renderer | Algorithms |

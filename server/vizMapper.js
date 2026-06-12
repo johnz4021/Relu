@@ -43,10 +43,23 @@ function distancesEntries(distances, statusFn = () => 'default') {
 
 /**
  * Build a tree structure from a heap array for the tree renderer.
+ *
+ * Entries are either raw values (heap_ops) or {value, label} objects
+ * (top_k_heap, k_closest_points, …): label is display-only, value stays data
+ * (node.raw carries it for future numeric consumers, e.g. a HeapRenderer
+ * array view).
  */
+function heapEntryDisplay(v) {
+  return v !== null && typeof v === 'object' ? (v.label ?? v.value) : v;
+}
+
 function heapToTree(heap) {
-  if (!heap || heap.length === 0) return { nodes: [], edges: [], root: null, heap_array: heap };
-  const nodes = heap.map((v, i) => ({ id: `n${i}`, value: v }));
+  if (!heap || heap.length === 0) return { nodes: [], edges: [], root: null, heap_array: [] };
+  const nodes = heap.map((v, i) => ({
+    id: `n${i}`,
+    value: heapEntryDisplay(v),
+    raw: v !== null && typeof v === 'object' ? v.value : v,
+  }));
   const edges = [];
   for (let i = 0; i < heap.length; i++) {
     const l = 2 * i + 1;
@@ -54,7 +67,9 @@ function heapToTree(heap) {
     if (l < heap.length) edges.push({ from: `n${i}`, to: `n${l}`, side: 'left' });
     if (r < heap.length) edges.push({ from: `n${i}`, to: `n${r}`, side: 'right' });
   }
-  return { nodes, edges, root: 'n0', heap_array: heap };
+  // heap_array is the numeric backing array (wire contract: number[]) — for
+  // labeled entries that's the heap KEY (freq, d²), not the display label.
+  return { nodes, edges, root: 'n0', heap_array: heap.map(v => (v !== null && typeof v === 'object' ? v.value : v)) };
 }
 
 function pathUsesEdge(edgeKey, path) {
@@ -2466,6 +2481,11 @@ function mapTreeStep(algo, step, state) {
     }
 
     case 'extract_min': {
+      // Snapshot-only heap traces (top_k_heap, k_closest_points) carry the
+      // post-evict heap; redraw it so the eviction is visible.
+      if (step.heap) {
+        v.push(viz('tree', 'set_tree', heapToTree(step.heap)));
+      }
       c.push(ctxUpdate('heap_state', {
         entries: [{ key: 'Extracted', value: step.value ?? step.description ?? '?', status: 'updated' }],
       }));
@@ -2507,11 +2527,16 @@ function mapTreeStep(algo, step, state) {
 
     case 'insert': {
       // BST node inserted. BST traces carry node_id; heap traces (top_k_heap,
-      // median_finder, k_closest_points) carry `node` — accept both.
+      // median_finder, k_closest_points) carry `node` — accept both. Snapshot
+      // heap traces carry `heap` + `heap_index` (where the element settled).
       if (step.tree) {
         v.push(viz('tree', 'set_tree', step.tree));
+      } else if (step.heap) {
+        v.push(viz('tree', 'set_tree', heapToTree(step.heap)));
       }
-      const insertedId = step.node_id ?? step.node;
+      const insertedId = step.heap_index !== undefined && step.heap_index >= 0
+        ? `n${step.heap_index}`
+        : (step.node_id ?? step.node);
       if (insertedId !== undefined) {
         v.push(viz('tree', 'highlight_node', { id: insertedId, className: 'inserted' }));
       }
