@@ -348,7 +348,14 @@ describe.skipIf(!ENABLED)('on-the-fly viz — live model accuracy eval', () => {
 // ── Tier 2 live authoring (always-viz ladder) ───────────────────────────────
 // Exercises the real authorAgent → sandbox → correctness-gate path for an
 // off-registry pattern key, exactly as start_leetcode's Tier 2 rung invokes it.
-describe.skipIf(!ENABLED)('viz Tier 2 — live trace authoring for an off-registry pattern', () => {
+//
+// SKIPPED 2026-06-12: stale on two counts that predate the consent-gating
+// branch — product_except_self was promoted to a Tier 1 registry entry
+// (f1b29fc, so runAlgorithmWithFallback now returns tier 1 and the premise
+// "off-registry" is false), and the viz strategy decision (TODOS 2026-06-11)
+// made Tier 2 DORMANT (e31b6f2 — the runtime no longer invokes this rung).
+// Revive with a genuinely off-registry key if Tier 2 is ever un-dormanted.
+describe.skip('viz Tier 2 — live trace authoring for an off-registry pattern', () => {
   it('authors a correct, mappable trace for product_except_self', async () => {
     const { runAlgorithmWithFallback } = await import('./algorithms/registry.js');
     const { validateVizActionSchemas } = await import('./vizValidator.js');
