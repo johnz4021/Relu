@@ -1133,7 +1133,11 @@ parseLeetcodeProblem(problemText)         ← EXTRACTION_MODEL (models.js), 10s 
     │   pattern_key/pattern_renderer: required when algorithm_key is null or confidence < 0.7
     │
     ├── TIER 1: confidence >= 0.7 AND registry entry with run()?
-    │       YES → runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput })
+    │       YES → runAlgorithmWithFallback(algorithm_key, {}, …)  ← CURATED defaultInput,
+    │             │  NOT the parsed Example 1: the default is hand-picked + CI-validated
+    │             │  to exercise the algorithm; Example 1 extraction errors can no longer
+    │             │  break the viz. The student's Example 1 stays on the session for
+    │             │  verify_result at lesson end.
     │             └── sends lc_viz_ready { algorithm_key, renderer, trace, input, tier: 1 }
     │                (client can render the trace immediately, before teaching begins)
     └── TIER 3: else hasViz = false, viz_tier = 3 → guided session runs in live-viz mode

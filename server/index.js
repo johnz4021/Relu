@@ -559,10 +559,20 @@ function attachHandlers(ws, session) {
           let hasViz = false;
           let vizTier = null;
 
-          // Pre-run the Tier 1 trace so client gets viz immediately
+          // Pre-run the Tier 1 trace so client gets viz immediately.
+          // Teach on the registry's curated defaultInput (pass {}), NOT the parsed
+          // Example 1: the default is hand-picked to exercise the algorithm's
+          // defining behavior and is validated in CI, while Example 1 extraction is
+          // the pipeline's weakest link (parse/truncation errors used to fail the
+          // pre-run → unnecessary Tier 3) and LeetCode picks it to explain I/O
+          // format, not to make the algorithm interesting. The student's own
+          // Example 1 stays on the session (_leetcodeTestCase/_leetcodeExpectedOutput)
+          // for verify_result at the end of the lesson. This also keeps the pre-run
+          // trace identical to the lesson trace when the agent calls run_algorithm
+          // with input omitted (which merges defaultInput).
           if (tier1Available) {
             try {
-              const result = await runAlgorithmWithFallback(algorithm_key, test_case, { description: title, expectedOutput: expected_output || null });
+              const result = await runAlgorithmWithFallback(algorithm_key, {}, { description: title, expectedOutput: null });
               session._leetcodeTrace = result.trace;
               session._leetcodeRenderer = result.renderer;
               session._leetcodeInput = result.input;
