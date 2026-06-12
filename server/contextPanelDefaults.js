@@ -166,6 +166,31 @@ const PANEL_DEFAULTS = {
       initial_data: { lines: PSEUDOCODE.maximal_square } },
     { id: 'square_state', type: 'key_value', title: 'Best Square' },
   ],
+  trapping_rain_water: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.trapping_rain_water } },
+    { id: 'search_state', type: 'key_value', title: 'Water State' },
+  ],
+  product_except_self: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.product_except_self } },
+    { id: 'algorithm_state', type: 'key_value', title: 'Pass State' },
+  ],
+  move_zeroes: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.move_zeroes } },
+    { id: 'stats', type: 'key_value', title: 'Stats' },
+  ],
+  find_peak: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.find_peak } },
+    { id: 'bounds', type: 'key_value', title: 'Search Bounds' },
+  ],
+  search_rotated: [
+    { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
+      initial_data: { lines: PSEUDOCODE.search_rotated } },
+    { id: 'bounds', type: 'key_value', title: 'Search Bounds' },
+  ],
   interval_merge: [
     { id: 'stats', type: 'key_value', title: 'State' },
   ],

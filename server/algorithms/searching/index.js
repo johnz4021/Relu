@@ -12,3 +12,8 @@ export { kmpSearch, DEFAULT_KMP_SEARCH_INPUT } from './kmpSearch.js';
 export { findAnagrams, DEFAULT_FIND_ANAGRAMS_INPUT } from './findAnagrams.js';
 export { rotateArray, DEFAULT_ROTATE_ARRAY_INPUT } from './rotateArray.js';
 export { containerWater, DEFAULT_CONTAINER_WATER_INPUT } from './containerWater.js';
+export { trappingRainWater, DEFAULT_TRAPPING_RAIN_WATER_INPUT } from './trappingRainWater.js';
+export { productExceptSelf, DEFAULT_PRODUCT_EXCEPT_SELF_INPUT } from './productExceptSelf.js';
+export { moveZeroes, DEFAULT_MOVE_ZEROES_INPUT } from './moveZeroes.js';
+export { findPeak, DEFAULT_FIND_PEAK_INPUT } from './findPeak.js';
+export { searchRotated, DEFAULT_SEARCH_ROTATED_INPUT } from './searchRotated.js';

@@ -97,19 +97,25 @@ DISAMBIGUATION RULES:
 - interval_merge vs interval_scheduling: "merge" = combine overlapping ranges → interval_merge; "select max non-overlapping" → interval_scheduling
 - topological_sort vs bfs/dfs: when problem explicitly involves dependency ordering or cycle detection in directed graph → topological_sort
 - two_pointers vs sliding_window: two_pointers is for pair-sum on sorted array; sliding_window is for fixed/variable window on unsorted array
-- container_water: Use for Container With Most Water (LC11) — converging two-pointer area maximization on { heights }. NOT two_pointers (no target sum) and NOT trapping rain water
+- container_water: Use for Container With Most Water (LC11) — converging two-pointer area maximization on { heights }. NOT two_pointers (no target sum) and NOT Trapping Rain Water (→ trapping_rain_water)
+- trapping_rain_water: Use for Trapping Rain Water (LC42) — two-pointer water accumulation on { heights }. LC42 SUMS water trapped above every bar; container_water (LC11) maximizes one container's area
 - binary_search vs two_pointers: binary_search for finding a value; two_pointers for finding a pair summing to target
+- search_rotated vs binary_search: binary_search ONLY for a sorted, untouched array; Search in Rotated Sorted Array (LC33) → search_rotated ({ nums, target })
+- find_peak vs binary_search: find_peak for Find Peak Element (LC162) — { nums } is unsorted and there is NO target; the slope at mid drives the halving
+- move_zeroes: Use for Move Zeroes (LC283) — slow/fast pointer in-place compaction on { nums }
 - two_sum_hash vs two_pointers: two_sum_hash when array is UNSORTED; two_pointers when array IS sorted
 - hash_map_grouping vs frequency_count: hash_map_grouping when grouping items by derived key; frequency_count when counting occurrences to find top-K or most frequent
 - greedy_choice vs interval_scheduling: greedy_choice for non-interval greedy (jump game, stock prices); interval_scheduling for interval selection
 - word_break vs lcs/edit_distance: use lcs for longest common subsequence, edit_distance for edit distance, word_break ONLY for Word Break (LC139) with wordDict input
-- max_subarray vs divide_conquer_array: REMOVED — use max_subarray for Maximum Subarray (Kadane's); Find Peak / Count Inversions → null
+- max_subarray vs divide_conquer_array: REMOVED — use max_subarray for Maximum Subarray (Kadane's); Find Peak → find_peak (registered, { nums } input); Count Inversions → null
 - climbing_stairs vs recursion_memoization: REMOVED — use climbing_stairs ONLY for {n} input (Climbing Stairs, Fibonacci); House Robber → house_robber (registered, { nums } input)
 - word_search vs backtrack_grid: REMOVED — use word_search ONLY for board+word grid DFS; N-Queens → board_backtracking
 - board_backtracking: Use for N-Queens (LC51) and N-Queens II (LC52) — input { puzzle: "n_queens", n }. Do NOT use for Sudoku Solver (LC37): only n_queens is implemented → null
 - valid_sudoku: Use for Valid Sudoku (LC 36). Input shape: { board: string[9][9] of digits "1"-"9" or "." for empty cells }. Do NOT use for Sudoku Solver (LC 37) — that requires backtracking which is not yet supported.
 - min_path_sum vs matrix_dp: REMOVED — use min_path_sum for Minimum Path Sum and Unique Paths; Maximal Square → maximal_square (registered, { matrix: string[][] of "0"/"1" } input)
 - rotate_array vs array_manipulation: REMOVED — use rotate_array ONLY for Rotate Array (LC189); Move Zeroes/Product Except Self → null
+- min_path_sum vs matrix_dp: REMOVED — use min_path_sum for Minimum Path Sum and Unique Paths; Maximal Square → null
+- rotate_array vs array_manipulation: REMOVED — use rotate_array ONLY for Rotate Array (LC189); Move Zeroes → move_zeroes; Product Except Self → product_except_self (both registered, { nums } input)
 - tree_depth_dfs vs tree_level_order vs tree_path: depth/balance/comparison problems → tree_depth_dfs; level-by-level output → tree_level_order; root-to-leaf sum/path → tree_path
 - bst_insert vs tree_depth_dfs: bst_insert ONLY when inserting values into a BST; tree_depth_dfs for any other binary tree operation
 - bfs/dfs (graph keys) vs tree_* keys: use tree_* keys when the input IS a binary tree (root/left/right structure); use bfs/dfs for grid or general graph traversal
