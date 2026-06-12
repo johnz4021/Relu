@@ -61,6 +61,58 @@ export const PSEUDOCODE = {
     '  else: right ← right - 1',                   // 5
     'return best',                                   // 6
   ],
+  trapping_rain_water: [
+    'left ← 0, right ← n-1, left_max ← 0, right_max ← 0, total ← 0', // 0
+    'while left < right:',                          // 1
+    '  if h[left] < h[right]:',                     // 2
+    '    left_max ← max(left_max, h[left])',       // 3
+    '    total += left_max - h[left]',              // 4
+    '    left ← left + 1',                         // 5
+    '  else:',                                       // 6
+    '    right_max ← max(right_max, h[right])',    // 7
+    '    total += right_max - h[right]',            // 8
+    '    right ← right - 1',                       // 9
+    'return total',                                  // 10
+  ],
+  product_except_self: [
+    'result ← [1]×n, prefix ← 1, suffix ← 1',  // 0
+    'for i in 0..n-1:           // prefix pass',    // 1
+    '  result[i] ← prefix; prefix ← prefix × nums[i]', // 2
+    'for i in n-1..0:           // suffix pass',    // 3
+    '  result[i] ← result[i] × suffix; suffix ← suffix × nums[i]', // 4
+    'return result',                                 // 5
+  ],
+  move_zeroes: [
+    'slow ← 0',                                     // 0
+    'for fast in 0..n-1:',                           // 1
+    '  if nums[fast] ≠ 0:',                         // 2
+    '    swap(nums[slow], nums[fast])',              // 3
+    '    slow ← slow + 1',                          // 4
+    'return nums   // zeroes swept to the end',      // 5
+  ],
+  find_peak: [
+    'left ← 0, right ← n-1',                      // 0
+    'while left < right:',                           // 1
+    '  mid ← ⌊(left + right) / 2⌋',              // 2
+    '  if nums[mid] < nums[mid+1]:   // rising',     // 3
+    '    left ← mid + 1   // peak is to the right', // 4
+    '  else:                         // falling',    // 5
+    '    right ← mid      // peak at mid or left',  // 6
+    'return left   // left = right = a peak',        // 7
+  ],
+  search_rotated: [
+    'left ← 0, right ← n-1',                      // 0
+    'while left ≤ right:',                          // 1
+    '  mid ← ⌊(left + right) / 2⌋',              // 2
+    '  if nums[mid] = target: return mid',           // 3
+    '  if nums[left] ≤ nums[mid]:    // left half sorted', // 4
+    '    if nums[left] ≤ target < nums[mid]: right ← mid - 1', // 5
+    '    else: left ← mid + 1',                     // 6
+    '  else:                          // right half sorted', // 7
+    '    if nums[mid] < target ≤ nums[right]: left ← mid + 1', // 8
+    '    else: right ← mid - 1',                    // 9
+    'return -1',                                      // 10
+  ],
   binary_search: [
     'left ← 0, right ← n-1',             // 0
     'while left ≤ right:',                 // 1

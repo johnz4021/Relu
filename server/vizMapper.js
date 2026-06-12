@@ -1214,7 +1214,7 @@ function mapArrayStep(algo, step, state) {
       }
       if (!state.comparisons) state.comparisons = 0;
       if (!state.swaps) state.swaps = 0;
-      if (algo === 'binary_search' && step.target !== undefined) {
+      if ((algo === 'binary_search' || algo === 'search_rotated') && step.target !== undefined) {
         state.target = step.target;
         c.push(ctxUpdate('bounds', {
           entries: [
@@ -1247,6 +1247,33 @@ function mapArrayStep(algo, step, state) {
           entries: [
             { key: 'Width', value: (step.array?.length ?? 1) - 1 },
             { key: 'Best', value: 0 },
+          ],
+        }));
+      } else if (algo === 'trapping_rain_water') {
+        v.push(viz('array', 'set_pointer', { name: 'left', index: 0 }));
+        v.push(viz('array', 'set_pointer', { name: 'right', index: (step.array?.length ?? 1) - 1 }));
+        c.push(ctxUpdate('search_state', {
+          entries: [
+            { key: 'Left max', value: 0 },
+            { key: 'Right max', value: 0 },
+            { key: 'Total water', value: 0 },
+          ],
+        }));
+      } else if (algo === 'product_except_self') {
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [
+            { key: 'Pass', value: 'prefix' },
+            { key: 'Prefix product', value: 1 },
+          ],
+        }));
+      } else if (algo === 'find_peak') {
+        // Binary-search family but with NO target — the slope at mid is the signal.
+        v.push(viz('array', 'set_pointer', { name: 'left', index: 0 }));
+        v.push(viz('array', 'set_pointer', { name: 'right', index: (step.array?.length ?? 1) - 1 }));
+        c.push(ctxUpdate('bounds', {
+          entries: [
+            { key: 'Left', value: 0 },
+            { key: 'Right', value: (step.array?.length ?? 1) - 1 },
           ],
         }));
       } else if (algo === 'gcd') {
@@ -1430,25 +1457,55 @@ function mapArrayStep(algo, step, state) {
       v.push(viz('array', 'set_pointer', { name: 'right', index: step.right }));
       v.push(viz('array', 'set_pointer', { name: 'mid', index: step.mid }));
       v.push(viz('array', 'highlight', { indices: [step.mid], className: 'comparing' }));
-      c.push(ctxUpdate('bounds', {
-        entries: [
-          { key: 'Target', value: state.target },
-          { key: 'Left', value: step.left },
-          { key: 'Right', value: step.right },
-          { key: 'Mid', value: step.mid, status: 'highlight' },
-          { key: 'Value at mid', value: step.value },
-        ],
-      }));
+      if (algo === 'find_peak') {
+        // No target — the comparison is mid vs mid+1 (the slope).
+        v.push(viz('array', 'compare', { i: step.mid, j: step.mid + 1 }));
+        c.push(ctxUpdate('bounds', {
+          entries: [
+            { key: 'Left', value: step.left },
+            { key: 'Right', value: step.right },
+            { key: 'Mid', value: step.mid, status: 'highlight' },
+            { key: 'Value at mid', value: step.value },
+            { key: 'Value at mid+1', value: step.next_value },
+            { key: 'Slope', value: step.value < step.next_value ? 'rising →' : 'falling ↓', status: 'highlight' },
+          ],
+        }));
+      } else if (algo === 'search_rotated') {
+        c.push(ctxUpdate('bounds', {
+          entries: [
+            { key: 'Target', value: state.target },
+            { key: 'Left', value: step.left },
+            { key: 'Right', value: step.right },
+            { key: 'Mid', value: step.mid, status: 'highlight' },
+            { key: 'Value at mid', value: step.value },
+            { key: 'Sorted half', value: step.sorted_half, status: 'highlight' },
+          ],
+        }));
+      } else {
+        c.push(ctxUpdate('bounds', {
+          entries: [
+            { key: 'Target', value: state.target },
+            { key: 'Left', value: step.left },
+            { key: 'Right', value: step.right },
+            { key: 'Mid', value: step.mid, status: 'highlight' },
+            { key: 'Value at mid', value: step.value },
+          ],
+        }));
+      }
       break;
     }
 
+    // Binary-search family pointer moves. The closed-interval default is
+    // left ← mid+1 / right ← mid-1; producers using a half-open variant
+    // (e.g. find_peak's right ← mid) carry an explicit `left`/`right` field,
+    // which takes precedence.
     case 'eliminate_left': {
-      v.push(viz('array', 'set_pointer', { name: 'left', index: step.mid + 1 }));
+      v.push(viz('array', 'set_pointer', { name: 'left', index: step.left !== undefined ? step.left : step.mid + 1 }));
       break;
     }
 
     case 'eliminate_right': {
-      v.push(viz('array', 'set_pointer', { name: 'right', index: step.mid - 1 }));
+      v.push(viz('array', 'set_pointer', { name: 'right', index: step.right !== undefined ? step.right : step.mid - 1 }));
       break;
     }
 
@@ -1490,6 +1547,17 @@ function mapArrayStep(algo, step, state) {
           if (pair.length > 0) v.push(viz('array', 'mark_sorted', { indices: pair }));
           c.push(ctxUpdate('search_state', {
             entries: [{ key: 'Best pair', value: `[${pair.join(', ')}]`, status: 'updated' }],
+          }));
+          break;
+        }
+        if (algo === 'find_peak') {
+          // No target to report — the find is the peak itself.
+          v.push(viz('array', 'mark_sorted', { indices: [step.index] }));
+          c.push(ctxUpdate('bounds', {
+            entries: [
+              { key: 'Peak index', value: step.index, status: 'updated' },
+              { key: 'Peak value', value: step.value, status: 'highlight' },
+            ],
           }));
           break;
         }
@@ -1616,6 +1684,25 @@ function mapArrayStep(algo, step, state) {
           { key: 'Height', value: step.height },
           { key: 'Area', value: step.area, status: step.improved ? 'updated' : 'highlight' },
           { key: 'Best', value: step.best, status: step.improved ? 'updated' : 'default' },
+        ],
+      }));
+      break;
+    }
+
+    // Two-pointer accumulation (trapping_rain_water). Not algo-gated: any
+    // converging-pointer algorithm that settles a per-index quantity against a
+    // running side-max can emit
+    // { left, right, index, side, left_max, right_max, water, total }.
+    case 'collect_water': {
+      v.push(viz('array', 'set_pointer', { name: 'left', index: step.left }));
+      v.push(viz('array', 'set_pointer', { name: 'right', index: step.right }));
+      v.push(viz('array', 'highlight', { indices: [step.index], className: step.water > 0 ? 'sorted' : 'comparing' }));
+      c.push(ctxUpdate('search_state', {
+        entries: [
+          { key: 'Left max', value: step.left_max, status: step.side === 'left' && step.water === 0 ? 'updated' : 'default' },
+          { key: 'Right max', value: step.right_max, status: step.side === 'right' && step.water === 0 ? 'updated' : 'default' },
+          { key: `Water at ${step.index}`, value: step.water, status: step.water > 0 ? 'updated' : 'highlight' },
+          { key: 'Total water', value: step.total, status: step.water > 0 ? 'updated' : 'default' },
         ],
       }));
       break;
@@ -1752,6 +1839,17 @@ function mapArrayStep(algo, step, state) {
       }
       if (Array.isArray(step.indices) && step.indices.length > 0) {
         v.push(viz('array', 'highlight', { indices: step.indices, className: 'current' }));
+      }
+      if (algo === 'product_except_self') {
+        // fill steps carry { pass: 'prefix'|'suffix', running, value, indices }.
+        c.push(ctxUpdate('algorithm_state', {
+          entries: [
+            { key: 'Pass', value: step.pass },
+            { key: step.pass === 'suffix' ? 'Suffix product' : 'Prefix product', value: step.running, status: 'highlight' },
+            { key: `result[${step.indices?.[0]}]`, value: step.value, status: 'updated' },
+          ],
+        }));
+        break;
       }
       c.push(ctxUpdate('algorithm_state', {
         entries: [{ key: step.type, value: step.description || '', status: 'highlight' }],
