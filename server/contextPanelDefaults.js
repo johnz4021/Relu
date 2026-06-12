@@ -415,8 +415,10 @@ const PANEL_DEFAULTS = {
   ],
 
   // --- Tree renderer patterns ---
+  // Only declare panels the trace mapper actually feeds — an unfed default
+  // sits on screen as "No entries yet" for the whole lesson (QA ISSUE-001,
+  // 2026-06-12). The tutor agent creates its own extra panels live as needed.
   top_k_heap: [
-    { id: 'heap_contents', type: 'collection', title: 'Heap (Top-K)' },
     { id: 'heap_state', type: 'key_value', title: 'Heap State' },
     { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
@@ -424,7 +426,6 @@ const PANEL_DEFAULTS = {
     { id: 'median_state', type: 'key_value', title: 'Median' },
   ],
   k_closest_points: [
-    { id: 'heap_contents', type: 'collection', title: 'K Closest So Far' },
     { id: 'heap_state', type: 'key_value', title: 'Heap State' },
     { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
@@ -433,7 +434,6 @@ const PANEL_DEFAULTS = {
     { id: 'heap_state', type: 'key_value', title: 'Heap State' },
   ],
   tree_dp: [
-    { id: 'dp_values', type: 'key_value', title: 'Path Values' },
     { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
   lca_tree: [
