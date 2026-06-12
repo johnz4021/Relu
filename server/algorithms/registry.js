@@ -774,10 +774,11 @@ export const ALGORITHMS = {
   // ── Linked List / Pointer patterns (Tier 1) ────────────────────────────────────
   linked_list_cycle: {
     run: (input) => linkedListCycle(input),
-    renderer: 'tree', category: 'Data Structures',
+    // linked, not tree: the cycle back-edge is the whole lesson and a tree
+    // structurally cannot represent it (drain Phase 3, eng review D8).
+    renderer: 'linked', category: 'Data Structures',
     defaultInput: DEFAULT_LINKED_LIST_CYCLE_INPUT,
     capabilities: { max_array_length: 10 },
-    broken: true,
   },
   merge_k_sorted: {
     run: (input) => mergeKSorted(input),

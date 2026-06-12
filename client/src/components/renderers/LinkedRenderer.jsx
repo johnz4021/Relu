@@ -78,6 +78,23 @@ export default function LinkedRenderer({
       const fromRect = fromEl.getBoundingClientRect();
       const toRect = toEl.getBoundingClientRect();
 
+      // Backward arrow in a horizontal row (a cycle back-edge): a straight
+      // line would cut through the intervening nodes, so anchor it to the
+      // node bottoms and render it as an arc below the chain instead.
+      const backward = toRect.left < fromRect.left;
+      if (backward) {
+        positions.push({
+          backward: true,
+          fromX: fromRect.left + fromRect.width / 2 - containerRect.left,
+          fromY: fromRect.bottom - containerRect.top,
+          toX: toRect.left + toRect.width / 2 - containerRect.left,
+          toY: toRect.bottom - containerRect.top,
+          reversed: arrow.reversed,
+          id: arrow.id,
+        });
+        continue;
+      }
+
       const fromX = fromRect.right - containerRect.left;
       const fromY = fromRect.top + fromRect.height / 2 - containerRect.top;
       const toX = toRect.left - containerRect.left;
@@ -522,7 +539,20 @@ export default function LinkedRenderer({
                 </marker>
               </defs>
               <AnimatePresence>
-                {arrowPositions.map((pos) => (
+                {arrowPositions.map((pos) => pos.backward ? (
+                  <m.path
+                    key={pos.id}
+                    d={`M ${pos.fromX} ${pos.fromY + 2} Q ${(pos.fromX + pos.toX) / 2} ${Math.max(pos.fromY, pos.toY) + 44} ${pos.toX} ${pos.toY + 4}`}
+                    fill="none"
+                    stroke="#a78bfa"
+                    strokeWidth={2}
+                    markerEnd="url(#arrowhead-purple)"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  />
+                ) : (
                   <m.line
                     key={pos.id}
                     x1={pos.fromX}

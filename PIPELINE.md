@@ -384,9 +384,12 @@ numeric key). Oversized linear inputs (`nums`/`values`/`nodes`/`stream`/
 `points`/`lists`) are clamped via the `clamp_linear_inputs` adaptation against
 per-entry capabilities caps. Classifier routing for all six problems is guarded
 by `leetcodeRouting.eval.test.js` (RELU_EVAL=1; phase-aware — flips from
-must-not-route to must-route as flags come off). Still flagged: `median_finder`
-and `merge_k_sorted` (Phase 2: two-tree-panel work) and `linked_list_cycle`
-(Phase 3: linked-renderer move with `set_arrows` back-edge).
+must-not-route to must-route as flags come off). Phase 3 (shipped):
+`linked_list_cycle` moved tree→linked renderer — init carries `list` + `pos`
+(mapper emits `set_list` + `set_arrows` with the cycle back-edge, drawn as an
+arc below the row by LinkedRenderer's backward-arrow path), every step carries
+explicit `slow`/`fast` indices for the named-pointer badges. Still flagged:
+`median_finder` and `merge_k_sorted` (Phase 2: two-tree-panel work).
 
 **Tier 1 algorithms by renderer (103 total):**
 

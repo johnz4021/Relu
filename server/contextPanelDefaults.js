@@ -452,7 +452,6 @@ const PANEL_DEFAULTS = {
   ],
   linked_list_cycle: [
     { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
-    { id: 'tree_state', type: 'key_value', title: 'State' },
   ],
   merge_k_sorted: [
     { id: 'heap_state', type: 'collection', title: 'Min-Heap' },

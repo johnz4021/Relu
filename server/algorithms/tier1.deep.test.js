@@ -868,17 +868,56 @@ describe('validate_bst (tree renderer)', () => {
 
 // ── New linked list algorithms ───────────────────────────────────────────────
 
-describe('linked_list_cycle (tree renderer)', () => {
+describe('linked_list_cycle (linked renderer)', () => {
   it('[3,2,0,-4] pos=1 → cycle detected = true', () => {
     const trace = runDefault('linked_list_cycle');
     expect(getResult(trace)?.output).toBe('true');
   });
-  it('pos=-1 (no cycle) → false', () => {
+  it('pos=-1 (no cycle) → false, with a no_cycle step', () => {
     const trace = ALGORITHMS.linked_list_cycle.run({ values: [1, 2, 3], pos: -1 });
     expect(getResult(trace)?.output).toBe('false');
+    expect(trace.some(s => s.type === 'no_cycle')).toBe(true);
   });
   it('last step is result', () => {
     expect(lastStep(runDefault('linked_list_cycle')).type).toBe('result');
+  });
+  it('empty list → false, no crash', () => {
+    const trace = ALGORITHMS.linked_list_cycle.run({ values: [], pos: -1 });
+    expect(getResult(trace)?.output).toBe('false');
+  });
+  it('single node pointing to itself → cycle', () => {
+    const trace = ALGORITHMS.linked_list_cycle.run({ values: [7], pos: 0 });
+    expect(getResult(trace)?.output).toBe('true');
+  });
+  it('init carries list + pos; every traverse carries slow/fast indices', () => {
+    const trace = runDefault('linked_list_cycle');
+    expect(trace[0].list).toEqual([3, 2, 0, -4]);
+    expect(trace[0].pos).toBe(1);
+    for (const s of trace.filter(s => s.type === 'traverse')) {
+      expect(typeof s.slow).toBe('number');
+      expect(typeof s.fast).toBe('number');
+    }
+  });
+  it('mapper init emits set_list + set_arrows with the cycle back-edge', () => {
+    const init = runDefault('linked_list_cycle')[0];
+    const out = mapTraceStep('linked_list_cycle', 'linked', init, {});
+    expect(out.viz.some(a => a.action === 'set_list')).toBe(true);
+    const arrows = out.viz.find(a => a.action === 'set_arrows')?.params.arrows;
+    expect(arrows).toContainEqual({ id: 'arrow-cycle', from: 3, to: 1, reversed: true });
+  });
+  it('mapper omits the back-edge when pos=-1', () => {
+    const trace = ALGORITHMS.linked_list_cycle.run({ values: [1, 2, 3], pos: -1 });
+    const out = mapTraceStep('linked_list_cycle', 'linked', trace[0], {});
+    const arrows = out.viz.find(a => a.action === 'set_arrows')?.params.arrows;
+    expect(arrows.every(a => a.id !== 'arrow-cycle')).toBe(true);
+  });
+  it('found step highlights the meeting index via pointers', () => {
+    const trace = runDefault('linked_list_cycle');
+    const found = trace.find(s => s.type === 'found');
+    const out = mapTraceStep('linked_list_cycle', 'linked', found, {});
+    const ptrs = out.viz.filter(a => a.action === 'highlight_pointer');
+    expect(ptrs.map(p => p.params.name).sort()).toEqual(['fast', 'slow']);
+    expect(ptrs.every(p => p.params.index === found.meet)).toBe(true);
   });
 });
 

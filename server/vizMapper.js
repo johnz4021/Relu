@@ -2441,7 +2441,7 @@ function mapTreeStep(algo, step, state) {
         c.push(ctxUpdate('tree_state', {
           entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
         }));
-      } else if (algo === 'linked_list_cycle' || algo === 'merge_k_sorted') {
+      } else if (algo === 'merge_k_sorted') {
         if (step.tree) v.push(viz('tree', 'set_tree', step.tree));
         c.push(ctxUpdate('pointer_state', {
           entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
@@ -2489,15 +2489,6 @@ function mapTreeStep(algo, step, state) {
       c.push(ctxUpdate('heap_state', {
         entries: [{ key: 'Extracted', value: step.value ?? step.description ?? '?', status: 'updated' }],
       }));
-      break;
-    }
-
-    case 'found': {
-      if (algo === 'linked_list_cycle') {
-        c.push(ctxUpdate('pointer_state', {
-          entries: [{ key: 'Cycle', value: step.description || 'detected', status: 'updated' }],
-        }));
-      }
       break;
     }
 
@@ -2818,6 +2809,66 @@ function mapLinkedStep(algo, step, state) {
         c.push(ctxUpdate('answers', {
           entries: (step.array || []).map((val, i) => ({ key: `arr[${i}]=${val}`, value: '?', status: 'default' })),
         }));
+      } else if (algo === 'linked_list_cycle') {
+        // Replace the default forward chain with explicit arrows including the
+        // cycle back-edge (tail → pos), rendered as an arc below the row.
+        const arrows = [];
+        for (let i = 0; i < values.length - 1; i++) {
+          arrows.push({ id: `arrow-${i}`, from: i, to: i + 1, reversed: false });
+        }
+        if (step.pos >= 0 && step.pos < values.length && values.length > 0) {
+          arrows.push({ id: 'arrow-cycle', from: values.length - 1, to: step.pos, reversed: true });
+        }
+        v.push(viz('linked', 'set_arrows', { arrows }));
+        if (values.length > 0) {
+          v.push(viz('linked', 'set_pointer', { name: 'slow', index: 0 }));
+          v.push(viz('linked', 'set_pointer', { name: 'fast', index: 0 }));
+        }
+        c.push(ctxUpdate('pointer_state', {
+          entries: [
+            { key: 'slow', value: 'node[0]' },
+            { key: 'fast', value: 'node[0]' },
+            { key: 'tail →', value: step.pos >= 0 ? `node[${step.pos}]` : 'null' },
+          ],
+        }));
+      }
+      break;
+    }
+
+    // ── Floyd cycle detection (linked_list_cycle) ────────────────────────
+    case 'traverse': {
+      if (algo === 'linked_list_cycle') {
+        v.push(viz('linked', 'set_pointer', { name: 'slow', index: step.slow }));
+        v.push(viz('linked', 'set_pointer', { name: 'fast', index: step.fast }));
+        v.push(viz('linked', 'highlight_node', { index: step.slow, className: 'current' }));
+        c.push(ctxUpdate('pointer_state', {
+          entries: [
+            { key: 'slow', value: `node[${step.slow}]`, status: 'highlight' },
+            { key: 'fast', value: `node[${step.fast}]`, status: 'highlight' },
+          ],
+        }));
+      }
+      break;
+    }
+
+    case 'found': {
+      if (algo === 'linked_list_cycle') {
+        v.push(viz('linked', 'highlight_pointer', { name: 'slow', index: step.meet }));
+        v.push(viz('linked', 'highlight_pointer', { name: 'fast', index: step.meet }));
+        v.push(viz('linked', 'highlight_node', { index: step.meet, className: 'highlighted' }));
+        c.push(ctxUpdate('pointer_state', {
+          entries: [{ key: 'Cycle', value: `pointers met at node[${step.meet}]`, status: 'updated' }],
+        }));
+      }
+      break;
+    }
+
+    case 'no_cycle': {
+      if (algo === 'linked_list_cycle') {
+        v.push(viz('linked', 'highlight_node', { index: step.fast, className: 'deleted' }));
+        c.push(ctxUpdate('pointer_state', {
+          entries: [{ key: 'Cycle', value: 'fast pointer hit null — no cycle', status: 'updated' }],
+        }));
       }
       break;
     }
@@ -2983,6 +3034,13 @@ function mapLinkedStep(algo, step, state) {
           entries: (step.answers || []).map((nge, i) => ({
             key: `arr[${i}]`, value: nge === -1 ? 'none' : nge, status: 'default',
           })),
+        }));
+        break;
+      }
+      if (algo === 'linked_list_cycle') {
+        // Keep the final picture (met pointers / dead end) — no reset.
+        c.push(ctxUpdate('pointer_state', {
+          entries: [{ key: 'Result', value: step.description || step.output || '?', status: 'updated' }],
         }));
         break;
       }

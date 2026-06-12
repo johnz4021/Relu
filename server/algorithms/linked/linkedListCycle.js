@@ -1,5 +1,11 @@
 // Floyd's cycle detection (fast/slow pointer) on a linked list.
 // Input: { values: [3, 2, 0, -4], pos: 1 } where pos is the index the tail connects to (-1 = no cycle)
+//
+// Renders on the LINKED renderer: init carries the list + pos so the mapper
+// can draw the row with the cycle back-edge (set_arrows); every step carries
+// explicit slow/fast INDICES for the named-pointer badges. (Previously on the
+// tree renderer, which structurally cannot represent the back-edge — the
+// whole point of the algorithm.)
 
 export function linkedListCycle(input) {
   const values = input.values || [3, 2, 0, -4];
@@ -7,58 +13,63 @@ export function linkedListCycle(input) {
   const n = values.length;
   const trace = [];
 
-  // Build linked list as array with next pointers
-  const nodes = values.map((val, i) => ({
-    id: `node${i}`,
-    val,
-    nextIdx: i < n - 1 ? i + 1 : pos, // last node points to pos (or null if -1)
-  }));
-
   trace.push({
     type: 'init',
-    description: `Floyd's cycle detection: values=[${values.join(', ')}], tail→node[${pos}] (${pos === -1 ? 'no cycle' : `cycle at index ${pos}`})`,
-    node: 'node0',
-    parent: null,
+    description: `Floyd's cycle detection: values=[${values.join(', ')}], tail→node[${pos}] (${pos === -1 ? 'no cycle' : `cycle back to index ${pos}`})`,
+    list: [...values],
+    pos,
+    slow: 0,
+    fast: 0,
   });
+
+  if (n === 0) {
+    trace.push({
+      type: 'result',
+      description: 'Empty list — no cycle',
+      output: 'false',
+    });
+    return trace;
+  }
+
+  // next index for node i: i+1 within the array, tail loops to pos (-1 = end)
+  const next = (i) => (i < n - 1 ? i + 1 : (pos >= 0 && pos < n ? pos : -1));
 
   let slow = 0, fast = 0;
   let cycleDetected = false;
   const maxSteps = n * 2 + 4;
 
   for (let step = 0; step < maxSteps; step++) {
-    const slowNext = nodes[slow]?.nextIdx;
-    const fastNext1 = nodes[fast]?.nextIdx;
-    const fastNext2 = fastNext1 !== -1 && fastNext1 !== null ? nodes[fastNext1]?.nextIdx : -1;
+    const fastNext1 = next(fast);
+    const fastNext2 = fastNext1 === -1 ? -1 : next(fastNext1);
 
-    if (fastNext1 === -1 || fastNext1 === null || fastNext2 === -1 || fastNext2 === null) {
+    if (fastNext1 === -1 || fastNext2 === -1) {
       trace.push({
         type: 'no_cycle',
-        description: `Fast pointer reached end (null) — no cycle`,
-        node: `node${slow}`,
-        parent: `node${fast}`,
+        description: `Fast pointer reached the end (null) — no cycle`,
+        slow,
+        fast,
       });
       break;
     }
 
-    slow = slowNext;
-    fast = fastNext2 !== undefined ? fastNext2 : -1;
-
-    if (fast === -1 || slow === -1) break;
+    slow = next(slow);
+    fast = fastNext2;
 
     trace.push({
       type: 'traverse',
-      description: `Step ${step+1}: slow→node${slow}(${values[slow]}), fast→node${fast}(${values[fast]})`,
-      node: `node${slow}`,
-      parent: `node${fast}`,
+      description: `Step ${step + 1}: slow→node[${slow}] (${values[slow]}), fast→node[${fast}] (${values[fast]})`,
+      slow,
+      fast,
     });
 
     if (slow === fast) {
       cycleDetected = true;
       trace.push({
         type: 'found',
-        description: `Cycle detected! slow == fast at node${slow} (value=${values[slow]})`,
-        node: `node${slow}`,
-        parent: `node${fast}`,
+        description: `Cycle detected! slow == fast at node[${slow}] (value=${values[slow]})`,
+        slow,
+        fast,
+        meet: slow,
       });
       break;
     }
@@ -66,9 +77,7 @@ export function linkedListCycle(input) {
 
   trace.push({
     type: 'result',
-    description: cycleDetected ? `Cycle detected at node${slow}` : 'No cycle detected',
-    node: 'node0',
-    parent: null,
+    description: cycleDetected ? `Cycle detected — pointers met at node[${slow}]` : 'No cycle detected',
     output: String(cycleDetected),
   });
 
