@@ -566,8 +566,10 @@ export default function App() {
 
   const handleGuidedMessage = useCallback(
     (text) => {
-      // In the no-spoiler path, a student follow-up is an escalation request (eng D4).
-      if (companionActiveRef.current) track('companion_escalation_requested', {});
+      // companion_escalation_requested RETIRED 2026-06-12 (consent-gating review):
+      // under consent-gating a follow-up can be an answer, a decline, or an offer
+      // acceptance — indistinguishable here. The server-side companion_turn rows
+      // (offer_made / escalation_consented) carry the real escalation signal.
       processMessage({ type: 'add_student_message', text });
       flushActiveTimeline();
       audioPlayer.flush();

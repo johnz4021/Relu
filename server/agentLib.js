@@ -59,6 +59,47 @@ export function sendBinary(ws, buffer) {
   }
 }
 
+// Server-side companion_turn analytics (consent-gating review 2026-06-12, T3).
+// PostHog HTTP capture from the server: the client funnel lives in an iframe on
+// leetcode.com (storage-partitioned, adblock-exposed), while the server already
+// holds the self-report in hand — so the audit trail of the consent contract is
+// emitted here. Fire-and-forget: telemetry must never block or fail a teaching
+// turn. Rows are emitted even when the model omitted its self-report — absence
+// of the report is itself a metric (self_report_present=false).
+// The pre-registered readout over these rows lives in TODOS.md §"Consent-gating readout".
+export function emitCompanionTurn(session, report, turnKind) {
+  // Env read per-call (not module-load) so tests can exercise the emitter and a
+  // missing key degrades to a silent no-op rather than a crash.
+  const POSTHOG_KEY = process.env.POSTHOG_KEY || process.env.VITE_POSTHOG_KEY;
+  const POSTHOG_HOST = process.env.POSTHOG_HOST || process.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+  if (!session?.companionMode || !POSTHOG_KEY) return;
+  session._companionTurnIndex = (session._companionTurnIndex || 0) + 1;
+  if (!session.userId && !session._companionAnonId) {
+    session._companionAnonId = `anon-companion-${globalThis.crypto.randomUUID()}`;
+  }
+  const body = {
+    api_key: POSTHOG_KEY,
+    event: 'companion_turn',
+    distinct_id: session.userId || session._companionAnonId,
+    properties: {
+      turn_index: session._companionTurnIndex,
+      turn_kind: turnKind, // 'reply' | 'segment'
+      self_report_present: report != null,
+      learner_state: report?.learner_state ?? null,
+      specificity_level: report?.specificity_level ?? null,
+      reveals_key_insight: report?.reveals_key_insight ?? null,
+      offer_made: report?.offer_made ?? null,
+      escalation_consented: report?.escalation_consented ?? null,
+      algorithm_key: session._leetcodeAlgorithmKey ?? null,
+    },
+  };
+  fetch(`${POSTHOG_HOST}/capture/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch((err) => console.warn(`[Companion] companion_turn emit failed (non-blocking): ${err.message}`));
+}
+
 // index.js routes the client's `highlight_result` WS message here (page-highlight
 // ack, eng review 2026-06-09 D2/D9). The id check is the correlation guard: a late
 // ack from a timed-out highlight must be DROPPED, never resolve a newer call's
@@ -849,14 +890,18 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
       }
       console.log(`[Agent] emit_segment viz_actions (${allVizActions.length}, trace_steps: ${input.trace_step_indices?.length || 0}):`, JSON.stringify(allVizActions).slice(0, 500));
 
-      sendJSON(ws, {
-        type: 'segment_start',
-        segment_id: segmentId,
-        narration: input.narration,
-        viz_actions: allVizActions,
-        phase: input.phase || '',
-        companion: companionSelfReport(input),
-      });
+      {
+        const companionReport = companionSelfReport(input);
+        emitCompanionTurn(session, companionReport, 'segment');
+        sendJSON(ws, {
+          type: 'segment_start',
+          segment_id: segmentId,
+          narration: input.narration,
+          viz_actions: allVizActions,
+          phase: input.phase || '',
+          companion: companionReport,
+        });
+      }
 
       // TTS or simulated delay (synthesizeAndStream waits for playback to finish)
       session.interruptAbortFlag = false;

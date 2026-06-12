@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { validatePanelIds, companionSelfReport } from './agentLib.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { validatePanelIds, companionSelfReport, emitCompanionTurn } from './agentLib.js';
 
 // Registry shape mirrors registerPanels(): keyed by panel id, value {renderer, type}.
 const arrayRegistry = { array_main: { renderer: 'array', type: 'renderer' } };
@@ -74,6 +74,65 @@ describe('companionSelfReport — smoke', () => {
       specificity_level: 2,
       reveals_key_insight: false,
     });
+  });
+});
+
+// ── emitCompanionTurn (consent-gating T3, 2026-06-12) ────────────────────────
+// Server-side companion_turn PostHog row per companion reply/segment. The audit
+// trail of the consent contract: null-report rows included (absence is a metric),
+// fire-and-forget (a failed emit must never fail a teaching turn).
+describe('emitCompanionTurn', () => {
+  let calls;
+  const origFetch = globalThis.fetch;
+  const origKey = process.env.POSTHOG_KEY;
+  const origViteKey = process.env.VITE_POSTHOG_KEY;
+
+  beforeEach(() => {
+    calls = [];
+    globalThis.fetch = (url, opts) => { calls.push({ url, body: JSON.parse(opts.body) }); return Promise.resolve({ ok: true }); };
+    process.env.POSTHOG_KEY = 'phc_test';
+    delete process.env.VITE_POSTHOG_KEY; // the fallback var must not leak in from the shell
+  });
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+    if (origKey === undefined) delete process.env.POSTHOG_KEY; else process.env.POSTHOG_KEY = origKey;
+    if (origViteKey === undefined) delete process.env.VITE_POSTHOG_KEY; else process.env.VITE_POSTHOG_KEY = origViteKey;
+  });
+
+  it('no-ops outside companion mode and without a key', () => {
+    emitCompanionTurn({ companionMode: false }, { specificity_level: 2 }, 'reply');
+    expect(calls).toHaveLength(0);
+    delete process.env.POSTHOG_KEY;
+    emitCompanionTurn({ companionMode: true }, { specificity_level: 2 }, 'reply');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('emits a row with the consent fields and increments turn_index', () => {
+    const session = { companionMode: true, userId: 'u1', _leetcodeAlgorithmKey: 'two_sum' };
+    emitCompanionTurn(session, { learner_state: 'partial', specificity_level: 2, reveals_key_insight: false, offer_made: true, escalation_consented: false }, 'reply');
+    emitCompanionTurn(session, null, 'segment');
+    expect(calls).toHaveLength(2);
+    expect(calls[0].body).toMatchObject({
+      event: 'companion_turn',
+      distinct_id: 'u1',
+      properties: { turn_index: 1, turn_kind: 'reply', self_report_present: true, offer_made: true, escalation_consented: false, algorithm_key: 'two_sum' },
+    });
+    // Null-report row: absence of the self-report is itself recorded.
+    expect(calls[1].body.properties).toMatchObject({ turn_index: 2, turn_kind: 'segment', self_report_present: false, learner_state: null, specificity_level: null });
+  });
+
+  it('anonymous sessions get one stable per-session distinct_id', () => {
+    const session = { companionMode: true };
+    emitCompanionTurn(session, { specificity_level: 1 }, 'reply');
+    emitCompanionTurn(session, { specificity_level: 1 }, 'reply');
+    const [a, b] = calls.map((c) => c.body.distinct_id);
+    expect(a).toMatch(/^anon-companion-/);
+    expect(a).toBe(b);
+  });
+
+  it('a rejected fetch never throws into the teaching turn', () => {
+    globalThis.fetch = () => Promise.reject(new Error('network down'));
+    expect(() => emitCompanionTurn({ companionMode: true, userId: 'u1' }, null, 'reply')).not.toThrow();
   });
 });
 

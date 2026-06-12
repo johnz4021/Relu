@@ -2,7 +2,7 @@
 
 import { tools } from './tools.js';
 import { ALGORITHMS, runRegisteredAlgorithm } from './algorithms/registry.js';
-import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState, companionSelfReport } from './agentLib.js';
+import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState, companionSelfReport, emitCompanionTurn } from './agentLib.js';
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
 import { CANONICAL_EXAMPLES } from './examples/canonicalExamples.js';
 import { getDefaultContextPanels, getModeDefaultPanels } from './contextPanelDefaults.js';
@@ -753,8 +753,16 @@ reply, silently classify where the student is:
     insight here.
   • UNDERSTANDS — the student articulated the key idea themselves → confirm it, move to the next
     sub-step or implementation.
-  • DISENGAGED / WANTS_ANSWER — explicit give-up ("just show me", "I give up") or sustained
-    frustration → offer the exit, and on confirmation move to the terminal reveal.
+  • DISENGAGED / WANTS_ANSWER — an explicit give-up or answer-demand ("just show me", "just tell
+    me the answer", "I give up") classifies HERE even if the student never attempted anything —
+    wants-answer outranks not_attempted. The explicit ask IS the confirmation: report
+    escalation_consented=true and move to the terminal rungs NOW (this turn transitions toward
+    the reveal — do not ask whether they're sure). Offer the exit and await confirmation ONLY
+    when you are inferring sustained frustration the student hasn't voiced. One exception: on a
+    TURN-1 demand (they haven't attempted anything), you may take AT MOST one bridging beat —
+    and that beat MUST itself carry the exit as an explicit offer ("even a rough guess helps —
+    or I can just walk you through it now, your call"), reported with offer_made=true. If they
+    repeat the demand, reveal immediately.
 
 CONSENT-GATED ESCALATION (who paces: the student, by explicit permission — decided 2026-06-12,
 supersedes model-paced). Specificity NEVER rises uninvited. You may OFFER the next step; only the
@@ -830,7 +838,11 @@ to true when you do it, and only do it once (a) the student has derived it thems
 explicitly gave up and you are doing the terminal reveal. If a [RESERVED KEY INSIGHT] block appears
 below, that is the exact thing you must NOT say, name, paraphrase, or encode as a concrete step
 until (a) or (b). Phrasing a reserved idea as a leading question ("what if two pointers were n
-apart?") STILL counts as revealing it — don't.
+apart?") STILL counts as revealing it — don't. FISHING: when the student asks you to confirm or
+deny a guessed technique (theirs, or "a friend said..."), do not confirm, deny, or correct the
+guess — and do NOT counter with a leading question that encodes the answer (that is the same leak
+in question form). Say plainly that you won't confirm guesses, and name the real exits: keep
+working from what THEY know, or say the word and you'll walk them through the whole thing.
 
 DO NOT FIGHT THE STUDENT. If they ask for more, or ask you to just show them, HONOR IT — escalate
 one rung, or go to the reveal if they explicitly gave up. Never refuse or withhold behind a "try
@@ -1645,7 +1657,10 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           // Companion self-report (eng D2): audit server-side, forward to the client for
           // precise funnel events. Null/no-op outside companion mode.
           const companion = companionSelfReport(block.input);
-          if (companion) console.log(`[Companion] reply state=${companion.learner_state} level=${companion.specificity_level} reveals=${companion.reveals_key_insight}`);
+          if (companion) console.log(`[Companion] reply state=${companion.learner_state} level=${companion.specificity_level} reveals=${companion.reveals_key_insight} offer=${companion.offer_made} consented=${companion.escalation_consented}`);
+          // companion_turn analytics row (consent-gating T3) — emitted even when the
+          // self-report is absent, so missing reports are themselves measurable.
+          emitCompanionTurn(session, companion, 'reply');
 
           // Send as interrupt_response to reuse existing purple "Argmax:" segment
           sendJSON(ws, { type: 'interrupt_response', answer: text, explanation_mode: 'none', companion });
