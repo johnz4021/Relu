@@ -31,6 +31,7 @@ import { slidingWindowMax, DEFAULT_SLIDING_WINDOW_MAX_INPUT, jumpGame, DEFAULT_J
 // runner doesn't emit a structural action like set_tree / init_grid /
 // set_list with values / set_jobs). Filtered out of the LC classifier in
 // leetcodeAgent.js so users never land on a silently-empty viz.
+// DRAINED TO ZERO 2026-06-12 — the contract below stays for future entries.
 //
 // Drain to zero. When fixing one of these:
 //   1. Make the runner emit structural data (tree:{nodes,edges} on init, or
@@ -638,9 +639,15 @@ export const ALGORITHMS = {
   median_finder: {
     run: (input) => medianFinder(input),
     renderer: 'tree', category: 'Data Structures',
+    // Two tree panels (eng review D2): the algorithm keeps two unconnected
+    // heaps, so each gets its own panel. Mapper actions target these panel
+    // ids EXPLICITLY — bare 'tree' targets are ambiguous with two tree panels.
+    panels: [
+      { id: 'lo_heap', renderer: 'tree', title: 'Lower half (max-heap)' },
+      { id: 'hi_heap', renderer: 'tree', title: 'Upper half (min-heap)' },
+    ],
     defaultInput: DEFAULT_MEDIAN_FINDER_INPUT,
     capabilities: { max_stream_length: 12 },
-    broken: true,
   },
   k_closest_points: {
     run: (input) => kClosestPoints(input),
@@ -783,9 +790,14 @@ export const ALGORITHMS = {
   merge_k_sorted: {
     run: (input) => mergeKSorted(input),
     renderer: 'tree', category: 'Data Structures',
+    // Heap tree panel + structural result list (eng review D3); source-list
+    // cursors live in the source_lists context panel.
+    panels: [
+      { id: 'merge_heap', renderer: 'tree', title: 'Min-heap of list heads' },
+      { id: 'merge_result', renderer: 'linked', title: 'Merged result' },
+    ],
     defaultInput: DEFAULT_MERGE_K_SORTED_INPUT,
     capabilities: { max_lists: 4, max_list_length: 6 },
-    broken: true,
   },
 };
 

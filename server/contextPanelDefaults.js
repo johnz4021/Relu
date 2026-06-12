@@ -421,9 +421,7 @@ const PANEL_DEFAULTS = {
     { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   median_finder: [
-    { id: 'heap_stats', type: 'key_value', title: 'Heap State' },
-    { id: 'heap_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
+    { id: 'median_state', type: 'key_value', title: 'Median' },
   ],
   k_closest_points: [
     { id: 'heap_contents', type: 'collection', title: 'K Closest So Far' },
@@ -454,9 +452,7 @@ const PANEL_DEFAULTS = {
     { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
   ],
   merge_k_sorted: [
-    { id: 'heap_state', type: 'collection', title: 'Min-Heap' },
-    { id: 'result_so_far', type: 'log', title: 'Merged Result' },
-    { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
+    { id: 'source_lists', type: 'key_value', title: 'Source Lists' },
   ],
   tree_depth_dfs: [
     { id: 'expression', type: 'expression', title: 'Computation' },

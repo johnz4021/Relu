@@ -49,7 +49,7 @@ vi.mock('../tts.js', () => ({
 }));
 
 import { ALGORITHMS } from './registry.js';
-import { handleToolCall } from '../agentLib.js';
+import { handleToolCall, restoreGraphState } from '../agentLib.js';
 import { getDefaultContextPanels } from '../contextPanelDefaults.js';
 
 // ── Mock WebSocket ───────────────────────────────────────────────────────────
@@ -391,5 +391,77 @@ describe('pipeline coverage — full server-side flow per algorithm', () => {
         ).toBeGreaterThan(1);
       });
     }
+  });
+
+  // ── Multi-panel algos: the single-panel structural gate above is keyed off
+  // the scalar registry `renderer` field, so with two panels of the same type
+  // it passes when lo_heap paints and hi_heap never does. This gate closes
+  // that hole: EVERY declared panel must receive a structural action of its
+  // own renderer type, or it sits in its "Waiting for data..." empty state
+  // forever while the suite stays green.
+  describe('multi-panel: every declared panel receives a structural action', () => {
+    const PANEL_REQUIRED_ACTIONS = {
+      tree: ['set_tree', 'insert_node'],
+      array: ['set_data'],
+      table: ['init_grid'],
+      linked: ['set_list', 'push', 'enqueue', 'insert_after'],
+      interval: ['set_jobs'],
+      string: ['set_string'],
+    };
+    const multiPanelAlgos = Object.entries(ALGORITHMS).filter(([, v]) => v.panels?.length > 0);
+
+    it('at least one registry entry declares panels (sanity — keeps this gate honest)', () => {
+      expect(multiPanelAlgos.length).toBeGreaterThan(0);
+    });
+
+    for (const [algoId, info] of multiPanelAlgos) {
+      it(`${algoId}: all ${info.panels.length} declared panels are registered and paint`, async () => {
+        const { session, actions } = await runPipeline(algoId, 'bare');
+        for (const p of info.panels) {
+          expect(session._panels[p.id], `panel '${p.id}' not registered by auto-setup`).toBeDefined();
+          const required = PANEL_REQUIRED_ACTIONS[p.renderer] || [];
+          const structural = actions.filter(
+            (a) => a.renderer === p.id && required.includes(a.action)
+          );
+          expect(
+            structural.length,
+            `${algoId}: panel '${p.id}' (${p.renderer}) never received a structural action ` +
+            `(one of ${required.join('/')}) — it would stay in its empty state forever.`
+          ).toBeGreaterThan(0);
+        }
+      });
+    }
+
+    it('median_finder: restore replay remounts BOTH panels and repaints them', async () => {
+      const { session } = await runPipeline('median_finder', 'bare');
+      // Mirror the illustrate-detour auto-save shape (agentLib respond_to_interrupt).
+      session._savedGraphState = {
+        graph: session.currentGraph,
+        trace: session.currentTrace,
+        algorithm: session.currentAlgorithm,
+        renderer: session.currentRenderer,
+        rendererPanelId: session._rendererPanelId || null,
+        mapperState: {},
+        emittedTraceSteps: [...(session._emittedTraceSteps || [])],
+        lastVizMessage: session._lastVizMessage || null,
+        rendererVizHistory: session._rendererVizHistory || {},
+      };
+      session.ws.sent.length = 0;
+      await restoreGraphState(session, session.ws);
+
+      const remount = session.ws.sent.find((m) => m.type === 'create_visualization');
+      expect(remount, 'restore sent no create_visualization — both panels stay unmounted').toBeDefined();
+      expect(remount.panels.map((p) => p.id).sort()).toEqual(['hi_heap', 'lo_heap']);
+
+      const replayed = session.ws.sent
+        .filter((m) => m.type === 'segment_start')
+        .flatMap((m) => m.viz_actions || []);
+      for (const panelId of ['lo_heap', 'hi_heap']) {
+        expect(
+          replayed.some((a) => a.renderer === panelId && a.action === 'set_tree'),
+          `restore replay never repainted '${panelId}'`
+        ).toBe(true);
+      }
+    });
   });
 });

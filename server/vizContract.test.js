@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RENDERER_MANIFEST } from './rendererManifest.js';
 import { SYSTEM_ACTIONS, CONTEXT_ACTIONS } from './vizValidator.js';
+import { ALGORITHMS } from './algorithms/registry.js';
 import { tools } from './tools.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -55,10 +56,20 @@ describe('manifest ↔ client renderer parity', () => {
 });
 
 describe('vizMapper ↔ manifest parity', () => {
+  // Multi-panel algos (median_finder, merge_k_sorted) emit viz('<panel_id>', ...)
+  // with explicit panel ids instead of bare renderer types. Resolve each
+  // declared panel id to its renderer type via the registry — the same source
+  // of truth agentLib's auto-setup registers panels from.
+  const PANEL_ID_RENDERERS = {};
+  for (const entry of Object.values(ALGORITHMS)) {
+    for (const p of entry.panels || []) PANEL_ID_RENDERERS[p.id] = p.renderer;
+  }
+  const resolveRenderer = (name) => PANEL_ID_RENDERERS[name] || name;
+
   // Statically extract every viz('<renderer>', '<action>', ...) call the mapper makes.
   const mapperSrc = read('server/vizMapper.js');
   const calls = [...mapperSrc.matchAll(/viz\(\s*'([a-z_]+)'\s*,\s*'([a-z_]+)'/g)].map((m) => ({
-    renderer: m[1],
+    renderer: resolveRenderer(m[1]),
     action: m[2],
   }));
 

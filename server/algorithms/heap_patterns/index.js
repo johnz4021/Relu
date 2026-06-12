@@ -1,10 +1,10 @@
 // Tier 1 implementations for heap / priority queue patterns.
 // Uses a simple array-backed min-heap for correctness.
 
-class MinHeap {
+export class MinHeap {
   // cmp(a, b) → true when `a` belongs above `b`. The default preserves the
-  // plain numeric min-heap; pair-valued heaps (top_k_heap, k_closest_points)
-  // pass a comparator instead of encoding pairs into a single number.
+  // plain numeric min-heap; pair-valued heaps (top_k_heap, k_closest_points,
+  // merge_k_sorted) pass a comparator instead of encoding pairs into a number.
   constructor(cmp = (a, b) => a < b) { this.data = []; this.cmp = cmp; }
   push(val) {
     this.data.push(val);
@@ -161,17 +161,23 @@ export function medianFinder(input) {
 
   for (const num of stream) {
     // Add to appropriate side
+    let placed;
     if (lo.size() === 0 || num <= lo.peek()) {
       lo.push(num);
+      placed = 'lo';
     } else {
       hi.push(num);
+      placed = 'hi';
     }
 
     // Rebalance: lo can have at most 1 more than hi
+    let rebalanced = null;
     if (lo.size() > hi.size() + 1) {
       hi.push(lo.pop());
+      rebalanced = 'lo→hi';
     } else if (hi.size() > lo.size()) {
       lo.push(hi.pop());
+      rebalanced = 'hi→lo';
     }
 
     const median = lo.size() > hi.size()
@@ -179,10 +185,17 @@ export function medianFinder(input) {
       : (lo.peek() + hi.peek()) / 2;
     medians.push(median);
 
+    // Two-panel contract: each step carries BOTH heap arrays (in heap order)
+    // so the mapper can redraw the lo_heap / hi_heap panels per insert.
     trace.push({
       type: 'insert',
-      description: `Add ${num}: lo=[${[...lo.data].sort((a,b)=>b-a).join(',')}] hi=[${[...hi.data].sort((a,b)=>a-b).join(',')}] → median=${median}`,
+      description: `Add ${num} to ${placed}${rebalanced ? `, rebalance ${rebalanced}` : ''} → median=${median}`,
       node: String(num),
+      lo: [...lo.data],
+      hi: [...hi.data],
+      median,
+      placed,
+      rebalanced,
     });
   }
 
@@ -190,6 +203,8 @@ export function medianFinder(input) {
     type: 'result',
     description: `Medians after each insertion: [${medians.join(', ')}]`,
     node: null,
+    lo: [...lo.data],
+    hi: [...hi.data],
     output: String(medians[medians.length - 1]),
   });
 

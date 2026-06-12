@@ -353,6 +353,12 @@ Every algorithm in the registry has:
   category: string,
   defaultInput: {},    // used when no input is provided
   capabilities: {},    // max_nodes, max_array_length, etc.
+  panels: [],          // OPTIONAL multi-panel declaration: [{id, renderer, title}].
+                       // run_algorithm mounts every declared panel; the mapper must
+                       // target these panel ids EXPLICITLY (bare renderer-type targets
+                       // are ambiguous with two panels of one type and get stripped).
+                       // pipeline.coverage's multi-panel gate asserts each declared
+                       // panel receives a structural action. (median_finder, merge_k_sorted)
   tier: 2,            // explicitly marked for Tier 2-only
 }
 ```
@@ -388,8 +394,14 @@ must-not-route to must-route as flags come off). Phase 3 (shipped):
 `linked_list_cycle` moved tree→linked renderer — init carries `list` + `pos`
 (mapper emits `set_list` + `set_arrows` with the cycle back-edge, drawn as an
 arc below the row by LinkedRenderer's backward-arrow path), every step carries
-explicit `slow`/`fast` indices for the named-pointer badges. Still flagged:
-`median_finder` and `merge_k_sorted` (Phase 2: two-tree-panel work).
+explicit `slow`/`fast` indices for the named-pointer badges. Phase 2 (shipped —
+**drained to zero**): `median_finder` renders its two heaps on two tree panels
+(`lo_heap`/`hi_heap`, registry `panels` declaration) with the median in a
+context panel; `merge_k_sorted` rewritten on a real MinHeap with a heap tree
+panel + structural result list panel + source-list cursors in context. The
+illustrate auto-save now captures `lastVizMessage`/`rendererVizHistory` so
+restore remounts non-graph (incl. multi-panel) layouts; an empty `set_tree`
+(root: null) is legal and clears a panel's waiting state.
 
 **Tier 1 algorithms by renderer (103 total):**
 

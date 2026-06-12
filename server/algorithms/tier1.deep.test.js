@@ -559,7 +559,7 @@ describe('top_k_heap (tree renderer)', () => {
   });
 });
 
-describe('median_finder (tree renderer)', () => {
+describe('median_finder (two tree panels)', () => {
   it('stream=[5,15,1,3,2,8] → final median = 4', () => {
     const trace = runDefault('median_finder');
     expect(getResult(trace)?.output).toBe('4');
@@ -567,6 +567,37 @@ describe('median_finder (tree renderer)', () => {
   it('single-element stream → median = that element', () => {
     const trace = ALGORITHMS.median_finder.run({ stream: [7] });
     expect(getResult(trace)?.output).toBe('7');
+  });
+  it('every insert carries both heap arrays + the running median', () => {
+    const trace = runDefault('median_finder');
+    for (const s of trace.filter(s => s.type === 'insert')) {
+      expect(Array.isArray(s.lo)).toBe(true);
+      expect(Array.isArray(s.hi)).toBe(true);
+      expect(typeof s.median).toBe('number');
+      // invariant: lo holds the lower half — its max ≤ hi's min
+      if (s.lo.length > 0 && s.hi.length > 0) {
+        expect(Math.max(...s.lo)).toBeLessThanOrEqual(Math.min(...s.hi));
+      }
+      // balance invariant: |lo| - |hi| ∈ {0, 1}
+      expect([0, 1]).toContain(s.lo.length - s.hi.length);
+    }
+  });
+  it('rebalance fires in BOTH directions across the default stream', () => {
+    const trace = ALGORITHMS.median_finder.run({ stream: [1, 2, 3, 4, 5, 0] });
+    const rebalances = trace.filter(s => s.rebalanced).map(s => s.rebalanced);
+    expect(rebalances).toContain('hi→lo');
+  });
+  it('even-count stream → median is the average of the two tops', () => {
+    const trace = ALGORITHMS.median_finder.run({ stream: [1, 3] });
+    expect(getResult(trace)?.output).toBe('2');
+  });
+  it('mapper routes every insert to BOTH panels with explicit ids', () => {
+    const trace = runDefault('median_finder');
+    for (const s of trace.filter(s => s.type === 'insert')) {
+      const out = mapTraceStep('median_finder', 'tree', s, {});
+      const targets = out.viz.filter(a => a.action === 'set_tree').map(a => a.renderer).sort();
+      expect(targets).toEqual(['hi_heap', 'lo_heap']);
+    }
   });
 });
 
@@ -921,7 +952,7 @@ describe('linked_list_cycle (linked renderer)', () => {
   });
 });
 
-describe('merge_k_sorted (tree renderer)', () => {
+describe('merge_k_sorted (heap tree panel + result list panel)', () => {
   it('[[1,4,5],[1,3,4],[2,6]] → merged = [1,1,2,3,4,4,5,6]', () => {
     const trace = runDefault('merge_k_sorted');
     const out = JSON.parse(getResult(trace).output);
@@ -936,5 +967,29 @@ describe('merge_k_sorted (tree renderer)', () => {
     const trace = ALGORITHMS.merge_k_sorted.run({ lists: [] });
     const out = JSON.parse(getResult(trace).output);
     expect(out).toEqual([]);
+  });
+  it('an empty list among inputs is skipped cleanly', () => {
+    const trace = ALGORITHMS.merge_k_sorted.run({ lists: [[2, 4], [], [1, 3]] });
+    expect(JSON.parse(getResult(trace).output)).toEqual([1, 2, 3, 4]);
+  });
+  it('every pop/push carries heap snapshot, growing result, and list cursors', () => {
+    const trace = runDefault('merge_k_sorted');
+    for (const s of trace.filter(s => s.type === 'pop' || s.type === 'push')) {
+      expect(Array.isArray(s.heap)).toBe(true);
+      expect(Array.isArray(s.result)).toBe(true);
+      expect(Array.isArray(s.lists_state)).toBe(true);
+      // heap root is always the smallest remaining head (min-heap property)
+      if (s.heap.length > 0) {
+        const values = s.heap.map(e => e.value);
+        expect(values[0]).toBe(Math.min(...values));
+      }
+    }
+  });
+  it('mapper routes pops to merge_heap (tree) and merge_result (list) with explicit ids', () => {
+    const trace = runDefault('merge_k_sorted');
+    const pop = trace.find(s => s.type === 'pop');
+    const out = mapTraceStep('merge_k_sorted', 'tree', pop, {});
+    expect(out.viz.some(a => a.renderer === 'merge_heap' && a.action === 'set_tree')).toBe(true);
+    expect(out.viz.some(a => a.renderer === 'merge_result' && a.action === 'set_list')).toBe(true);
   });
 });

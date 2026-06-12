@@ -72,6 +72,17 @@ function heapToTree(heap) {
   return { nodes, edges, root: 'n0', heap_array: heap.map(v => (v !== null && typeof v === 'object' ? v.value : v)) };
 }
 
+// Source-list rows for merge_k_sorted's context panel. lists_state is
+// [{listIdx, remaining}] from the runner; activeIdx highlights the list whose
+// head just moved.
+function mergeKListEntries(listsState, activeIdx) {
+  return (listsState || []).map((ls) => ({
+    key: `list[${ls.listIdx}]`,
+    value: ls.remaining.length > 0 ? ls.remaining.join(' → ') : '∅ done',
+    status: ls.listIdx === activeIdx ? 'highlight' : 'default',
+  }));
+}
+
 function pathUsesEdge(edgeKey, path) {
   const [from, to] = edgeKey.split('->');
   for (let i = 0; i < path.length - 1; i++) {
@@ -2431,9 +2442,16 @@ function mapTreeStep(algo, step, state) {
             { key: 'Path', value: '—' },
           ],
         }));
-      } else if (algo === 'heap_ops' || algo === 'top_k_heap' || algo === 'k_closest_points' || algo === 'median_finder') {
+      } else if (algo === 'heap_ops' || algo === 'top_k_heap' || algo === 'k_closest_points') {
         if (step.tree) v.push(viz('tree', 'set_tree', step.tree));
         c.push(ctxUpdate('heap_state', {
+          entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
+        }));
+      } else if (algo === 'median_finder') {
+        // Two-panel layout: clear both panels' waiting state with empty trees.
+        v.push(viz('lo_heap', 'set_tree', heapToTree(step.lo || [])));
+        v.push(viz('hi_heap', 'set_tree', heapToTree(step.hi || [])));
+        c.push(ctxUpdate('median_state', {
           entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
         }));
       } else if (algo === 'tree_dp' || algo === 'lca_tree' || algo === 'validate_bst') {
@@ -2442,10 +2460,9 @@ function mapTreeStep(algo, step, state) {
           entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
         }));
       } else if (algo === 'merge_k_sorted') {
-        if (step.tree) v.push(viz('tree', 'set_tree', step.tree));
-        c.push(ctxUpdate('pointer_state', {
-          entries: [{ key: 'Status', value: step.description || 'Initialized', status: 'default' }],
-        }));
+        v.push(viz('merge_heap', 'set_tree', heapToTree(step.heap || [])));
+        v.push(viz('merge_result', 'set_list', { values: step.result || [], mode: 'list' }));
+        c.push(ctxUpdate('source_lists', { entries: mergeKListEntries(step.lists_state) }));
       } else {
         // Generic fallback: surface description so the panel isn't blank
         c.push(ctxUpdate('algorithm_state', {
@@ -2495,9 +2512,12 @@ function mapTreeStep(algo, step, state) {
     case 'pop':
     case 'push': {
       if (algo === 'merge_k_sorted') {
-        c.push(ctxUpdate('pointer_state', {
-          entries: [{ key: step.type, value: step.description || step.value || '', status: 'highlight' }],
-        }));
+        v.push(viz('merge_heap', 'set_tree', heapToTree(step.heap || [])));
+        v.push(viz('merge_result', 'set_list', { values: step.result || [], mode: 'list' }));
+        if (step.type === 'pop' && (step.result || []).length > 0) {
+          v.push(viz('merge_result', 'highlight_node', { index: step.result.length - 1, className: 'inserted' }));
+        }
+        c.push(ctxUpdate('source_lists', { entries: mergeKListEntries(step.lists_state, step.list_idx) }));
       }
       break;
     }
@@ -2517,9 +2537,23 @@ function mapTreeStep(algo, step, state) {
     }
 
     case 'insert': {
+      // median_finder: redraw BOTH heap panels (explicit panel ids — bare
+      // 'tree' is ambiguous with two tree panels mounted).
+      if (algo === 'median_finder' && step.lo) {
+        v.push(viz('lo_heap', 'set_tree', heapToTree(step.lo)));
+        v.push(viz('hi_heap', 'set_tree', heapToTree(step.hi || [])));
+        c.push(ctxUpdate('median_state', {
+          entries: [
+            { key: 'median', value: step.median, status: 'updated' },
+            { key: 'placed in', value: step.placed === 'lo' ? 'lower half' : 'upper half' },
+            { key: 'rebalance', value: step.rebalanced ?? '—', status: step.rebalanced ? 'highlight' : 'default' },
+          ],
+        }));
+        break;
+      }
       // BST node inserted. BST traces carry node_id; heap traces (top_k_heap,
-      // median_finder, k_closest_points) carry `node` — accept both. Snapshot
-      // heap traces carry `heap` + `heap_index` (where the element settled).
+      // k_closest_points) carry `node` — accept both. Snapshot heap traces
+      // carry `heap` + `heap_index` (where the element settled).
       if (step.tree) {
         v.push(viz('tree', 'set_tree', step.tree));
       } else if (step.heap) {
@@ -2644,6 +2678,18 @@ function mapTreeStep(algo, step, state) {
           step.found ? `Path found: ${step.path.join(' → ')}` : `No path sums to ${step.target}`,
           step.found ? 'result' : 'info',
         ));
+      } else if (algo === 'median_finder') {
+        // Keep both final heaps on screen; surface the answer in context.
+        if (step.lo) v.push(viz('lo_heap', 'set_tree', heapToTree(step.lo)));
+        if (step.hi) v.push(viz('hi_heap', 'set_tree', heapToTree(step.hi)));
+        c.push(ctxUpdate('median_state', {
+          entries: [{ key: 'Final median', value: step.output ?? '?', status: 'updated' }],
+        }));
+      } else if (algo === 'merge_k_sorted') {
+        v.push(viz('merge_result', 'set_list', { values: step.result || [], mode: 'list' }));
+        c.push(ctxUpdate('source_lists', {
+          entries: [{ key: 'Merged', value: `[${(step.result || []).join(', ')}]`, status: 'updated' }],
+        }));
       } else {
         v.push(viz('tree', 'reset', {}));
         if (step.tree) {

@@ -1,3 +1,5 @@
+import { MinHeap, heapSnapshot } from '../heap_patterns/index.js';
+
 // Floyd's cycle detection (fast/slow pointer) on a linked list.
 // Input: { values: [3, 2, 0, -4], pos: 1 } where pos is the index the tail connects to (-1 = no cycle)
 //
@@ -91,44 +93,61 @@ export function mergeKSorted(input) {
   const lists = input.lists || [[1,4,5],[1,3,4],[2,6]];
   const trace = [];
 
-  trace.push({
-    type: 'init',
-    description: `Merge K=${lists.length} sorted lists using a min-heap. Pop smallest, advance that list's pointer.`,
-    node: null,
-    parent: null,
-  });
+  // Real min-heap of [value, listIndex, elementIndex] — lowest head at the
+  // root (ties broken by list index for determinism). Two-panel contract:
+  // every step carries the heap snapshot ({value, label} entries for the
+  // merge_heap tree panel), the growing result (merge_result linked panel),
+  // and per-list cursors (source_lists context panel).
+  const heap = new MinHeap((a, b) => (a[0] !== b[0] ? a[0] < b[0] : a[1] < b[1]));
+  const toEntry = ([val, listIdx]) => ({ value: val, label: `${val} ←list[${listIdx}]` });
+  const cursors = lists.map(() => 0);
+  const listsState = () => lists.map((l, i) => ({
+    listIdx: i,
+    remaining: l.slice(cursors[i]),
+  }));
 
-  // Min-heap simulation: store [value, listIndex, elementIndex]
-  const heap = [];
   for (let i = 0; i < lists.length; i++) {
     if (lists[i].length > 0) {
       heap.push([lists[i][0], i, 0]);
     }
   }
-  heap.sort((a, b) => a[0] - b[0]);
+
+  trace.push({
+    type: 'init',
+    description: `Merge K=${lists.length} sorted lists using a min-heap. Pop smallest, advance that list's pointer.`,
+    heap: heapSnapshot(heap.data, toEntry).entries,
+    result: [],
+    lists_state: listsState(),
+  });
 
   const result = [];
 
-  while (heap.length > 0) {
-    const [val, listIdx, elemIdx] = heap.shift();
+  while (heap.size() > 0) {
+    const [val, listIdx, elemIdx] = heap.pop();
     result.push(val);
+    cursors[listIdx] = elemIdx + 1;
 
     trace.push({
       type: 'pop',
       description: `Pop ${val} from list[${listIdx}]. Result so far: [${result.join(', ')}]`,
-      node: String(val),
-      parent: String(listIdx),
+      value: val,
+      list_idx: listIdx,
+      heap: heapSnapshot(heap.data, toEntry).entries,
+      result: [...result],
+      lists_state: listsState(),
     });
 
     if (elemIdx + 1 < lists[listIdx].length) {
       const nextVal = lists[listIdx][elemIdx + 1];
       heap.push([nextVal, listIdx, elemIdx + 1]);
-      heap.sort((a, b) => a[0] - b[0]);
       trace.push({
         type: 'push',
         description: `Advance list[${listIdx}]: next element ${nextVal} added to heap`,
-        node: String(nextVal),
-        parent: String(listIdx),
+        value: nextVal,
+        list_idx: listIdx,
+        heap: heapSnapshot(heap.data, toEntry).entries,
+        result: [...result],
+        lists_state: listsState(),
       });
     }
   }
@@ -136,8 +155,7 @@ export function mergeKSorted(input) {
   trace.push({
     type: 'result',
     description: `Merged result: [${result.join(', ')}]`,
-    node: null,
-    parent: null,
+    result: [...result],
     output: JSON.stringify(result),
   });
 

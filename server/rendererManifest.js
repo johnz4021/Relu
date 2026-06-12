@@ -111,7 +111,7 @@ export const RENDERER_MANIFEST = {
 
   tree: {
     actions: [
-      { name: 'set_tree', params: { nodes: 'array', edges: 'array', root: 'string', heap_array: 'number[]?' }, description: 'Initialize tree with nodes, edges, and root. Edge objects: {from, to, side, label?} — label is optional text shown on the edge (e.g. "0"/"1" for Huffman).' },
+      { name: 'set_tree', params: { nodes: 'array', edges: 'array', root: 'string?', heap_array: 'number[]?' }, description: 'Initialize tree with nodes, edges, and root. Edge objects: {from, to, side, label?} — label is optional text shown on the edge (e.g. "0"/"1" for Huffman). An EMPTY tree (nodes: [], root: null) is legal — it clears the panel (e.g. median_finder heaps before the first insert).' },
       { name: 'highlight_node', params: { id: 'string', className: 'string?' }, description: 'Highlight a tree node' },
       { name: 'highlight_edge', params: { from: 'string', to: 'string', className: 'string?' }, description: 'Highlight a tree edge' },
       { name: 'insert_node', params: { id: 'string', value: 'any', parent: 'string?', side: "'left'|'right'?", label: 'string?' }, description: 'Insert a new node' },

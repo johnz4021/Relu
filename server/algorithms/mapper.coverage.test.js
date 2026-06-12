@@ -511,9 +511,12 @@ describe('vizMapper coverage — registry exhaustiveness', () => {
         const violations = [];
         for (const panelId of scenarios) {
           // Registered panels for this scenario. Includes the renderer panel + standard
-          // context panel ids that any algorithm could target.
+          // context panel ids that any algorithm could target. Multi-panel algos
+          // declare `panels` on their registry entry — agentLib's auto-setup
+          // registers every declared id, so the simulation must too.
           const registered = new Set([
             panelId,
+            ...(ALGORITHMS[algoId].panels || []).map((p) => p.id),
             // Context panels are registered under their declared id; assume any context
             // action's panel_id is registered (covered by getDefaultContextPanels).
           ]);

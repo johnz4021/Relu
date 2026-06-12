@@ -517,7 +517,20 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           // Use 'algorithm_step' instead of 'lesson_start' to avoid wiping transcript/viz state.
           sendJSON(ws, { type: 'algorithm_step', algorithm: algo });
 
-          if (rendererType === 'context') {
+          if (algoInfo?.panels?.length > 0) {
+            // Multi-panel registry declaration (median_finder, merge_k_sorted):
+            // mount EVERY declared panel. The mapper targets these panel ids
+            // explicitly, so _rendererPanelId stays null — a bare renderer-type
+            // rewrite would be ambiguous with two panels of the same type.
+            const autoVizMsg = {
+              type: 'create_visualization',
+              panels: algoInfo.panels.map(p => ({ id: p.id, renderer: p.renderer, title: p.title, config: {} })),
+              context_panels: contextPanels,
+            };
+            sendJSON(ws, autoVizMsg);
+            registerPanels(session, algoInfo.panels, contextPanels);
+            session._lastVizMessage = autoVizMsg;
+          } else if (rendererType === 'context') {
             // Context-only (Tier 2 hash map / data structure algorithms): no main viz panel
             const autoVizMsg = {
               type: 'create_visualization',
@@ -1079,6 +1092,11 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           rendererPanelId: session._rendererPanelId || null,
           mapperState: session.mapperState ? { ...session.mapperState } : {},
           emittedTraceSteps: session._emittedTraceSteps ? [...session._emittedTraceSteps] : [],
+          // Without these, restoreGraphState has no viz message to remount for
+          // non-graph algos (incl. multi-panel layouts) and silently skips the
+          // renderer restore — the panel stays blank after the illustrate detour.
+          lastVizMessage: session._lastVizMessage || null,
+          rendererVizHistory: session._rendererVizHistory || {},
         };
       }
       if (input.explanation_mode === 'illustrate' && input.illustrate) {
