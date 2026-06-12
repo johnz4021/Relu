@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { posthog, POSTHOG_KEY } from '../lib/posthog';
+import { track } from '../lib/posthog';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 const AMOUNTS = ['$5/mo', '$10/mo', '$15/mo', '$20+/mo'];
 

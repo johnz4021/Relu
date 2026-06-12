@@ -28,9 +28,8 @@ import { useTutorState, normalizeVizActions } from './hooks/useTutorState';
 import { applyActions, applyAction, applyActionsSequenced, killActiveTimeline, flushActiveTimeline, loadGraphImmediate } from './lib/rendererRegistry';
 import { initContextManager, destroyContextManager } from './lib/contextManager';
 import { supabase } from './lib/supabase';
-import { posthog, POSTHOG_KEY } from './lib/posthog';
+import { track } from './lib/posthog';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 export default function App() {
   const { session, user, loading: authLoading, signOut } = useAuth();

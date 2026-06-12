@@ -2,10 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSpeechToText } from '../hooks/useSpeechToText';
 import GuidedOptions from './GuidedOptions';
 import MathText from './MathText';
-import { posthog, POSTHOG_KEY } from '../lib/posthog';
+import { track } from '../lib/posthog';
 import { setTimelineSpeed } from '../lib/rendererRegistry';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 export default function Controls({ status, agentStatus, onInterrupt, onPause, onResume, onSkip, onRestart, onSpeedChange, onTtsMuteToggle, ttsMuted, explanationMode, guidedOptions, onGuidedResponse, mode, onGuidedMessage, guidedPrompt, registerInsertRef, independentWork, onIndependentWorkSubmit, onKeepGuiding, onRevealHint }) {
   const [question, setQuestion] = useState('');

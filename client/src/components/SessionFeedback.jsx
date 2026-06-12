@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { posthog, POSTHOG_KEY } from '../lib/posthog';
+import { track } from '../lib/posthog';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 export default function SessionFeedback({ mode, algorithm, onDismiss }) {
   const [rating, setRating] = useState(null);

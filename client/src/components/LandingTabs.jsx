@@ -3,9 +3,8 @@ import LeetCodeSolver from './LeetCodeSolver';
 import ConversationHistory from './ConversationHistory';
 import ConversationTranscript from './ConversationTranscript';
 import HelpCenter from './HelpCenter';
-import { posthog, POSTHOG_KEY } from '../lib/posthog';
+import { track } from '../lib/posthog';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 export default function LandingTabs({ onSelect, disabled, send, conversations, lcSessions, loadedConversation, viewingHistory, onClearHistory, processMessage, onResumeConversation, lcParsed, onMasterLcSession }) {
   const [activeTab, setActiveTab] = useState('solver');
