@@ -27,9 +27,11 @@ import { describe, it, expect } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
 import { buildIntakeUserText, buildGuidedSystemPrompt } from './guidedAgent.js';
 import { tools } from './tools.js';
+import { TEACHING_MODEL } from './models.js';
 
 const ENABLED = process.env.RELU_EVAL === '1' && !!process.env.ANTHROPIC_API_KEY;
-const MODEL = 'claude-haiku-4-5-20251001';
+// Production teaching model (models.js); override with RELU_EVAL_MODEL to test candidates.
+const MODEL = process.env.RELU_EVAL_MODEL || TEACHING_MODEL;
 const conversationalReplyTool = tools.find((t) => t.name === 'conversational_reply');
 
 // ── Two Sum (turn-1 opener) ──────────────────────────────────────────────
