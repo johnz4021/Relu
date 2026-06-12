@@ -264,6 +264,14 @@ export const tools = [
           type: 'boolean',
           description: 'COMPANION MODE only: true ONLY if this segment legitimately states the reserved key insight.',
         },
+        offer_made: {
+          type: 'boolean',
+          description: 'COMPANION MODE only: true when this turn explicitly OFFERS an escalation (names the next step or the drawing and asks). An open thinking-question is NOT an offer.',
+        },
+        escalation_consented: {
+          type: 'boolean',
+          description: "COMPANION MODE only: true ONLY when this turn's specificity rise was explicitly licensed (student asked, accepted your offer, or gave up).",
+        },
       },
       required: ['narration'],
     },
@@ -624,11 +632,19 @@ export const tools = [
           type: 'integer',
           minimum: 1,
           maximum: 5,
-          description: 'COMPANION MODE only: how specific this reply is (1=open question … 5=full reveal). At most +1 from your previous turn unless the student explicitly gave up.',
+          description: 'COMPANION MODE only: how specific this reply is (1=open question … 5=full reveal). +1 ONLY on a consented step (explicit ask, accepted offer, or give-up); otherwise ≤ your previous turn.',
         },
         reveals_key_insight: {
           type: 'boolean',
           description: 'COMPANION MODE only: true ONLY if this turn legitimately states the reserved key insight (student derived it, or they gave up and you are revealing). Never true on a partial-attempt turn.',
+        },
+        offer_made: {
+          type: 'boolean',
+          description: 'COMPANION MODE only: true when this turn explicitly OFFERS an escalation (names the next step or the drawing and asks). An open thinking-question is NOT an offer.',
+        },
+        escalation_consented: {
+          type: 'boolean',
+          description: "COMPANION MODE only: true ONLY when this turn's specificity rise was explicitly licensed (student asked, accepted your offer, or gave up). False on hold/lower turns.",
         },
       },
       required: ['text'],

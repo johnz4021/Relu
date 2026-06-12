@@ -38,12 +38,18 @@ export function sendJSON(ws, obj) {
 // precise funnel events (nudge_given, key-insight reveal) instead of guessing from viz.
 export function companionSelfReport(input) {
   if (!input) return null;
-  const { learner_state, specificity_level, reveals_key_insight } = input;
-  if (learner_state == null && specificity_level == null && reveals_key_insight == null) return null;
+  const { learner_state, specificity_level, reveals_key_insight, offer_made, escalation_consented } = input;
+  if (learner_state == null && specificity_level == null && reveals_key_insight == null
+    && offer_made == null && escalation_consented == null) return null;
   return {
     learner_state: learner_state ?? null,
     specificity_level: specificity_level ?? null,
     reveals_key_insight: reveals_key_insight === true,
+    // Consent-contract audit fields (2026-06-12): offer_made marks an explicit
+    // escalation offer; escalation_consented marks a specificity rise the student
+    // licensed (ask / accepted offer / give-up).
+    offer_made: offer_made === true,
+    escalation_consented: escalation_consented === true,
   };
 }
 
