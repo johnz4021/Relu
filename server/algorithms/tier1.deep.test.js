@@ -667,6 +667,33 @@ describe('heapToTree contract (vizMapper)', () => {
   });
 });
 
+// Regression: ISSUE-001 — default context panels declared for drained algos
+// that the trace mapper never feeds sat on screen as "No entries yet" for the
+// whole lesson (HEAP (TOP-K), K CLOSEST SO FAR, Path Values).
+// Found by /qa on 2026-06-12
+// Report: .gstack/qa-reports/qa-report-localhost-5173-2026-06-12.md
+describe('drained algos: every default context panel is fed by the mapper', () => {
+  const DRAINED = ['tree_dp', 'top_k_heap', 'k_closest_points', 'median_finder', 'merge_k_sorted', 'linked_list_cycle'];
+  for (const algoId of DRAINED) {
+    it(`${algoId}: no default panel stays "No entries yet"`, async () => {
+      const { getDefaultContextPanels } = await import('../contextPanelDefaults.js');
+      const algo = ALGORITHMS[algoId];
+      const trace = algo.run(algo.defaultInput);
+      const fed = new Set();
+      const state = {};
+      for (const s of trace) {
+        for (const a of (mapTraceStep(algoId, algo.renderer, s, state).ctx || [])) {
+          fed.add(a.params?.panel_id);
+        }
+      }
+      const declared = getDefaultContextPanels(algoId).map(p => p.id)
+        .filter(id => id !== 'pseudocode'); // pseudocode panels carry initial_data, not mapper feeds
+      const unfed = declared.filter(id => !fed.has(id));
+      expect(unfed, `default panels never fed by the mapper: ${unfed.join(', ')}`).toEqual([]);
+    });
+  }
+});
+
 describe('linear input clamping (validateInput + adaptInput)', () => {
   it('oversized nums → clamp adaptation + warning, adapt truncates to cap', () => {
     const nums = Array.from({ length: 50 }, (_, i) => i % 7);
