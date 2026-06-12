@@ -88,8 +88,10 @@ export function multiSourceBfs(input) {
   return trace;
 }
 
+// Two rotten sources in opposite corners so the BFS fronts visibly spread in
+// parallel and meet — the single-source LC Ex1 grid made "multi-source" a misnomer.
 export const DEFAULT_MULTI_SOURCE_BFS_INPUT = {
-  grid: [[2, 1, 1], [1, 1, 0], [0, 1, 1]],
+  grid: [[2, 1, 1], [1, 1, 0], [0, 1, 2]],
 };
 
 // ── floyd_warshall — All-Pairs Shortest Path ──────────────────────────────────
@@ -384,6 +386,9 @@ export function bipartiteCheck(input) {
   return trace;
 }
 
+// The 0-2 chord creates an odd cycle (0-1-2), so the trace shows passing checks
+// and then the conflict — the defining moment of the algorithm. The plain
+// 4-cycle default 2-colored cleanly and the conflict branch never appeared.
 export const DEFAULT_BIPARTITE_CHECK_INPUT = {
   graph: {
     nodes: [{ id: '0' }, { id: '1' }, { id: '2' }, { id: '3' }],
@@ -392,6 +397,7 @@ export const DEFAULT_BIPARTITE_CHECK_INPUT = {
       { source: '0', target: '3' },
       { source: '1', target: '2' },
       { source: '2', target: '3' },
+      { source: '0', target: '2' },
     ],
     directed: false,
   },

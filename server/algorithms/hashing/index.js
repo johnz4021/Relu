@@ -154,7 +154,9 @@ export function twoSumHash(input) {
   return trace;
 }
 
-export const DEFAULT_TWO_SUM_HASH_INPUT = { nums: [2, 7, 11, 15], target: 9 };
+// Five misses/stores before the complement hit — [2,7,11,15]/9 (LC Ex1) found
+// the pair on the second element and never showed the hash map earning its keep.
+export const DEFAULT_TWO_SUM_HASH_INPUT = { nums: [3, 8, 11, 2, 15, 7], target: 9 };
 
 // ── string_hash — Isomorphic Strings ─────────────────────────────────────────
 export function stringHash(input) {
@@ -214,7 +216,9 @@ export function stringHash(input) {
   return trace;
 }
 
-export const DEFAULT_STRING_HASH_INPUT = { s: 'egg', t: 'add' };
+// "foo"/"bar" hits the conflict step (o already mapped to a, then needs r) —
+// "egg"/"add" (LC Ex1) mapped three chars and never tested a mapping.
+export const DEFAULT_STRING_HASH_INPUT = { s: 'foo', t: 'bar' };
 
 // ── set_operations — Contains Duplicate ──────────────────────────────────────
 export function setOperations(input) {
@@ -432,7 +436,10 @@ export function greedyChoice(input) {
   return trace;
 }
 
-export const DEFAULT_GREEDY_CHOICE_INPUT = { nums: [2, 3, 1, 1, 4] };
+// Mixes improving and non-improving indices before reaching the goal —
+// [2,3,1,1,4] (LC Ex1) hit maxReach=goal in two straight updates with no
+// tension. Also differentiates this entry from jump_game's stuck/false default.
+export const DEFAULT_GREEDY_CHOICE_INPUT = { nums: [2, 1, 1, 1, 4] };
 
 // ── jump_game_ii — Jump Game II (minimum jumps) ───────────────────────────────
 export function jumpGameII(input) {

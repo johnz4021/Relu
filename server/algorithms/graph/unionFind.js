@@ -11,6 +11,9 @@ export const DEFAULT_UNION_FIND_GRAPH = {
     { source: '0', target: '1' },
     { source: '1', target: '2' },
     { source: '3', target: '4' },
+    // Redundant edge: 2 and 0 already share a root, so the trace shows the
+    // already_connected (cycle-detection) case — without it every edge unions.
+    { source: '2', target: '0' },
   ],
   directed: false,
   positions: {

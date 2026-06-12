@@ -138,10 +138,12 @@ export const ALGORITHMS = {
     capabilities: { max_array_length: 12 },
   },
   huffman: {
-    run: (input) => huffman(input.string ?? 'abcde'),
+    run: (input) => huffman(input.string ?? 'abracadabra'),
     renderer: 'tree',
     category: 'Greedy Algorithms',
-    defaultInput: { string: 'abcde' },
+    // Skewed frequencies (a:5, b:2, r:2, c:1, d:1) so frequent chars visibly
+    // earn shorter codes — uniform input makes Huffman look arbitrary.
+    defaultInput: { string: 'abracadabra' },
     capabilities: { max_nodes: 30 },
   },
   heap_ops: {
@@ -178,7 +180,9 @@ export const ALGORITHMS = {
     run: (input) => binarySearch(input.array, input.target),
     renderer: 'array',
     category: 'Searching',
-    defaultInput: { array: [1, 3, 5, 7, 9, 11, 13], target: 7 },
+    // Target 13 takes 3 probes with two half-eliminations — target 7 was the
+    // exact first mid, found in 1 probe with no halving shown.
+    defaultInput: { array: [1, 3, 5, 7, 9, 11, 13], target: 13 },
     capabilities: { max_array_length: 20 },
   },
   coin_change: {
@@ -263,14 +267,18 @@ export const ALGORITHMS = {
     run: (input) => twoPointers(input.array, input.target),
     renderer: 'array',
     category: 'Searching',
-    defaultInput: { array: [2, 7, 11, 15], target: 9 },
+    // Both pointers must move (16 too big → right, 12 too small → left) —
+    // [2,7,11,15]/9 only ever moved the right pointer.
+    defaultInput: { array: [1, 2, 4, 7, 11, 15], target: 13 },
     capabilities: { max_array_length: 15 },
   },
   interval_merge: {
     run: (input) => intervalMerge(input.intervals),
     renderer: 'interval',
     category: 'Greedy Algorithms',
-    defaultInput: { intervals: [{ start: 1, end: 3 }, { start: 2, end: 6 }, { start: 8, end: 10 }, { start: 15, end: 18 }] },
+    // [1,3]→[1,6]→[1,10] cascades twice — the LC Ex1 default merged only once,
+    // hiding the case students get wrong (a merged interval absorbing the next).
+    defaultInput: { intervals: [{ start: 1, end: 3 }, { start: 2, end: 6 }, { start: 5, end: 10 }, { start: 15, end: 18 }] },
     capabilities: { max_intervals: 12 },
   },
   interval_scheduling: {

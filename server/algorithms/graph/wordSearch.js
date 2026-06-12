@@ -84,7 +84,10 @@ export function wordSearch(input) {
   return trace;
 }
 
+// "SEE" (LC Ex2) dead-ends at the first S and backtracks before succeeding from
+// the second S — "ABCCED" (LC Ex1) found its path on the first try with zero
+// backtracking, hiding the algorithm's defining behavior.
 export const DEFAULT_WORD_SEARCH_INPUT = {
   board: [['A', 'B', 'C', 'E'], ['S', 'F', 'C', 'S'], ['A', 'D', 'E', 'E']],
-  word: 'ABCCED',
+  word: 'SEE',
 };

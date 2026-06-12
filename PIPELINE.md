@@ -357,6 +357,17 @@ Every algorithm in the registry has:
 }
 ```
 
+**Curating `defaultInput`.** Tier 1 lessons teach on `defaultInput` (not the
+problem's parsed Example 1), so the default must exercise the algorithm's
+*defining* behavior — misses before the hit (two_sum_hash), backtracking
+(word_search), a detected conflict (bipartite_check, valid_sudoku), cascading
+merges (interval_merge), a skewed distribution (huffman). Don't copy LC
+Example 1 verbatim without checking: LeetCode picks Example 1 to explain I/O
+format, and it is often degenerate (pair found on first probe, target at the
+exact first mid, zero backtracks). Audit check: run the trace and confirm the
+interesting step types (skip/conflict/backtrack/already_connected/…) actually
+appear; the mapper coverage test only sees step types the default produces.
+
 #### Tier 1: Hand-Written Trace Generators
 
 `run` is a synchronous JS function that executes the real algorithm and emits a step-by-step trace array. Deterministic, instant, no network call. Every algorithm in the registry is Tier 1 — there are no `run: null` stubs.

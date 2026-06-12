@@ -4,6 +4,11 @@ import { validSudoku, DEFAULT_VALID_SUDOKU_INPUT } from './validSudoku.js';
 // Helper: walk a trace, return the first step matching a predicate (or null).
 const findStep = (trace, pred) => trace.find(pred) || null;
 
+// The default board is LC 36 Ex2 (invalid). Restoring '5' at (0,0) gives the
+// LC 36 Ex1 board, which is valid.
+const VALID_BOARD = DEFAULT_VALID_SUDOKU_INPUT.board.map((row) => [...row]);
+VALID_BOARD[0][0] = '5';
+
 describe('validSudoku — trace shape', () => {
   it('init_table is the first step and carries the 9×9 board', () => {
     const trace = validSudoku(DEFAULT_VALID_SUDOKU_INPUT);
@@ -16,12 +21,20 @@ describe('validSudoku — trace shape', () => {
   });
 
   it('emits exactly one result step, last, with output "true" for valid boards', () => {
-    const trace = validSudoku(DEFAULT_VALID_SUDOKU_INPUT);
+    const trace = validSudoku({ board: VALID_BOARD });
     const results = trace.filter((s) => s.type === 'result');
     expect(results.length).toBe(1);
     expect(trace[trace.length - 1].type).toBe('result');
     expect(results[0].output).toBe('true');
     expect(results[0].valid).toBe(true);
+  });
+
+  it('default board (LC Ex2) → conflict found, result "false"', () => {
+    const trace = validSudoku(DEFAULT_VALID_SUDOKU_INPUT);
+    expect(findStep(trace, (s) => s.type === 'conflict')).not.toBeNull();
+    const result = trace[trace.length - 1];
+    expect(result.type).toBe('result');
+    expect(result.output).toBe('false');
   });
 
   it('emits no scan_cell for "." cells (defensive scan)', () => {
@@ -78,7 +91,7 @@ describe('validSudoku — conflict detection', () => {
 describe('validSudoku — set_state contents', () => {
   it('check_constraint set_state surfaces the active row/col/box snapshots', () => {
     const trace = validSudoku(DEFAULT_VALID_SUDOKU_INPUT);
-    // First check_constraint is the row check for cell (0,0) = '5'.
+    // First check_constraint is the row check for cell (0,0) = '8'.
     // At this moment row 0 / col 0 / box 0 are all still empty.
     const firstCheck = findStep(trace, (s) => s.type === 'check_constraint');
     expect(firstCheck.set_state.length).toBe(3);

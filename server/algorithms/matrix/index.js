@@ -98,12 +98,14 @@ export function numberOfIslands(input) {
   return trace;
 }
 
+// LC Ex2: three islands, so the count actually counts — the Ex1 grid had a
+// single island, reducing the demo to one flood fill.
 export const DEFAULT_NUMBER_OF_ISLANDS_INPUT = {
   grid: [
-    [1,1,1,1,0],
-    [1,1,0,1,0],
     [1,1,0,0,0],
-    [0,0,0,0,0],
+    [1,1,0,0,0],
+    [0,0,1,0,0],
+    [0,0,0,1,1],
   ],
 };
 

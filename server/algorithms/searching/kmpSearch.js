@@ -1,4 +1,7 @@
-export const DEFAULT_KMP_SEARCH_INPUT = { text: 'hello', pattern: 'll' };
+// Pattern "aaba" has a non-trivial failure function ([0,1,0,1]) that gets used
+// on real mismatches, and the text yields 3 matches — "hello"/"ll" was
+// indistinguishable from naive search.
+export const DEFAULT_KMP_SEARCH_INPUT = { text: 'aabaacaadaabaaba', pattern: 'aaba' };
 
 function buildFailureFunction(pattern) {
   const m = pattern.length;

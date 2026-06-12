@@ -1833,7 +1833,9 @@ function mapArrayStep(algo, step, state) {
     case 'push':
     case 'pop':
     case 'dequeue':
-    case 'window_max': {
+    case 'window_max':
+    case 'skip':
+    case 'blocked': {
       if (step.array) {
         v.push(viz('array', 'set_data', { values: step.array }));
       }

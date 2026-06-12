@@ -140,4 +140,7 @@ export function jumpGame(input) {
   return trace;
 }
 
-export const DEFAULT_JUMP_GAME_INPUT = { nums: [2, 3, 1, 1, 4] };
+// LC Ex2: maxReach stalls at the 0 and index 4 is unreachable — the trace shows
+// non-improving indices and the blocked/false ending. LC Ex1 reached the goal
+// in two straight updates with no tension.
+export const DEFAULT_JUMP_GAME_INPUT = { nums: [3, 2, 1, 0, 4] };

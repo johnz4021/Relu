@@ -201,10 +201,13 @@ export function validSudoku(input) {
   return trace;
 }
 
-// The canonical LC 36 example board (valid).
+// LC 36 Example 2 (invalid: the leading '8' duplicates the '8' in box 0 via
+// row 2). The generator stops at the first conflict by design — the lesson is
+// about *finding* the conflict, so an all-valid board (Ex1) showed 152 steps
+// of passing checks and never exercised the conflict branch.
 export const DEFAULT_VALID_SUDOKU_INPUT = {
   board: [
-    ['5','3','.','.','7','.','.','.','.'],
+    ['8','3','.','.','7','.','.','.','.'],
     ['6','.','.','1','9','5','.','.','.'],
     ['.','9','8','.','.','.','.','6','.'],
     ['8','.','.','.','6','.','.','.','3'],

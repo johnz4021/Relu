@@ -139,9 +139,13 @@ describe('frequency_count (context renderer)', () => {
 });
 
 describe('two_sum_hash (array renderer)', () => {
-  it('[2,7,11,15] target=9 → [0,1]', () => {
+  it('[3,8,11,2,15,7] target=9 → [3,5]', () => {
     const trace = runDefault('two_sum_hash');
-    expect(getResult(trace)?.output).toBe('[0,1]');
+    expect(getResult(trace)?.output).toBe('[3,5]');
+  });
+  it('default input shows several misses before the hit', () => {
+    const trace = runDefault('two_sum_hash');
+    expect(trace.filter(s => s.type === 'store').length).toBeGreaterThanOrEqual(3);
   });
   it('init step exposes array + target for the mapper', () => {
     const trace = runDefault('two_sum_hash');
@@ -171,16 +175,17 @@ describe('two_sum_hash (array renderer)', () => {
 });
 
 describe('string_hash (context renderer)', () => {
-  it('"egg"/"add" → isomorphic = true', () => {
+  it('default "foo"/"bar" → false (o maps to both a and r)', () => {
     const trace = runDefault('string_hash');
-    expect(getResult(trace)?.output).toBe('true');
+    expect(getResult(trace)?.output).toBe('false');
+    expect(trace.some(s => s.type === 'conflict')).toBe(true);
   });
   it('has context updates', () => {
     expect(hasContextUpdates(runDefault('string_hash'))).toBe(true);
   });
-  it('"foo"/"bar" → false (o maps to both a and r)', () => {
-    const trace = ALGORITHMS.string_hash.run({ s: 'foo', t: 'bar' });
-    expect(getResult(trace)?.output).toBe('false');
+  it('"egg"/"add" → isomorphic = true', () => {
+    const trace = ALGORITHMS.string_hash.run({ s: 'egg', t: 'add' });
+    expect(getResult(trace)?.output).toBe('true');
   });
 });
 
@@ -227,7 +232,7 @@ describe('math_simulation (context renderer)', () => {
 });
 
 describe('greedy_choice (context renderer)', () => {
-  it('[2,3,1,1,4] → can reach end = true', () => {
+  it('[2,1,1,1,4] → can reach end = true', () => {
     const trace = runDefault('greedy_choice');
     expect(getResult(trace)?.output).toBe('true');
   });
@@ -396,9 +401,9 @@ describe('house_robber (array renderer)', () => {
 // ── Graph advanced ─────────────────────────────────────────────────────────
 
 describe('multi_source_bfs (graph renderer)', () => {
-  it('rotting oranges default grid → answer = 4', () => {
+  it('rotting oranges default grid (two sources) → answer = 2', () => {
     const trace = runDefault('multi_source_bfs');
-    expect(getResult(trace)?.output).toBe('4');
+    expect(getResult(trace)?.output).toBe('2');
   });
   it('init step has nodes + edges fields', () => {
     expect(initHasGraphFields(runDefault('multi_source_bfs'))).toBe(true);
@@ -445,8 +450,23 @@ describe('tarjan_bridges (graph renderer)', () => {
 });
 
 describe('bipartite_check (graph renderer)', () => {
-  it('default 4-cycle graph → bipartite = true', () => {
+  it('default graph (4-cycle + odd-cycle chord) → not bipartite', () => {
     const trace = runDefault('bipartite_check');
+    expect(getResult(trace)?.output).toBe('false');
+  });
+  it('plain 4-cycle → bipartite = true', () => {
+    const trace = ALGORITHMS.bipartite_check.run({
+      graph: {
+        nodes: [{ id: '0' }, { id: '1' }, { id: '2' }, { id: '3' }],
+        edges: [
+          { source: '0', target: '1' },
+          { source: '0', target: '3' },
+          { source: '1', target: '2' },
+          { source: '2', target: '3' },
+        ],
+        directed: false,
+      },
+    });
     expect(getResult(trace)?.output).toBe('true');
   });
   it('init step has nodes + edges fields', () => {
@@ -555,9 +575,9 @@ describe('manacher (string renderer)', () => {
 // ── Matrix algorithms ────────────────────────────────────────────────────────
 
 describe('number_of_islands (graph renderer)', () => {
-  it('default 4×5 grid → 1 island', () => {
+  it('default 4×5 grid (LC Ex2) → 3 islands', () => {
     const trace = runDefault('number_of_islands');
-    expect(getResult(trace)?.output).toBe('1');
+    expect(getResult(trace)?.output).toBe('3');
   });
   it('init step has nodes + edges fields', () => {
     expect(initHasGraphFields(runDefault('number_of_islands'))).toBe(true);
@@ -664,13 +684,15 @@ describe('sliding_window_max (array renderer)', () => {
 });
 
 describe('jump_game (array renderer)', () => {
-  it('[2,3,1,1,4] → can reach = true', () => {
+  it('default [3,2,1,0,4] → cannot reach = false, with skip + blocked steps', () => {
     const trace = runDefault('jump_game');
-    expect(getResult(trace)?.output).toBe('true');
-  });
-  it('[3,2,1,0,4] → cannot reach = false', () => {
-    const trace = ALGORITHMS.jump_game.run({ nums: [3, 2, 1, 0, 4] });
     expect(getResult(trace)?.output).toBe('false');
+    expect(trace.some(s => s.type === 'skip')).toBe(true);
+    expect(trace.some(s => s.type === 'blocked')).toBe(true);
+  });
+  it('[2,3,1,1,4] → can reach = true', () => {
+    const trace = ALGORITHMS.jump_game.run({ nums: [2, 3, 1, 1, 4] });
+    expect(getResult(trace)?.output).toBe('true');
   });
   it('init step has array + indices fields', () => {
     expect(initHasArrayFields(runDefault('jump_game'))).toBe(true);

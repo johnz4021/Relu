@@ -44,10 +44,10 @@ describe('Phase 2 registry smoke tests', () => {
     expect(result.indices).toEqual([0, 1]);
   });
 
-  it('interval_merge: merges overlapping intervals', () => {
+  it('interval_merge: cascading merge on default input', () => {
     const trace = ALGORITHMS.interval_merge.run(ALGORITHMS.interval_merge.defaultInput);
     const result = trace.find(s => s.type === 'result');
-    expect(result.merged).toEqual([[1, 6], [8, 10], [15, 18]]);
+    expect(result.merged).toEqual([[1, 10], [15, 18]]);
   });
 
   it('interval_scheduling: returns accepted job count', () => {
@@ -95,7 +95,7 @@ describe('String Renderer algorithms', () => {
     expect(result.best_palindrome.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('kmp_search: trace contains a found step (hello/ll)', () => {
+  it('kmp_search: trace contains a found step (default input)', () => {
     const trace = ALGORITHMS.kmp_search.run(ALGORITHMS.kmp_search.defaultInput);
     expect(trace.some(s => s.type === 'found')).toBe(true);
   });
