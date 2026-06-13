@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react';
-import { posthog, POSTHOG_KEY } from '../lib/posthog';
+import { track } from '../lib/posthog';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 // Shared lesson-session lifecycle (eng D6). Both the web app (paste-to-learn) and
 // the leetcode overlay (the in-problem "Nudge me — no spoilers" companion) route

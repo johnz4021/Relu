@@ -28,9 +28,8 @@ import { useTutorState, normalizeVizActions } from './hooks/useTutorState';
 import { applyActions, applyAction, applyActionsSequenced, killActiveTimeline, flushActiveTimeline, loadGraphImmediate } from './lib/rendererRegistry';
 import { initContextManager, destroyContextManager } from './lib/contextManager';
 import { supabase } from './lib/supabase';
-import { posthog, POSTHOG_KEY } from './lib/posthog';
+import { track } from './lib/posthog';
 
-const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
 
 export default function App() {
   const { session, user, loading: authLoading, signOut } = useAuth();
@@ -567,8 +566,10 @@ export default function App() {
 
   const handleGuidedMessage = useCallback(
     (text) => {
-      // In the no-spoiler path, a student follow-up is an escalation request (eng D4).
-      if (companionActiveRef.current) track('companion_escalation_requested', {});
+      // companion_escalation_requested RETIRED 2026-06-12 (consent-gating review):
+      // under consent-gating a follow-up can be an answer, a decline, or an offer
+      // acceptance — indistinguishable here. The server-side companion_turn rows
+      // (offer_made / escalation_consented) carry the real escalation signal.
       processMessage({ type: 'add_student_message', text });
       flushActiveTimeline();
       audioPlayer.flush();

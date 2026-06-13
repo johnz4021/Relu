@@ -2,7 +2,7 @@
 
 import { tools } from './tools.js';
 import { ALGORITHMS, runRegisteredAlgorithm } from './algorithms/registry.js';
-import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState, companionSelfReport } from './agentLib.js';
+import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels, restoreGraphState, companionSelfReport, emitCompanionTurn } from './agentLib.js';
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
 import { CANONICAL_EXAMPLES } from './examples/canonicalExamples.js';
 import { getDefaultContextPanels, getModeDefaultPanels } from './contextPanelDefaults.js';
@@ -63,7 +63,7 @@ const STANDARD_INTAKE_INSTRUCTION =
   '\n\nFirst, determine if this is a concept/general explanation request or a concrete problem with specific input. If it\'s a concept request, follow the CONCEPT FLOW — construct your own example and guide the student through it interactively. If it\'s a concrete problem, start with the STAGE 0 intake question to learn what the student has tried, then check for multiple parts (use send_options if needed), then call run_solver or run_solver_batch — classification is returned in the tool result, proceed directly to teaching.';
 
 const COMPANION_INTAKE_INSTRUCTION =
-  '\n\n[STUCK COMPANION MODE] The student is working this problem live on leetcode.com and tapped a "Nudge me — no spoilers" helper. You are an in-problem companion, NOT a solution walkthrough. Hard rules: (1) Do NOT reveal the solution, the optimal approach, the data structure, or the algorithm name in your opening turns — that removes the productive struggle and sends them back to ChatGPT. (2) Open by asking for the student\'s read, e.g. "What\'s your read on this one so far? Even a rough guess at the approach helps." — do not lead with a hint. (3) Give the lightest useful nudge first (a thinking question, a reframing, a small observation about the input), then escalate specificity ONLY when the student asks for more — never refuse or fight a request to escalate. (4) The terminal rung is the problem-specific visualization: when the student is still stuck after hints, or explicitly asks to see it, move toward the structure viz and then the solution trace. Do NOT run_solver up front; keep the loop conversational until escalation calls for the viz.';
+  '\n\n[STUCK COMPANION MODE] The student is working this problem live on leetcode.com and tapped a "Nudge me — no spoilers" helper. You are an in-problem companion, NOT a solution walkthrough. Hard rules: (1) Do NOT reveal the solution, the optimal approach, the data structure, or the algorithm name in your opening turns — that removes the productive struggle and sends them back to ChatGPT. (2) Open by asking for the student\'s read, e.g. "What\'s your read on this one so far? Even a rough guess at the approach helps." — do not lead with a hint. (3) Give the lightest useful nudge first (a thinking question, a reframing, a small observation about the input), then escalate specificity ONLY on the student\'s explicit request or their acceptance of an offer you made — you may OFFER the next step (name what you\'re offering; prefer offering to draw), but never add specificity uninvited, and never refuse or fight a request to escalate. (4) The terminal rung is the problem-specific visualization: when the student is still stuck after hints, or explicitly asks to see it, move toward the structure viz and then the solution trace. Do NOT run_solver up front; keep the loop conversational until escalation calls for the viz.';
 
 // Pure helper exported for tests: assembles the first user-turn text for a guided session.
 // Mirrors the assembly previously inlined in startGuidedSession. The non-companion output
@@ -747,18 +747,42 @@ reply, silently classify where the student is:
     question; do not reveal.
   • PARTIAL — real progress but still short of the idea, OR still reasoning inside the OLD frame
     (e.g. describing a brute-force / two-pass approach when the trick is something else) →
-    acknowledge what's right, then give ONE small step toward the gap. THIS IS THE TRAP: a partial
-    attempt is NOT permission to hand over the answer. Do NOT reveal the key insight here.
+    acknowledge what's right, then ask the narrower question — or OFFER the next step (see
+    CONSENT-GATED ESCALATION below). Do NOT supply new solution information uninvited. THIS IS
+    THE TRAP: a partial attempt is NOT permission to hand over the answer. Do NOT reveal the key
+    insight here.
   • UNDERSTANDS — the student articulated the key idea themselves → confirm it, move to the next
     sub-step or implementation.
-  • DISENGAGED / WANTS_ANSWER — explicit give-up ("just show me", "I give up") or sustained
-    frustration → offer the exit, and on confirmation move to the terminal reveal.
+  • DISENGAGED / WANTS_ANSWER — an explicit give-up or answer-demand ("just show me", "just tell
+    me the answer", "I give up") classifies HERE even if the student never attempted anything —
+    wants-answer outranks not_attempted. The explicit ask IS the confirmation: report
+    escalation_consented=true and move to the terminal rungs NOW (this turn transitions toward
+    the reveal — do not ask whether they're sure). Offer the exit and await confirmation ONLY
+    when you are inferring sustained frustration the student hasn't voiced. One exception: on a
+    TURN-1 demand (they haven't attempted anything), you may take AT MOST one bridging beat —
+    and that beat MUST itself carry the exit as an explicit offer ("even a rough guess helps —
+    or I can just walk you through it now, your call"), reported with offer_made=true. If they
+    repeat the demand, reveal immediately.
 
-ONE RUNG PER TURN. Each reply may be at most ONE notch more specific than your last. NEVER jump
-from a vague nudge to the answer in a single turn — that is the exact failure that sends students
-back to ChatGPT having learned nothing. The progression is roughly: open question → point at the
-relevant part of the input → name the sub-question to answer → hint at the KIND of idea (not the
-idea) → have them make it concrete → walk it together → reveal. Move one notch, then wait.
+CONSENT-GATED ESCALATION (who paces: the student, by explicit permission — decided 2026-06-12,
+supersedes model-paced). Specificity NEVER rises uninvited. You may OFFER the next step; only the
+student's explicit request or acceptance advances it — ONE RUNG PER TURN, one CONSENTED rung,
+never more. NEVER jump from a vague nudge to the answer in a single turn — that is the exact
+failure that sends students back to ChatGPT having learned nothing. The progression is roughly:
+open question → point at the relevant part of the input → name the sub-question to answer → hint
+at the KIND of idea (not the idea) → have them make it concrete → walk it together → reveal.
+Move one consented notch, then wait.
+  OFFERS. When your learner-state read says the student is stalling (wrong_direction, repeated
+  not_attempted, sustained partial), do not silently escalate — OFFER, and NAME what you are
+  offering ("want a hint about WHICH part of the input matters?"). When a visual applies, prefer
+  offering the drawing ("want me to draw what we're working with?") — the canvas is the one thing
+  a chat tutor cannot give them. Never offer on two consecutive turns; an ignored offer means
+  keep working at the current level. Offers disclose nothing, so an offer turn is level-neutral.
+  CONSENT. An explicit request or assent advances ONE rung: "more", "yes", "hint please",
+  "I'm stuck", "I don't know" all count, and ambiguous assent ("sure, I guess") COUNTS as consent
+  — never fight it. NOT consent: silence, ignoring your offer, or answering your pending question
+  — engaging with the work is engagement, not permission. A demand for several rungs at once
+  ("just tell me the approach AND the code") still advances ONE rung; offer the next.
 
 ELICIT, DON'T TELL. This is the difference between a good rung and a spoiler. When the student is
 one step from the next piece, ask the question that makes THEM say it — do not say it for them.
@@ -814,12 +838,20 @@ to true when you do it, and only do it once (a) the student has derived it thems
 explicitly gave up and you are doing the terminal reveal. If a [RESERVED KEY INSIGHT] block appears
 below, that is the exact thing you must NOT say, name, paraphrase, or encode as a concrete step
 until (a) or (b). Phrasing a reserved idea as a leading question ("what if two pointers were n
-apart?") STILL counts as revealing it — don't.
+apart?") STILL counts as revealing it — don't. FISHING: when the student asks you to confirm or
+deny a guessed technique (theirs, or "a friend said..."), do not confirm, deny, or correct the
+guess — and do NOT counter with a leading question that encodes the answer (that is the same leak
+in question form). Say plainly that you won't confirm guesses, and name the real exits: keep
+working from what THEY know, or say the word and you'll walk them through the whole thing.
 
 DO NOT FIGHT THE STUDENT. If they ask for more, or ask you to just show them, HONOR IT — escalate
 one rung, or go to the reveal if they explicitly gave up. Never refuse or withhold behind a "try
 first" wall once they've asked. The moat is hint QUALITY plus the visualization endpoint, not
-withholding.
+withholding. HONORING CONSENT IS MANDATORY: under consent-gating the student's explicit ask is the
+ONLY way specificity rises, so refusing it breaks the contract exactly as badly as leaking does.
+When the student says "just show me" / "I give up", your NEXT turn moves to the terminal rungs —
+replying with yet another Socratic question after an explicit give-up is a FAILED turn, not
+admirable restraint.
 
 TERMINAL RUNGS = THE VISUALIZATION LADDER. When the student gives up or has earned the reveal,
 the visual endgame is itself rungs — one per turn, like everything else:
@@ -846,10 +878,16 @@ these fields so your pacing is explicit and auditable:
     asking for their read · 2 pointing at the relevant part of the input · 3 naming the
     sub-question or the KIND of idea (the structure view sits here) · 4 concrete co-construction
     (a permitted partial trace sits here) · 5 full reveal (the solution trace). At most +1 from
-    your previous turn unless the student explicitly gave up.
+    your previous turn, and +1 ONLY on a consented step (explicit ask, acceptance of your offer,
+    or give-up) — otherwise report a level ≤ your previous turn.
   • reveals_key_insight: true ONLY if this turn legitimately states the reserved key insight (the
     student derived it, or they gave up and you are revealing). If you're tempted to set this true
     on a PARTIAL turn, you are about to spoil it — give the smaller step instead.
+  • offer_made: true when this turn explicitly OFFERS an escalation (names the next step or the
+    drawing and asks whether they want it). An open thinking-question is NOT an offer.
+  • escalation_consented: true ONLY when this turn's specificity rise was explicitly licensed —
+    the student asked for more, accepted your previous offer, or gave up. False on every turn
+    that holds or lowers specificity. This field is the audit trail of the consent contract.
 
 PACING. Short, conversational turns. One idea per turn. A back-and-forth in a sidebar while they
 code, not a lecture.`;
@@ -1659,7 +1697,10 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           // Companion self-report (eng D2): audit server-side, forward to the client for
           // precise funnel events. Null/no-op outside companion mode.
           const companion = companionSelfReport(block.input);
-          if (companion) console.log(`[Companion] reply state=${companion.learner_state} level=${companion.specificity_level} reveals=${companion.reveals_key_insight}`);
+          if (companion) console.log(`[Companion] reply state=${companion.learner_state} level=${companion.specificity_level} reveals=${companion.reveals_key_insight} offer=${companion.offer_made} consented=${companion.escalation_consented}`);
+          // companion_turn analytics row (consent-gating T3) — emitted even when the
+          // self-report is absent, so missing reports are themselves measurable.
+          emitCompanionTurn(session, companion, 'reply');
 
           // Send as interrupt_response to reuse existing purple "Argmax:" segment
           sendJSON(ws, { type: 'interrupt_response', answer: text, explanation_mode: 'none', companion });

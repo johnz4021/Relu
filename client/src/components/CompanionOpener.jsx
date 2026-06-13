@@ -32,8 +32,10 @@ export default function CompanionOpener({ onChoose, problemTitle }) {
             className="w-full rounded-lg border border-[#4f46e5] bg-[#4f46e5] px-4 py-3 text-left text-white transition-colors hover:bg-[#4338ca] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4f46e5] focus-visible:ring-offset-2"
           >
             <span className="block text-sm font-semibold font-display">Nudge me — no spoilers</span>
+            {/* The consent guarantee, surfaced (CEO review 2026-06-12): states the
+                interaction RULE — escalation only happens when the student asks. */}
             <span className="mt-0.5 block text-xs font-body text-indigo-100">
-              Hints that get you unstuck without giving away the answer
+              Hints that get you unstuck — it won&apos;t get more specific unless you ask
             </span>
           </button>
 

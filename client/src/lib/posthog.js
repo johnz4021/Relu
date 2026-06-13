@@ -16,4 +16,7 @@ if (POSTHOG_KEY) {
   });
 }
 
-export { posthog, POSTHOG_KEY };
+// Canonical analytics helper — no-op when PostHog is not configured.
+const track = (event, props) => POSTHOG_KEY && posthog.capture(event, props);
+
+export { posthog, POSTHOG_KEY, track };

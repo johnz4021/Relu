@@ -313,6 +313,23 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('is NOT permission to hand over the answer');
   });
 
+  // 2026-06-12 consent-gating (eng+CEO review, supersedes model-paced D1 06-09):
+  // specificity never rises uninvited; offers are named and prefer the visual rung;
+  // consent semantics are pinned; honoring a give-up is mandatory (Opus baseline
+  // failed case 4 by over-withholding — the doctrine now names that failure).
+  it('companion doctrine encodes consent-gated escalation', () => {
+    expect(companion).toContain('CONSENT-GATED ESCALATION');
+    expect(companion).toContain('Specificity NEVER rises uninvited');
+    expect(companion).toContain('one CONSENTED rung');
+    expect(companion).toContain('NAME what you are');
+    expect(companion).toContain('offering the drawing');
+    expect(companion).toContain('NOT consent: silence');
+    expect(companion).toContain('COUNTS as consent');
+    expect(companion).toContain('HONORING CONSENT IS MANDATORY');
+    expect(companion).toContain('offer_made');
+    expect(companion).toContain('escalation_consented');
+  });
+
   // design review 2026-06-09 (viz-as-hints contract, D2-D6): mid-struggle visuals
   // are permission-gated, verified, co-discovered, borrowed-and-returned, and
   // level-neutral. Five decisions, five pinned phrases.
@@ -385,12 +402,23 @@ describe('companionSelfReport (eng-2 — self-report seam)', () => {
       learner_state: 'partial',
       specificity_level: 2,
       reveals_key_insight: false, // absent → false, never accidentally "truthy"
+      offer_made: false,
+      escalation_consented: false,
     });
-    expect(companionSelfReport({ learner_state: 'disengaged', specificity_level: 5, reveals_key_insight: true })).toEqual({
+    expect(companionSelfReport({ learner_state: 'disengaged', specificity_level: 5, reveals_key_insight: true, escalation_consented: true })).toEqual({
       learner_state: 'disengaged',
       specificity_level: 5,
       reveals_key_insight: true,
+      offer_made: false,
+      escalation_consented: true,
     });
+  });
+
+  // Consent-contract fields (2026-06-12): an offer-only turn is a real self-report
+  // even when the legacy trio is absent, and the booleans coerce strictly.
+  it('treats offer/consent fields as first-class self-report signals', () => {
+    expect(companionSelfReport({ offer_made: true })).toMatchObject({ offer_made: true, escalation_consented: false });
+    expect(companionSelfReport({ escalation_consented: 'yes' })).toMatchObject({ escalation_consented: false }); // strict boolean
   });
 });
 
