@@ -210,3 +210,45 @@ describe('run_algorithm — trace0 graph edge normalization (client-crash regres
     }
   });
 });
+
+// ISSUE-006 (eng review 2026-06-12): when a mid-lesson run_algorithm fires on a
+// renderer the agent has ALREADY hand-built a panel for (e.g. Koko: agent paints
+// 'array_piles', then run_algorithm('binary_search') runs on the array renderer),
+// auto-setup must REUSE that panel — sending panels:[] so the client preserves the
+// painted viz — never mount a fresh bare 'array' panel that displaces it.
+//
+// The /qa Tier 3 sweep reported a painted-piles → "Waiting for array data…" wipe.
+// Investigation (this test) proved the SERVER path is correct: it reuses the panel
+// and sends panels:[]. The visible wipe was the leading edge of the ISSUE-005 crash
+// (malformed append_log unmounting <App>), already fixed. This test locks the reuse
+// contract so a future auto-setup refactor can't introduce the displacement the QA
+// report feared.
+describe('run_algorithm — reuses an agent-built same-renderer panel (ISSUE-006)', () => {
+  it('mid-lesson run_algorithm over a hand-built array panel sends panels:[] (preserve)', async () => {
+    const s = fakeSession();
+    s._panels = {};
+    // Agent hand-builds the piles panel + a context panel (the Tier 3 viz).
+    await handleToolCall(s, {
+      name: 'create_visualization',
+      input: {
+        panels: [{ id: 'array_piles', renderer: 'array', title: 'Piles [3,6,7,11]' }],
+        context_panels: [{ id: 'kv_state', type: 'key_value', title: 'Search State' }],
+      },
+    }, null, null, null);
+    expect(s._panels.array_piles).toEqual({ renderer: 'array', type: 'renderer' });
+
+    s.sent.length = 0;
+    const result = await handleToolCall(s, {
+      name: 'run_algorithm', input: { algorithm: 'binary_search', input: {} },
+    }, null, null, null);
+    expect(result.success).toBe(true);
+
+    const cv = s.sent.find((m) => m.type === 'create_visualization');
+    expect(cv, 'auto-setup sent no create_visualization').toBeDefined();
+    // panels:[] is the preserve signal — the client keeps the painted array_piles.
+    expect(cv.panels).toEqual([]);
+    // The trace's mapped actions are rewritten onto the existing panel id, not a
+    // fresh 'array' panel that would render "Waiting for array data…".
+    expect(s._rendererPanelId).toBe('array_piles');
+  });
+});
