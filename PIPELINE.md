@@ -253,6 +253,35 @@ When `paradigmShift: true`, the solver also returns `obviousApproach` — the ap
 
 In practice this means the agent will acknowledge the naive approach, explain why it fails (usually a complexity argument), and then reveal the non-obvious technique. This is injected directly into the solver context block appended to the system prompt, not something the agent infers on its own.
 
+> **`paradigmShift` is NOT a routing signal.** It means "the naive approach won't
+> hit optimal complexity" — true for a large fraction of correctly-routed registry
+> problems (two_pointers, two_sum, …). Do not use it to decide registry binding.
+> See the intake-verdict guard below.
+
+### Intake-verdict guard (`applyClassification`, ISSUE-006)
+
+The **intake** classifier verdict is routing ground truth. `index.js` stores it on
+the session: `_leetcodeAlgorithmKey` (the registry key, set when intake matched a
+Tier 1/2 algorithm) and `_leetcodePatternKey` (a free-form pattern descriptor, set
+when intake classified the problem OFF-registry → Tier 3).
+
+The mid-lesson `run_solver` can re-classify and, when it does, `applyClassification`
+adopts its `target_algorithm`. The guard (before plan adoption) refuses a dangerous
+case: **when intake classified off-registry (pattern key set, no registry algorithm
+key) and the solver rebinds to a DIFFERENT registry key**, the plan is pinned to the
+out-of-scope (hand-built viz) branch instead of loading a canned trace that
+contradicts the lesson. This was the LC875 Koko incident — the solver returned the
+registry's target-search `binary_search` for a binary-search-on-ANSWER problem.
+`buildSolverContext` likewise stops naming the rebound key in the system prompt.
+The guard fires only for LeetCode sessions (both keys null in plain guided mode) and
+never downgrades a legitimate Tier 1 session (intake set a registry key there).
+
+Koko itself is now a Tier 1 entry, **`koko_eating_speed`** — a problem-specific key
+(like `number_of_islands`, `trapping_rain_water`) so the classifier routes only Koko
+there. LC1011 Ship Capacity and LC410 Split Array are "binary search on answer" too
+but use different feasibility predicates; one runner can't model them, so they stay
+Tier 3 (`leetcodeRouting.eval.test.js` pins this).
+
 ### Output fields (`submit_solution` tool)
 
 | Field | Description |
