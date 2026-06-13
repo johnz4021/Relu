@@ -1109,11 +1109,21 @@ function compareResults(expected, computed, type) {
   }
 }
 
-function buildSolverContext(result) {
+function buildSolverContext(result, session) {
+  // ISSUE-006: when intake classified the problem off-registry (Tier 3), the
+  // solver's target_algorithm may be a registry key that does NOT model the
+  // problem (LC875 → binary_search). applyClassification's guard already refused
+  // to bind it; the prompt must not name it either, or it re-steers the agent
+  // toward a canned trace that doesn't exist for this lesson. Prefer the guarded
+  // plan's target (the pattern key) and tell the agent the viz is hand-built.
+  const intakeOffRegistry = session && !!session._leetcodePatternKey && !session._leetcodeAlgorithmKey;
+  const displayAlgorithm = intakeOffRegistry
+    ? `${session._leetcodePatternKey} (hand-built viz — no registry trace; build it yourself)`
+    : (session?.sessionPlan?.target_algorithm || result.target_algorithm || 'N/A');
   let ctx = `
 
 ===== SOLVER CONTEXT (INTERNAL — NEVER REVEAL TO STUDENT) =====
-CLASSIFICATION: ${result.reasoning_mode?.toUpperCase() || 'UNKNOWN'} | ALGORITHM: ${result.target_algorithm || 'N/A'}
+CLASSIFICATION: ${result.reasoning_mode?.toUpperCase() || 'UNKNOWN'} | ALGORITHM: ${displayAlgorithm}
 OPTIMAL APPROACH: ${result.approach}
 COMPLEXITY: ${result.complexity}
 KEY INSIGHT: ${result.keyInsight}
@@ -1152,6 +1162,36 @@ export function applyClassification(plan, session, ws, vizState) {
       reasoning_mode: 'algorithm_execution',
       is_in_scope: true,
       target_algorithm: session._leetcodeAlgorithmKey,
+    };
+  }
+
+  // ISSUE-006 guard (eng review 2026-06-12): the INTAKE classifier verdict is
+  // routing ground truth. When intake classified this LC problem OFF-registry
+  // (it set a pattern key and NO registry algorithm key — i.e. Tier 3), a
+  // mid-lesson solver that rebinds to a DIFFERENT registry key is a
+  // misclassification (LC875 Koko "binary search on ANSWER" → the registry's
+  // target-search `binary_search`). Binding it loads a canned trace + pseudocode
+  // that contradict the lesson the agent is correctly hand-building. Refuse the
+  // rebind and pin the plan to the out-of-scope (hand-built viz) branch below.
+  //
+  // NOT keyed on plan.paradigmShift — the solver schema defines that as "the
+  // naive approach won't hit optimal complexity", which is true for a large
+  // fraction of correctly-routed registry problems (two_pointers, two_sum, …),
+  // so it would downgrade legitimate Tier 1 lessons. Intake state is the only
+  // reliable signal. Fires only for LC sessions (both keys null otherwise).
+  const intakeOffRegistry = !!session._leetcodePatternKey && !session._leetcodeAlgorithmKey;
+  if (intakeOffRegistry
+      && plan.reasoning_mode === 'algorithm_execution'
+      && plan.is_in_scope
+      && plan.target_algorithm
+      && Object.prototype.hasOwnProperty.call(ALGORITHMS, plan.target_algorithm)
+      && plan.target_algorithm !== session._leetcodePatternKey) {
+    console.log(`[GuidedAgent] ISSUE-006 guard: intake classified off-registry (pattern='${session._leetcodePatternKey}') but solver rebound to registry key '${plan.target_algorithm}' — refusing the rebind, keeping the hand-built (out-of-scope) lesson`);
+    plan = {
+      ...plan,
+      is_in_scope: false,
+      closest_algorithm: plan.target_algorithm,   // name the near-miss in the out-of-scope message
+      target_algorithm: session._leetcodePatternKey,
     };
   }
 
@@ -1342,7 +1382,7 @@ export async function resumeGuidedSession(session, savedMessages, savedSolverRes
   if (cleanSolverResult) delete cleanSolverResult._batchState;
 
   const systemPrompt = cleanSolverResult?.success
-    ? buildGuidedSystemPrompt(session) + buildSolverContext(cleanSolverResult)
+    ? buildGuidedSystemPrompt(session) + buildSolverContext(cleanSolverResult, session)
     : buildGuidedSystemPrompt(session);
 
   if (savedVizState?.currentGraph) {
@@ -2060,7 +2100,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           } else {
             solverResult = sr;
             session._solverSucceeded = true;
-            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(sr);
+            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(sr, session);
 
             if (sr.reasoning_mode) {
               const classResult = applyClassification(sr, session, ws, vizState);
@@ -2108,7 +2148,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           } else {
             solverResultsMap = batchResult.solutions;
             solverResult = solverResultsMap[activePart];
-            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(solverResult);
+            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(solverResult, session);
 
             // Apply classification for the first active part
             let classMessage = '';
@@ -2132,7 +2172,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
           } else {
             activePart = targetLabel;
             solverResult = solverResultsMap[targetLabel];
-            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(solverResult);
+            systemPrompt = buildGuidedSystemPrompt(session) + buildSolverContext(solverResult, session);
             session.sessionPlan = null; // Reset classification for new part
 
             // Apply classification for the new part

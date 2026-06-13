@@ -427,3 +427,90 @@ describe('applyClassification — off-registry targets', () => {
     expect(result.error).toContain('Unknown algorithm: made_up_algorithm');
   });
 });
+
+// ── ISSUE-006: intake-verdict guard (Koko mid-lesson rebind) ─────────────────
+// Intake is routing ground truth. When it classified a problem OFF-registry
+// (pattern key set, no registry algorithm key — Tier 3), a mid-lesson solver
+// that rebinds to a DIFFERENT registry key (LC875 "binary search on answer" →
+// the registry's target-search `binary_search`) must be refused: the lesson
+// stays in the hand-built out-of-scope branch, not a contradictory canned trace.
+describe('applyClassification — ISSUE-006 intake-verdict guard', () => {
+  const fakeWs = { OPEN: 1, readyState: 1, send: () => {} };
+
+  it('off-registry intake + solver rebind to a registry key → refused, routed to hand-built branch', () => {
+    const session = {
+      _leetcodeAlgorithmKey: null,                  // intake: NO registry match
+      _leetcodePatternKey: 'binary_search_on_answer', // intake: pattern key (Tier 3)
+    };
+    const result = applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'binary_search' },
+      session, fakeWs, null,
+    );
+    expect(result.success).toBe(true);
+    // Pinned to the out-of-scope (build-it-yourself) message, NOT the load-the-trace one.
+    expect(result.message).toContain('no registered trace exists');
+    expect(result.message).toContain('Do NOT call run_algorithm');
+    // Plan was rewritten: out of scope, near-miss recorded, target back to the pattern key.
+    expect(session.sessionPlan.is_in_scope).toBe(false);
+    expect(session.sessionPlan.closest_algorithm).toBe('binary_search');
+    expect(session.sessionPlan.target_algorithm).toBe('binary_search_on_answer');
+  });
+
+  it('does NOT fire when the rebind matches the session pattern key (legit Tier 2)', () => {
+    const session = {
+      _leetcodeAlgorithmKey: null,
+      _leetcodePatternKey: 'binary_search', // intake pattern key happens to be a registry name
+    };
+    const result = applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'binary_search' },
+      session, fakeWs, null,
+    );
+    expect(result.success).toBe(true);
+    expect(session.sessionPlan.is_in_scope).toBe(true); // unchanged
+  });
+
+  it('does NOT downgrade a legitimate Tier 1 session (intake set a registry algorithm key)', () => {
+    const session = {
+      _leetcodeAlgorithmKey: 'two_pointers',   // intake: ON-registry (Tier 1)
+      _leetcodePatternKey: null,
+    };
+    const result = applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'two_pointers' },
+      session, fakeWs, null,
+    );
+    expect(result.success).toBe(true);
+    expect(session.sessionPlan.is_in_scope).toBe(true);
+    expect(session.sessionPlan.target_algorithm).toBe('two_pointers');
+  });
+
+  it('does NOT fire in a plain (non-LeetCode) guided session', () => {
+    const session = {}; // neither key set
+    const result = applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'binary_search' },
+      session, fakeWs, null,
+    );
+    expect(result.success).toBe(true);
+    expect(session.sessionPlan.is_in_scope).toBe(true);
+  });
+});
+
+// ── ISSUE-006: buildSolverContext does not name a wrong registry key ─────────
+import { buildGuidedSystemPrompt as _bgsp } from './guidedAgent.js';
+describe('solver context naming (ISSUE-006)', () => {
+  it('off-registry intake → the system prompt does not steer toward the rebound registry key', () => {
+    // Drive the real intake path: an off-registry session whose solver guessed binary_search.
+    const session = {
+      mode: 'leetcode',
+      _leetcodeAlgorithmKey: null,
+      _leetcodePatternKey: 'binary_search_on_answer',
+      sessionPlan: { is_in_scope: false, target_algorithm: 'binary_search_on_answer' },
+    };
+    applyClassification(
+      { reasoning_mode: 'algorithm_execution', is_in_scope: true, target_algorithm: 'binary_search',
+        approach: 'binary search on the answer space', complexity: 'O(n log m)', keyInsight: 'k', solution: 's' },
+      session, { OPEN: 1, readyState: 1, send: () => {} }, null,
+    );
+    // After the guard, the adopted plan must not name binary_search as the bound algorithm.
+    expect(session.sessionPlan.target_algorithm).toBe('binary_search_on_answer');
+  });
+});
