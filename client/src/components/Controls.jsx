@@ -203,6 +203,7 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
             )}
             <button
               type="submit"
+              aria-label="Send"
               disabled={agentBusy}
               className={`p-1.5 rounded-lg text-sm transition-colors shrink-0 ${
                 agentBusy
