@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { startCheckout, openBillingPortal } from '../lib/billing';
 
-export default function SettingsModal({ open, onClose, send, hasByok, deletionResult, onKeyDeleted, saveResult, onKeySaved }) {
+export default function SettingsModal({ open, onClose, send, hasByok, subscribed, billingEnabled, deletionResult, onKeyDeleted, saveResult, onKeySaved }) {
   const [confirming, setConfirming] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState(null);
@@ -8,6 +9,7 @@ export default function SettingsModal({ open, onClose, send, hasByok, deletionRe
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [billingError, setBillingError] = useState(null);
 
   useEffect(() => {
     if (!deletionResult || !working) return;
@@ -83,6 +85,39 @@ export default function SettingsModal({ open, onClose, send, hasByok, deletionRe
             </svg>
           </button>
         </div>
+
+        {(billingEnabled || subscribed) && (
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-text-primary mb-1">Subscription</h3>
+            {subscribed ? (
+              <>
+                <p className="text-xs text-text-tertiary mb-3">
+                  ReLU Pro is active. Manage your plan, update your card, or cancel via Stripe.
+                </p>
+                <button
+                  onClick={() => { setBillingError(null); openBillingPortal().catch((err) => setBillingError(err.message)); }}
+                  className="px-3 py-1.5 text-xs font-medium text-text-primary bg-surface-2 hover:bg-surface-3 border border-border rounded-lg transition-colors"
+                >
+                  Manage subscription
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-text-tertiary mb-3">
+                  Upgrade to ReLU Pro for unlimited sessions on our API key — $20/month.
+                </p>
+                <button
+                  onClick={() => { setBillingError(null); startCheckout().catch((err) => setBillingError(err.message)); }}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent/90 rounded-lg transition-colors"
+                >
+                  Upgrade — $20/month
+                </button>
+              </>
+            )}
+            {billingError && <p className="mt-2 text-xs text-red-400">{billingError}</p>}
+            <div className="border-t border-border mt-5" />
+          </div>
+        )}
 
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-1">Anthropic API key (BYOK)</h3>
