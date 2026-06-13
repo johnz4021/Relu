@@ -979,6 +979,44 @@ describe('linked_list_cycle (linked renderer)', () => {
   });
 });
 
+describe('koko_eating_speed (Koko, LC875 — array piles + range/feasibility context)', () => {
+  it('piles=[3,6,7,11] h=8 → minimum speed = 4', () => {
+    const trace = runDefault('koko_eating_speed');
+    expect(getResult(trace)?.output).toBe('4');
+  });
+  it('h equals pile count → must eat the biggest pile in one hour (speed = max)', () => {
+    const trace = ALGORITHMS.koko_eating_speed.run({ piles: [30, 11, 23, 4, 20], h: 5 });
+    expect(getResult(trace)?.output).toBe('30');
+  });
+  it('generous h → slowest feasible speed', () => {
+    const trace = ALGORITHMS.koko_eating_speed.run({ piles: [30, 11, 23, 4, 20], h: 6 });
+    expect(getResult(trace)?.output).toBe('23');
+  });
+  it('feasibility predicate is correct: total hours = sum of ceilings, compared to h', () => {
+    const trace = runDefault('koko_eating_speed');
+    for (const s of trace.filter(s => s.type === 'feasibility')) {
+      const recomputed = s.perPile.reduce((sum, e) => sum + Math.ceil(e.pile / s.mid), 0);
+      expect(s.total).toBe(recomputed);
+      expect(s.feasible).toBe(s.total <= s.h);
+    }
+  });
+  it('every probe shrinks the range; the final answer IS feasible and answer-1 is NOT', () => {
+    const trace = runDefault('koko_eating_speed');
+    const answer = Number(getResult(trace).output);
+    const piles = ALGORITHMS.koko_eating_speed.defaultInput.piles;
+    const h = ALGORITHMS.koko_eating_speed.defaultInput.h;
+    const hoursAt = (k) => piles.reduce((s, p) => s + Math.ceil(p / k), 0);
+    expect(hoursAt(answer)).toBeLessThanOrEqual(h);
+    expect(hoursAt(answer - 1)).toBeGreaterThan(h);
+  });
+  it('init carries the piles array + the search range', () => {
+    const init = runDefault('koko_eating_speed')[0];
+    expect(init.array).toEqual([3, 6, 7, 11]);
+    expect(init.lo).toBe(1);
+    expect(init.hi).toBe(11);
+  });
+});
+
 describe('merge_k_sorted (heap tree panel + result list panel)', () => {
   it('[[1,4,5],[1,3,4],[2,6]] → merged = [1,1,2,3,4,4,5,6]', () => {
     const trace = runDefault('merge_k_sorted');

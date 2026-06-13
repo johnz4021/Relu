@@ -118,6 +118,11 @@ const PANEL_DEFAULTS = {
     { id: 'bounds', type: 'key_value', title: 'Search Bounds' },
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
+  koko_eating_speed: [
+    { id: 'bounds', type: 'key_value', title: 'Speed Range' },
+    { id: 'feasibility', type: 'expression', title: 'Feasibility: hours at this speed' },
+    { id: 'iterations', type: 'log', title: 'Iteration History' },
+  ],
   coin_change: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
     { id: 'decisions', type: 'log', title: 'Decisions' },

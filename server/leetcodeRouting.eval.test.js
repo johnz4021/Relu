@@ -179,3 +179,65 @@ d('classifier routing — drained algorithms (RELU_EVAL=1)', () => {
     }
   }
 });
+
+// ── ISSUE-006: koko_eating_speed is Koko-shaped ONLY ───────────────────
+// The new Tier 1 entry has a single feasibility predicate (sum of ceilings).
+// LC410 Split Array and LC1011 Ship Capacity are "binary search on answer" too
+// but use DIFFERENT predicates — one runner can't model them, so they must NOT
+// route here (they fall to Tier 3 hand-built viz). General predicate
+// parameterization is a separate future capability.
+const SOA_LC875 = `Koko Eating Bananas
+
+Koko loves to eat bananas. There are n piles of bananas, the ith pile has piles[i] bananas. The guards come back in h hours. Koko picks an eating speed k (bananas/hour); each hour she eats k from one pile (or the whole pile if smaller). Return the minimum integer k such that she eats all bananas within h hours.
+
+Example 1:
+Input: piles = [3,6,7,11], h = 8
+Output: 4
+
+Constraints:
+1 <= piles.length <= 10^4
+piles[i] <= 10^9
+1 <= h <= 10^9`;
+
+const SOA_LC1011 = `Capacity To Ship Packages Within D Days
+
+A conveyor belt has packages that must be shipped from one port to another within days days. The ith package has weight weights[i]. Each day we load the ship with packages in the given order, not exceeding the ship's maximum weight capacity. Return the least weight capacity of the ship that will result in all packages shipped within days days.
+
+Example 1:
+Input: weights = [1,2,3,4,5,6,7,8,9,10], days = 5
+Output: 15
+
+Constraints:
+1 <= days <= weights.length <= 5 * 10^4
+1 <= weights[i] <= 500`;
+
+const SOA_LC410 = `Split Array Largest Sum
+
+Given an integer array nums and an integer k, split nums into k non-empty contiguous subarrays. Minimize the largest sum among these k subarrays. Return the minimized largest sum.
+
+Example 1:
+Input: nums = [7,2,5,10,8], k = 2
+Output: 18
+
+Constraints:
+1 <= nums.length <= 1000
+0 <= nums[i] <= 10^6
+1 <= k <= min(50, nums.length)`;
+
+d('classifier routing — koko_eating_speed is Koko-shaped only (RELU_EVAL=1, ISSUE-006)', () => {
+  it('LC875 Koko routes to koko_eating_speed with confidence ≥ 0.7', async () => {
+    const parsed = await parseLeetcodeProblem(SOA_LC875);
+    expect(parsed.algorithm_key).toBe('koko_eating_speed');
+    expect(parsed.confidence).toBeGreaterThanOrEqual(0.7);
+  }, 30000);
+
+  it('LC1011 Ship Capacity must NOT route to koko_eating_speed (different predicate)', async () => {
+    const parsed = await parseLeetcodeProblem(SOA_LC1011);
+    expect(parsed.algorithm_key).not.toBe('koko_eating_speed');
+  }, 30000);
+
+  it('LC410 Split Array must NOT route to koko_eating_speed (different predicate)', async () => {
+    const parsed = await parseLeetcodeProblem(SOA_LC410);
+    expect(parsed.algorithm_key).not.toBe('koko_eating_speed');
+  }, 30000);
+});

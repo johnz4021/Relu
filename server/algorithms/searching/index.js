@@ -1,4 +1,5 @@
 export { binarySearch } from './binarySearch.js';
+export { binarySearchOnAnswer, DEFAULT_BINARY_SEARCH_ON_ANSWER_INPUT } from './binarySearchOnAnswer.js';
 export { quickselect } from './quickselect.js';
 export { slidingWindow, DEFAULT_SLIDING_WINDOW_INPUT } from './slidingWindow.js';
 export { twoPointers } from './twoPointers.js';

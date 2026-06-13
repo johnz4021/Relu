@@ -1249,6 +1249,15 @@ function mapArrayStep(algo, step, state) {
             { key: 'Right', value: step.array.length - 1 },
           ],
         }));
+      } else if (algo === 'koko_eating_speed') {
+        // Search range is over ANSWERS (speeds), not array indices.
+        c.push(ctxUpdate('bounds', {
+          entries: [
+            { key: 'Hours allowed (h)', value: step.h },
+            { key: 'Slowest speed (lo)', value: step.lo },
+            { key: 'Fastest speed (hi)', value: step.hi },
+          ],
+        }));
       } else if (algo === 'quickselect') {
         c.push(ctxUpdate('stats', {
           entries: [
@@ -1521,6 +1530,47 @@ function mapArrayStep(algo, step, state) {
       break;
     }
 
+    // ── koko_eating_speed (Koko, LC875) — search over the ANSWER space ──
+    case 'probe': {
+      // The candidate answer (mid speed) is in the search range, not an array
+      // index, so update the bounds panel rather than moving array pointers.
+      v.push(viz('array', 'highlight', { indices: (step.array || []).map((_, i) => i), className: 'active' }));
+      c.push(ctxUpdate('bounds', {
+        entries: [
+          { key: 'Slowest (lo)', value: step.lo },
+          { key: 'Fastest (hi)', value: step.hi },
+          { key: 'Trying speed (mid)', value: step.mid, status: 'highlight' },
+          { key: 'Hours allowed', value: step.h },
+        ],
+      }));
+      break;
+    }
+
+    case 'feasibility': {
+      c.push(ctxUpdate('feasibility', {
+        label: `Speed k = ${step.mid}: ${step.feasible ? 'CAN finish ✅' : 'too slow ✗'}`,
+        lines: [
+          ...step.perPile.map((e) => ({ label: `pile ${e.pile}`, text: `⌈${e.pile}/${step.mid}⌉ = ${e.hours}` })),
+          { label: 'total', text: `${step.total} ${step.feasible ? '≤' : '>'} ${step.h}`, highlight: true },
+        ],
+      }));
+      c.push(ctxLog('iterations',
+        `k=${step.mid}: ${step.total} hrs ${step.feasible ? '≤' : '>'} ${step.h} → ${step.feasible ? 'feasible' : 'too slow'}`,
+        step.feasible ? 'result' : 'info'));
+      break;
+    }
+
+    case 'narrow_slower':
+    case 'narrow_faster': {
+      c.push(ctxUpdate('bounds', {
+        entries: [
+          { key: 'Slowest (lo)', value: step.lo, status: step.type === 'narrow_faster' ? 'highlight' : 'default' },
+          { key: 'Fastest (hi)', value: step.hi, status: step.type === 'narrow_slower' ? 'highlight' : 'default' },
+        ],
+      }));
+      break;
+    }
+
     // Binary-search family pointer moves. The closed-interval default is
     // left ← mid+1 / right ← mid-1; producers using a half-open variant
     // (e.g. find_peak's right ← mid) carry an explicit `left`/`right` field,
@@ -1536,6 +1586,14 @@ function mapArrayStep(algo, step, state) {
     }
 
     case 'found': {
+      if (algo === 'koko_eating_speed') {
+        c.push(ctxUpdate('bounds', {
+          entries: [
+            { key: 'Minimum speed', value: step.answer, status: 'updated' },
+          ],
+        }));
+        break;
+      }
       if (algo === 'two_pointers') {
         v.push(viz('array', 'mark_sorted', { indices: [step.left, step.right] }));
         c.push(ctxUpdate('search_state', {
@@ -1811,7 +1869,11 @@ function mapArrayStep(algo, step, state) {
     }
 
     case 'result':
-      if (algo === 'max_subarray' && step.start !== undefined) {
+      if (algo === 'koko_eating_speed') {
+        c.push(ctxUpdate('bounds', {
+          entries: [{ key: 'Answer (min speed)', value: step.answer ?? step.output, status: 'updated' }],
+        }));
+      } else if (algo === 'max_subarray' && step.start !== undefined) {
         v.push(viz('array', 'slide_window', { start: step.start, end: step.end }));
         v.push(viz('array', 'mark_sorted', {
           indices: Array.from({ length: step.end - step.start + 1 }, (_, i) => step.start + i),

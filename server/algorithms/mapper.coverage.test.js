@@ -69,6 +69,7 @@ const WIP_PSEUDOCODE_GAPS = new Set([
   'jump_game',
   'jump_game_ii',
   'k_closest_points',
+  'koko_eating_speed', // no pseudocode panel (search-on-answer; bundle into the pseudocode polish PR)
   'kmp_search',
   'lcs',
   'linked_list_cycle',
