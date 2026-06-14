@@ -2488,10 +2488,16 @@ function mapTreeStep(algo, step, state) {
         }));
       } else if (algo === 'tree_level_order' && step.tree) {
         v.push(viz('tree', 'set_tree', step.tree));
-        c.push(ctxUpdate('traversal_order', { items: [], style: 'queue' }));
+        // Cache id -> value so the queue panel shows node values (3, 9, 20),
+        // not synthetic internal ids (n0, n1). Populated at the init step;
+        // level_complete steps don't carry step.tree but reuse this map.
+        if (step.tree.nodes) {
+          state.treeNodeValues = {};
+          for (const node of step.tree.nodes) state.treeNodeValues[node.id] = node.value;
+        }
         if (step.queue) {
           c.push(ctxUpdate('queue', {
-            items: step.queue.map(id => ({ value: id })),
+            items: step.queue.map(id => ({ value: state.treeNodeValues?.[id] ?? id })),
             style: 'queue',
           }));
         }
@@ -2729,11 +2735,10 @@ function mapTreeStep(algo, step, state) {
           entries: [{ key: 'Max Depth', value: step.max_depth, status: 'updated' }],
         }));
       } else if (algo === 'tree_level_order') {
+        // traversal_order panel was dropped; close on the traversal_log (the
+        // registered result panel) with the complete level-order output.
         if (step.order) {
-          c.push(ctxUpdate('traversal_order', {
-            items: step.order.map(val => ({ value: val, status: 'updated' })),
-            style: 'queue',
-          }));
+          c.push(ctxLog('traversal_log', `Result: [${step.order.join(', ')}]`, 'result'));
         }
       } else if (algo === 'tree_path') {
         c.push(ctxLog('traversal_log',
@@ -2818,7 +2823,10 @@ function mapTreeStep(algo, step, state) {
       } else if (!state.traversalOrder) {
         state.traversalOrder = [];
       }
-      if (step.value !== undefined && step.remaining === undefined) {
+      // tree_level_order drops the flat traversal_order panel (the grouped
+      // traversal_log mirrors the problem's level-grouped output); only the
+      // DFS-style traversals surface a running flat order here.
+      if (step.value !== undefined && step.remaining === undefined && algo !== 'tree_level_order') {
         state.traversalOrder = state.traversalOrder || [];
         state.traversalOrder.push(step.value);
         c.push(ctxUpdate('traversal_order', {
@@ -2865,7 +2873,7 @@ function mapTreeStep(algo, step, state) {
       }
       if (step.queue_after !== undefined) {
         c.push(ctxUpdate('queue', {
-          items: step.queue_after.map(id => ({ value: id })),
+          items: step.queue_after.map(id => ({ value: state.treeNodeValues?.[id] ?? id })),
           style: 'queue',
         }));
       }

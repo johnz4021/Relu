@@ -464,10 +464,14 @@ const PANEL_DEFAULTS = {
     { id: 'stats', type: 'key_value', title: 'Stats' },
     { id: 'traversal_order', type: 'collection', title: 'Traversal Order' },
   ],
+  // One mechanism panel (Queue) + one result panel (grouped Traversal Log,
+  // which mirrors the problem's [[3],[9,20],[15,7]] output). The flat
+  // Traversal Order was dropped: it duplicated the log and the tree's own
+  // visited-node highlighting. Title is "Queue" not "BFS Queue" so it doesn't
+  // name the algorithm before the student earns it in companion mode.
   tree_level_order: [
-    { id: 'queue', type: 'collection', title: 'BFS Queue' },
+    { id: 'queue', type: 'collection', title: 'Queue' },
     { id: 'traversal_log', type: 'log', title: 'Traversal Log' },
-    { id: 'traversal_order', type: 'collection', title: 'Traversal Order' },
   ],
   tree_path: [
     { id: 'path_state', type: 'key_value', title: 'Path State' },
@@ -499,7 +503,9 @@ const PANEL_DEFAULTS = {
     { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   max_subarray: [
-    { id: 'kadane_state', type: 'key_value', title: 'Kadane State' },
+    // id is mapper-frozen; title uses student-facing language (the panel tracks
+    // the running best/current sums) rather than naming Kadane's algorithm.
+    { id: 'kadane_state', type: 'key_value', title: 'Running Max' },
   ],
   // Additional table-renderer DP algos that need expression + decisions
   // panels that the mapper writes to but were not registered before:

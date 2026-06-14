@@ -145,3 +145,14 @@ Incident: LC875 Koko taught correctly hand-built (Tier 3), then the mid-lesson s
 ## /qa ISSUE-006 verification (2026-06-12)
 - [x] **ISSUE-008: chat send button aria-label** — FIXED (e5315a0). Send button (Controls.jsx:204) had no accessible name. Found during ISSUE-006 live QA.
 - [ ] **Live drained-algo browser regression not re-run for ISSUE-006** — the LC347 drive stalled in Socratic dialogue (consent-gated intake holds longer; browser tool's Enter key didn't reach the textarea — Enter IS wired in-app). Covered by the prior /qa (6/6 drained PASS) + unit suite (3039 green). Re-verify opportunistically next browser session. [REQUIRES: none]
+
+## Context panel doctrine + alignment (from /plan-design-review 2026-06-14, branch: pattern-recognition)
+
+LANDED this pass: `tree_level_order` worked example (queue shows node values not `n0/n1`; dropped redundant flat `traversal_order`; `BFS Queue`→`Queue`), the panel doctrine in PIPELINE.md §8, and the enforcement test `server/algorithms/panel-alignment.test.js` (registered⟺fed + title lint). `max_subarray` title `Kadane State`→`Running Max`. Dropped-writes and title-leaks are at zero and gated.
+
+Burn-down: 12 DEAD panels (registered but never fed → "No entries yet" all lesson) are snapshotted in `panel-alignment.test.js` `WIP_DEAD_PANEL_GAPS`. Drive to empty. Two kinds:
+
+- [ ] **FEED these — load-bearing panels the mapper forgot to populate** (real teaching debt; add a `mapTraceStep` branch each, remove from `WIP_DEAD_PANEL_GAPS` as it lands): `validate_bst/valid_range` (the valid-range invariant IS the lesson), `sliding_window_max/deque_state` (the monotonic deque IS the mechanism), `tarjan_bridges/bridges` (that's the output), `floyd_warshall/via_node` (the k-loop pivot), `lis/dp_state` (tails array), `stock_dp/state_machine`, `house_robber/dp_values`, `lca_tree/search_state`. [REQUIRES: none — each is a self-contained mapper branch + the existing default trace]
+- [ ] **REMOVE these — registered panels that aren't load-bearing** (delete from `contextPanelDefaults.js`, remove from `WIP_DEAD_PANEL_GAPS`): `spiral_matrix/boundaries`, `rotate_matrix/phase`, `dijkstra_k_stops/stop_info`, `bipartite_check/decisions`, `tarjan_bridges/dfs_state`. Confirm each is genuinely redundant (not just unfed-but-wanted) before deleting. [REQUIRES: none — defaults edit + re-run alignment test]
+- [ ] **Triple-state-panel collapse pass** — `lis`, `spiral_matrix`, `house_robber`, `rotate_matrix` etc. carry `State` + `Stats` + a third key_value panel; "State" vs "Stats" means nothing to a student. Overlaps the FEED/REMOVE items above — do them together per algorithm. Doctrine rule 4. [REQUIRES: none]
+- Cross-ref: the agent-created (live) version of empty/duplicate panels is the open ISSUE-004 + ISSUE-007 tutor-panel-hygiene item above — different code path (guidedAgent prompting), same student-visible symptom.

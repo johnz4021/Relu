@@ -855,6 +855,55 @@ Context panels are updated via `emit_segment` viz_actions:
 { renderer: "context", action: "append_log", params: { panel_id: "aug_paths", entries: [...] } }
 ```
 
+### Panel doctrine
+
+Every entry in `contextPanelDefaults.js` must satisfy these rules. They exist
+because the corpus is hand-curated per algorithm and drifts toward "default
+dumps" — too many panels, panels that never fill, internal ids shown to
+students. The worked example for all of them is `tree_level_order`.
+
+1. **Display values, never internal ids.** A collection of data nodes shows
+   what the student sees (node value `9`, not synthetic id `n1`). Graph nodes
+   are exempt — their id *is* the student-facing label (`A`, `B`). Trees are
+   the trap: `treeUtils` mints `n0/n1` ids that differ from values, so the
+   mapper must translate via an id→value map cached at the trace's `init`
+   step. Guarded by `algorithms/treeLevelOrder.panels.test.js`.
+
+2. **The panel set must match what the mapper feeds (registered ⟺ fed).** A
+   registered panel the mapper never feeds sits as "No entries yet" for the
+   whole lesson (the QA ISSUE-001 class). A mapper write to an unregistered
+   panel_id is silently dropped by the frontend. When you add or remove a
+   panel, add or remove its mapper feed in the same change. Enforced both
+   directions by `algorithms/panel-alignment.test.js` (#1 dead, #2 dropped).
+   The current dead-panel backlog lives in that file's `WIP_DEAD_PANEL_GAPS`;
+   drive it to empty. Each entry is either FEED (load-bearing, add a mapper
+   branch — e.g. `validate_bst/valid_range`, `sliding_window_max/deque_state`)
+   or REMOVE (not load-bearing — e.g. `rotate_matrix/phase`).
+
+3. **At most one result/output panel** unless two views are genuinely distinct
+   *and* both load-bearing. `tree_level_order` dropped the flat `traversal_order`
+   because the grouped `traversal_log` already mirrors the problem's
+   `[[3],[9,20],[15,7]]` output and the tree highlights visited nodes — output
+   was shown three ways. Keep the framing that matches the problem's own answer
+   shape.
+
+4. **One mechanism panel that carries the lesson.** The teachable insight (the
+   queue for BFS, the tails array for LIS, the monotonic deque for sliding
+   window max) gets a panel and gets fed. Don't bury it among redundant state
+   panels — `State` + `Stats` + a third key_value panel is the common smell;
+   collapse to the one or two that are actually load-bearing.
+
+5. **Titles use student-facing language, not the algorithm's name.** The title
+   renders before the student earns the name in companion mode, so `Queue` not
+   `BFS Queue`, `Running Max` not `Kadane State`. Enforced by
+   `panel-alignment.test.js` #3. Exception: context-renderer algos hardcode
+   `panel_id: 'algorithm_state'` in the mapper — change the `title` only, never
+   the `id` (see Critical constraints below).
+
+6. **`pseudocode` panels are governed separately** by the `pseudocode_line`
+   coverage test (`mapper.coverage.test.js` #2), so they're excluded from the
+   alignment checks above.
+
 ### Critical constraints
 
 **Panel registry closes at `run_algorithm` time.** Panels listed in
