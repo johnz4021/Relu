@@ -136,6 +136,11 @@ export function validateBst(input) {
       description: `Node[${i}]=${val}: bounds (${min === -Infinity ? '-∞' : min}, ${max === Infinity ? '+∞' : max}) → ${inRange ? 'valid ✓' : 'VIOLATION ✗'}`,
       node: String(i),
       parent: node.parent !== null ? String(node.parent) : null,
+      // Structured fields for the valid_range panel (the propagating invariant).
+      value: val,
+      min: min === -Infinity ? '-∞' : min,
+      max: max === Infinity ? '+∞' : max,
+      valid: inRange,
       pseudocode_line: inRange ? 6 : 3,
     });
 

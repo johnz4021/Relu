@@ -246,6 +246,7 @@ export function tarjanBridges(input) {
             type: 'examine_edge',
             description: `Bridge found: ${u}↔${v} (low[${v}]=${low[v]} > disc[${u}]=${disc[u]})`,
             from: u, to: v,
+            is_bridge: true,
             visited: { ...visited },
             pseudocode_line: 6,
           });
@@ -254,6 +255,7 @@ export function tarjanBridges(input) {
             type: 'examine_edge',
             description: `${u}↔${v}: low[${v}]=${low[v]} ≤ disc[${u}]=${disc[u]} — not a bridge`,
             from: u, to: v,
+            is_bridge: false,
             visited: { ...visited },
             pseudocode_line: 5,
           });

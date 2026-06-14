@@ -875,10 +875,12 @@ students. The worked example for all of them is `tree_level_order`.
    panel_id is silently dropped by the frontend. When you add or remove a
    panel, add or remove its mapper feed in the same change. Enforced both
    directions by `algorithms/panel-alignment.test.js` (#1 dead, #2 dropped).
-   The current dead-panel backlog lives in that file's `WIP_DEAD_PANEL_GAPS`;
-   drive it to empty. Each entry is either FEED (load-bearing, add a mapper
-   branch — e.g. `validate_bst/valid_range`, `sliding_window_max/deque_state`)
-   or REMOVE (not load-bearing — e.g. `rotate_matrix/phase`).
+   As of the 2026-06-14 ruthless-cut pass, `WIP_DEAD_PANEL_GAPS` is **empty** —
+   every registered context panel is fed. Keep it that way: a new algo with a
+   registered-but-unfed panel fails the test. Resolve by FEED (load-bearing, add
+   a mapper branch — how `validate_bst/valid_range` and
+   `sliding_window_max/deque_state` were fed) or REMOVE (redundant with the
+   renderer or another panel).
 
 3. **At most one result/output panel** unless two views are genuinely distinct
    *and* both load-bearing. `tree_level_order` dropped the flat `traversal_order`

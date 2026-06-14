@@ -13,6 +13,7 @@ export function slidingWindowMax(input) {
     description: `Sliding Window Maximum: k=${k}, nums=[${nums.join(', ')}]. Monotonic deque stores INDICES (front = max of window).`,
     array: [...nums],
     indices: [],
+    deque: [],
   });
 
   const deque = []; // stores indices; deque[0] is index of window's max
@@ -26,6 +27,7 @@ export function slidingWindowMax(input) {
         description: `Window slid: remove index ${removed} (value ${nums[removed]}) — out of range`,
         array: [...nums],
         indices: [i],
+        deque: [...deque],
       });
     }
 
@@ -37,6 +39,7 @@ export function slidingWindowMax(input) {
         description: `Pop index ${popped} (value ${nums[popped]} < ${nums[i]}) — can never be window max`,
         array: [...nums],
         indices: [popped, i],
+        deque: [...deque],
       });
     }
 
@@ -46,6 +49,7 @@ export function slidingWindowMax(input) {
       description: `Push index ${i} (value ${nums[i]}). Deque: [${deque.map(d => `${d}(${nums[d]})`).join(', ')}]`,
       array: [...nums],
       indices: [...deque],
+      deque: [...deque],
     });
 
     // Window is full — record max
@@ -57,6 +61,7 @@ export function slidingWindowMax(input) {
         description: `Window [${i-k+1}..${i}] = [${nums.slice(i-k+1, i+1).join(', ')}] → max = ${max} (index ${deque[0]})`,
         array: [...nums],
         indices: [deque[0]],
+        deque: [...deque],
       });
     }
   }
@@ -67,6 +72,7 @@ export function slidingWindowMax(input) {
     array: [...result],
     indices: result.map((_, i) => i),
     output: JSON.stringify(result),
+    deque: [],
   });
 
   return trace;

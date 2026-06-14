@@ -55,18 +55,14 @@ const ALGO_NAME_TOKENS = [
 //   REMOVE (not load-bearing): spiral_matrix/boundaries, rotate_matrix/phase,
 //   dijkstra_k_stops/stop_info, bipartite_check/decisions, tarjan_bridges/dfs_state.
 const WIP_DEAD_PANEL_GAPS = {
-  bipartite_check: ['decisions'],
-  dijkstra_k_stops: ['stop_info'],
-  floyd_warshall: ['via_node'],
-  house_robber: ['dp_values'],
-  lca_tree: ['search_state'],
-  lis: ['dp_state'],
-  rotate_matrix: ['phase'],
-  sliding_window_max: ['deque_state'],
-  spiral_matrix: ['boundaries'],
-  stock_dp: ['state_machine'],
-  tarjan_bridges: ['bridges', 'dfs_state'],
-  validate_bst: ['valid_range'],
+  // EMPTY — every registered context panel is now fed by its trace.
+  // The full ruthless-cut pass (2026-06-14) resolved all dead panels:
+  //   tree: lca_tree/search_state cut, validate_bst/valid_range fed.
+  //   array: house_robber/dp_values, lis/dp_state, rotate_matrix/phase,
+  //          spiral_matrix/boundaries cut as redundant; deque_state fed.
+  //   graph: bipartite/decisions, dijkstra_k_stops/stop_info, tarjan/dfs_state
+  //          cut; floyd/via_node and tarjan/bridges fed.
+  //   table: stock_dp/state_machine cut (duplicated the table columns).
 };
 
 // DROP: mapper/embedded writes to unregistered panels. Should stay empty.

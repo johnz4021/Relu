@@ -17,25 +17,23 @@ const PANEL_DEFAULTS = {
   bfs: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.bfs } },
-    { id: 'visited', type: 'collection', title: 'Visited' },
     { id: 'queue', type: 'collection', title: 'Queue' },
     { id: 'distances', type: 'key_value', title: 'Distances' },
   ],
+  // The call stack is the DFS mechanism; the graph already highlights visited
+  // nodes and algorithm_state was just the final result narration.
   dfs: [
-    { id: 'visited', type: 'collection', title: 'Visited' },
     { id: 'stack', type: 'collection', title: 'Call Stack' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   kruskal: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.kruskal } },
-    { id: 'mst_weight', type: 'key_value', title: 'MST' },
     { id: 'decisions', type: 'log', title: 'Edge Decisions' },
   ],
+  // Prim's key array (min edge to each frontier node) is the mechanism; the
+  // graph highlights chosen edges and algorithm_state was the result narration.
   prim: [
     { id: 'keys', type: 'key_value', title: 'Keys' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   maxflow: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -46,9 +44,9 @@ const PANEL_DEFAULTS = {
   ],
 
   // --- Sorting algorithms ---
-  mergesort: [
-    { id: 'stats', type: 'key_value', title: 'Stats' },
-  ],
+  // The array + recursion_tree viz carry the merge; the 0/0 stats panel added
+  // nothing.
+  mergesort: [],
   // (mergesort emits actions targeting a 'recursion_tree' renderer panel
   //  in addition to the 'array' renderer; multi-panel registration is handled
   //  by build_example_graph rather than this default list.)
@@ -59,11 +57,11 @@ const PANEL_DEFAULTS = {
       initial_data: { lines: PSEUDOCODE.knapsack } },
     { id: 'items', type: 'key_value', title: 'Items' },
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
+  // The recurrence (expression) + the animated grid carry DP; the per-cell
+  // decisions log was reconstructable from both, so it's cut across DP algos.
   edit_distance: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
 
   // --- Complexity Theory ---
@@ -84,7 +82,6 @@ const PANEL_DEFAULTS = {
   quickselect: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.quickselect } },
-    { id: 'stats', type: 'key_value', title: 'State' },
   ],
 
   // --- Graph (continued) ---
@@ -103,10 +100,11 @@ const PANEL_DEFAULTS = {
   ],
 
   // --- Greedy ---
+  // pq (the extract-2-min frontier) is the mechanism; codes is the answer
+  // (char->code shape). freq_table is just the input, cut.
   huffman: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.huffman } },
-    { id: 'freq_table', type: 'key_value', title: 'Frequencies' },
     { id: 'pq', type: 'collection', title: 'Priority Queue' },
     { id: 'codes', type: 'key_value', title: 'Codes' },
   ],
@@ -116,7 +114,6 @@ const PANEL_DEFAULTS = {
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.binary_search } },
     { id: 'bounds', type: 'key_value', title: 'Search Bounds' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   koko_eating_speed: [
     { id: 'bounds', type: 'key_value', title: 'Speed Range' },
@@ -125,14 +122,14 @@ const PANEL_DEFAULTS = {
   ],
   coin_change: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
   lcs: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
+  // Keeps one panel: it carries the comparison decision ("15 < 20 -> go left"),
+  // the BST mechanism the tree highlight doesn't state. Retitled from "State".
   bst_insert: [
-    { id: 'stats', type: 'key_value', title: 'State' },
+    { id: 'stats', type: 'key_value', title: 'Comparison' },
   ],
   linked_list_reversal: [
     { id: 'pointers', type: 'key_value', title: 'Pointers' },
@@ -150,11 +147,9 @@ const PANEL_DEFAULTS = {
       initial_data: { lines: PSEUDOCODE.topological_sort } },
     { id: 'in_degrees', type: 'key_value', title: 'In-Degrees' },
     { id: 'queue', type: 'collection', title: 'Zero-Degree Queue' },
-    { id: 'sorted', type: 'collection', title: 'Sorted Order' },
   ],
   two_pointers: [
     { id: 'search_state', type: 'key_value', title: 'Search State' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   container_water: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -184,7 +179,6 @@ const PANEL_DEFAULTS = {
   move_zeroes: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.move_zeroes } },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   find_peak: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -218,7 +212,6 @@ const PANEL_DEFAULTS = {
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.min_window_substring } },
     { id: 'window_state', type: 'key_value', title: 'Window State' },
-    { id: 'char_freq', type: 'key_value', title: 'Required Chars (have/need)' },
   ],
   valid_palindrome: [
     { id: 'pointer_state', type: 'key_value', title: 'Pointers' },
@@ -226,14 +219,15 @@ const PANEL_DEFAULTS = {
   expand_palindrome: [
     { id: 'palindrome_state', type: 'key_value', title: 'Best Palindrome' },
   ],
+  // The pattern-vs-window frequency comparison IS the mechanism; matches is the
+  // result (the string renderer highlights found anagrams).
   find_anagrams: [
     { id: 'pattern_freq', type: 'key_value', title: 'Pattern Freq' },
     { id: 'window_freq', type: 'key_value', title: 'Window Freq' },
-    { id: 'matches', type: 'log', title: 'Matches Found' },
   ],
+  // The failure function is the KMP insight; the string renderer shows matching.
   kmp_search: [
     { id: 'failure_fn', type: 'key_value', title: 'Failure Function' },
-    { id: 'search_log', type: 'log', title: 'Search Log' },
   ],
 
   // --- Hashing / HashMap patterns ---
@@ -293,84 +287,75 @@ const PANEL_DEFAULTS = {
   // --- Array/table/string renderer patterns ---
   prefix_sum: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   difference_array: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // algorithm_state narrates the recurrence and the array renderer shows dp[],
+  // so dp_state (dead) and the 0/0 stats panel are redundant.
   lis: [
-    { id: 'dp_state', type: 'key_value', title: 'Tails Array' },
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // state_machine (dead) duplicated the table's held/sold/rest columns; the
+  // recurrence carries the mechanism.
   stock_dp: [
-    { id: 'state_machine', type: 'key_value', title: 'State Machine' },
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
   interval_dp: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
   palindrome_dp: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
   bitmask_dp: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
+  // algorithm_state narrates the recurrence ("dp[2]=max(dp[1]=7,
+  // dp[0]+nums[2]=11)=11") and the array renderer shows dp — so dp_values
+  // (dead) and the 0/0 stats panel are redundant.
   house_robber: [
-    { id: 'dp_values', type: 'key_value', title: 'DP Values' },
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   sieve_primes: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // algorithm_state narrates the traversal ("Top row [0][0] = 1"); boundaries
+  // was dead and the 0/0 stats panel added nothing.
   spiral_matrix: [
-    { id: 'boundaries', type: 'key_value', title: 'Spiral Bounds' },
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // expression carries the phase ("Transpose complete. Now reverse each row."),
+  // so phase (dead), algorithm_state, and the 0/0 stats panel are redundant.
   rotate_matrix: [
-    { id: 'phase', type: 'key_value', title: 'Phase' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
     { id: 'expression', type: 'expression', title: 'Operation' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // algorithm_state narrates the current candidate ("Choose 2: current=[2]
+  // remaining=5") — the mechanism. bounds rendered "undefined"; stats was 0/0.
   combination_sum: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'bounds', type: 'key_value', title: 'Bounds' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   subsets: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // algorithm_state narrates the current permutation; bounds rendered
+  // "undefined"; stats was 0/0.
   permutations: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'bounds', type: 'key_value', title: 'Bounds' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // The monotonic deque IS the mechanism — fed as a visual collection (see the
+  // mapArrayStep sliding_window_max branch). The text narration (algorithm_state)
+  // and 0/0 stats are dropped in favor of the visual.
   sliding_window_max: [
     { id: 'deque_state', type: 'collection', title: 'Monotonic Deque' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   jump_game: [
     { id: 'algorithm_state', type: 'key_value', title: 'State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   rabin_karp: [
     { id: 'hash_state', type: 'key_value', title: 'Hash Values' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
   manacher: [
     { id: 'palindrome_state', type: 'key_value', title: 'Palindrome State' },
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
   ],
 
   // --- Graph renderer patterns ---
@@ -388,7 +373,6 @@ const PANEL_DEFAULTS = {
   tarjan_bridges: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.tarjan_bridges } },
-    { id: 'dfs_state', type: 'key_value', title: 'disc[ ] / low[ ]' },
     { id: 'bridges', type: 'log', title: 'Bridges Found' },
     { id: 'disc_low', type: 'key_value', title: 'Discovery / Low' },
   ],
@@ -396,13 +380,11 @@ const PANEL_DEFAULTS = {
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.bipartite_check } },
     { id: 'coloring', type: 'key_value', title: 'Node Colors' },
-    { id: 'decisions', type: 'log', title: 'Edge Decisions' },
   ],
   dijkstra_k_stops: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.dijkstra_k_stops } },
     { id: 'distances', type: 'key_value', title: 'Min Cost to Node' },
-    { id: 'stop_info', type: 'key_value', title: 'Stop Budget' },
   ],
   number_of_islands: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
@@ -423,17 +405,22 @@ const PANEL_DEFAULTS = {
   // Only declare panels the trace mapper actually feeds — an unfed default
   // sits on screen as "No entries yet" for the whole lesson (QA ISSUE-001,
   // 2026-06-12). The tutor agent creates its own extra panels live as needed.
+  // Heaps render as a tree; the one thing the tree can't show is the size-K
+  // boundary / extracted value, so heap_state survives and the duplicate
+  // 'stats' panel is cut. heap_ops keeps the backing-array view instead
+  // (the array<->tree index duality is its unique insight).
   top_k_heap: [
     { id: 'heap_state', type: 'key_value', title: 'Heap State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   median_finder: [
     { id: 'median_state', type: 'key_value', title: 'Median' },
   ],
   k_closest_points: [
     { id: 'heap_state', type: 'key_value', title: 'Heap State' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
+  // Both earn their place: heap_array shows the backing-array<->tree index
+  // duality (the insight), heap_state narrates ops on init/insert_start steps
+  // that carry no structural snapshot. Not redundant.
   heap_ops: [
     { id: 'heap_array', type: 'collection', title: 'Heap Array' },
     { id: 'heap_state', type: 'key_value', title: 'Heap State' },
@@ -441,17 +428,19 @@ const PANEL_DEFAULTS = {
   tree_dp: [
     { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
+  // The tree renderer already highlights p/q/LCA and the visited path, so
+  // tree_state (and the dead search_state) are noise — pseudocode carries
+  // the logic.
   lca_tree: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.lca_tree } },
-    { id: 'search_state', type: 'key_value', title: 'Search State' },
-    { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
+  // valid_range (the propagating (min,max) invariant) IS the lesson and is fed
+  // by the traverse mapper branch; tree_state duplicated the tree highlight.
   validate_bst: [
     { id: 'pseudocode', type: 'pseudocode', title: 'Algorithm',
       initial_data: { lines: PSEUDOCODE.validate_bst } },
     { id: 'valid_range', type: 'key_value', title: 'Valid Range' },
-    { id: 'tree_state', type: 'key_value', title: 'Tree State' },
   ],
   linked_list_cycle: [
     { id: 'pointer_state', type: 'key_value', title: 'Pointer State' },
@@ -459,10 +448,11 @@ const PANEL_DEFAULTS = {
   merge_k_sorted: [
     { id: 'source_lists', type: 'key_value', title: 'Source Lists' },
   ],
+  // The height recurrence h=max(left,right)+1 (expression) is the mechanism.
+  // Max-depth is a scalar result (cut stats); the tree already highlights
+  // visited nodes (cut traversal_order).
   tree_depth_dfs: [
     { id: 'expression', type: 'expression', title: 'Computation' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
-    { id: 'traversal_order', type: 'collection', title: 'Traversal Order' },
   ],
   // One mechanism panel (Queue) + one result panel (grouped Traversal Log,
   // which mirrors the problem's [[3],[9,20],[15,7]] output). The flat
@@ -473,35 +463,35 @@ const PANEL_DEFAULTS = {
     { id: 'queue', type: 'collection', title: 'Queue' },
     { id: 'traversal_log', type: 'log', title: 'Traversal Log' },
   ],
+  // path_state (current path + remaining target) is the mechanism; the
+  // found/not-found log is a thin result the tree highlight already conveys.
   tree_path: [
     { id: 'path_state', type: 'key_value', title: 'Path State' },
-    { id: 'traversal_log', type: 'log', title: 'Traversal Log' },
   ],
   trie: [
-    { id: 'algorithm_state', type: 'key_value', title: 'State' },
     { id: 'trie_state', type: 'key_value', title: 'Trie State' },
   ],
+  // parent forest = mechanism; components count = the answer for several LC
+  // problems (Number of Connected Components, etc.). decisions log was
+  // redundant with the graph's edge highlighting.
   union_find: [
     { id: 'components', type: 'key_value', title: 'Components' },
     { id: 'parent', type: 'key_value', title: 'Parent Pointers' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
   word_search: [
     { id: 'search_state', type: 'key_value', title: 'Search State' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
+  // stats carries the dict-membership checks (the mechanism for word break);
+  // decisions log was redundant with the grid.
   word_break: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
     { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
   rotate_array: [
     { id: 'expression', type: 'expression', title: 'Operation' },
-    { id: 'stats', type: 'key_value', title: 'Stats' },
   ],
-  sliding_window: [
-    { id: 'stats', type: 'key_value', title: 'Stats' },
-  ],
+  // The array + window highlighting carry it; the 0/0 stats panel added nothing.
+  sliding_window: [],
   max_subarray: [
     // id is mapper-frozen; title uses student-facing language (the panel tracks
     // the running best/current sums) rather than naming Kadane's algorithm.
@@ -511,11 +501,9 @@ const PANEL_DEFAULTS = {
   // panels that the mapper writes to but were not registered before:
   climbing_stairs: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
   min_path_sum: [
     { id: 'expression', type: 'expression', title: 'Recurrence' },
-    { id: 'decisions', type: 'log', title: 'Decisions' },
   ],
 
   // --- Legacy fallback entries ---
