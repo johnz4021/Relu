@@ -29,6 +29,7 @@ import { applyActions, applyAction, applyActionsSequenced, killActiveTimeline, f
 import { initContextManager, destroyContextManager } from './lib/contextManager';
 import { supabase } from './lib/supabase';
 import { track } from './lib/posthog';
+import { OFFER_CHIPS, STUCK_MESSAGE } from './lib/offerChips';
 
 
 export default function App() {
@@ -583,21 +584,42 @@ export default function App() {
   );
 
   const handleGuidedMessage = useCallback(
-    (text) => {
-      // companion_escalation_requested RETIRED 2026-06-12 (consent-gating review):
-      // under consent-gating a follow-up can be an answer, a decline, or an offer
-      // acceptance — indistinguishable here. The server-side companion_turn rows
-      // (offer_made / escalation_consented) carry the real escalation signal.
+    (text, source) => {
+      // companion_escalation_requested was RETIRED 2026-06-12 for FREEFORM follow-ups
+      // (a typed reply could be an answer, a decline, or an acceptance — indistinguishable).
+      // E-UX (2026-06-13) un-retires it ONLY for chip/stuck taps, which ARE distinguishable
+      // (see handleOfferChip / handleStuck). `source` rides the message for server-side
+      // correlation; consent itself still rides the model (the text is an explicit ask).
       processMessage({ type: 'add_student_message', text });
       flushActiveTimeline();
       audioPlayer.flush();
-      send({ type: 'guided_message', text });
+      send({ type: 'guided_message', text, ...(source ? { source } : {}) });
       // Auto-resume if paused
       send({ type: 'resume' });
       processMessage({ type: 'resumed' });
     },
     [send, processMessage, audioPlayer]
   );
+
+  // E-UX: the student taps an offered-rung chip. We send an explicit consent SENTENCE
+  // (client-owned copy) through the normal message channel — the tutor reads it as
+  // consent via its own rules; NO server-side "this is consent" flag.
+  const handleOfferChip = useCallback(
+    (modality) => {
+      const chip = OFFER_CHIPS[modality];
+      if (!chip) return;
+      track('companion_escalation_requested', { via: 'chip', modality });
+      handleGuidedMessage(chip.consent, 'chip');
+    },
+    [handleGuidedMessage]
+  );
+
+  // E-UX: "I'm stuck" sends a standalone bid for help. The doctrine treats it as consent
+  // for the next OFFERED rung (not a direct hint), so it can't outrun the ladder.
+  const handleStuck = useCallback(() => {
+    track('companion_escalation_requested', { via: 'stuck' });
+    handleGuidedMessage(STUCK_MESSAGE, 'stuck');
+  }, [handleGuidedMessage]);
 
   const handlePause = useCallback(() => {
     track('pause_used', {});
@@ -865,7 +887,7 @@ export default function App() {
                   banner here to VizRequestToast mounted at App level — same
                   demand-signal capture, no layout coupling, no transcript clutter. */}
               <div className="flex-1 overflow-hidden">
-                <Transcript segments={state.segments} agentStatus={state.agentStatus} centered />
+                <Transcript segments={state.segments} agentStatus={state.agentStatus} onOfferChip={handleOfferChip} centered />
               </div>
               <Controls
                 status={state.status}
@@ -883,6 +905,8 @@ export default function App() {
                 onGuidedResponse={handleGuidedResponse}
                 mode={state.mode}
                 onGuidedMessage={handleGuidedMessage}
+                companion={embedIntent === 'nudge'}
+                onStuck={handleStuck}
                 guidedPrompt={state.guidedPrompt}
                 registerInsertRef={registerInsertRef}
                 independentWork={state.independentWork}
@@ -899,7 +923,7 @@ export default function App() {
                 initialRatio={0.35}
                 className="flex-1"
                 top={<ContextPanelHost panels={state.contextPanels} className="h-full overflow-auto max-h-[40vh]" />}
-                bottom={<Transcript segments={state.segments} agentStatus={state.agentStatus} centered />}
+                bottom={<Transcript segments={state.segments} agentStatus={state.agentStatus} onOfferChip={handleOfferChip} centered />}
               />
               <Controls
                 status={state.status}
@@ -917,6 +941,8 @@ export default function App() {
                 onGuidedResponse={handleGuidedResponse}
                 mode={state.mode}
                 onGuidedMessage={handleGuidedMessage}
+                companion={embedIntent === 'nudge'}
+                onStuck={handleStuck}
                 guidedPrompt={state.guidedPrompt}
                 registerInsertRef={registerInsertRef}
                 independentWork={state.independentWork}
@@ -986,7 +1012,7 @@ export default function App() {
                 </div>
               )}
               <div className="flex-1 overflow-hidden">
-                <Transcript segments={state.segments} agentStatus={state.agentStatus} />
+                <Transcript segments={state.segments} agentStatus={state.agentStatus} onOfferChip={handleOfferChip} />
               </div>
               <Controls
                 status={state.status}
@@ -1004,6 +1030,8 @@ export default function App() {
                 onGuidedResponse={handleGuidedResponse}
                 mode={state.mode}
                 onGuidedMessage={handleGuidedMessage}
+                companion={embedIntent === 'nudge'}
+                onStuck={handleStuck}
                 guidedPrompt={state.guidedPrompt}
                 registerInsertRef={registerInsertRef}
                 independentWork={state.independentWork}

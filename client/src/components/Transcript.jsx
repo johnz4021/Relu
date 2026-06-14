@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import MathText from './MathText';
+import { OFFER_CHIPS } from '../lib/offerChips';
 
-export default function Transcript({ segments, agentStatus, centered }) {
+export default function Transcript({ segments, agentStatus, centered, onOfferChip }) {
   const scrollContainerRef = useRef(null);
   const [waitSeconds, setWaitSeconds] = useState(0);
 
@@ -37,7 +38,7 @@ export default function Transcript({ segments, agentStatus, centered }) {
           </p>
         )}
 
-        {segments.map((seg) => (
+        {segments.map((seg, i) => (
           <div
             key={seg.id}
             className={`text-sm leading-relaxed rounded-lg px-3 py-2 ${
@@ -83,6 +84,20 @@ export default function Transcript({ segments, agentStatus, centered }) {
             <MathText>{seg.narration}</MathText>
             {seg.active && (
               <span className="inline-block w-2 h-4 bg-accent ml-1 animate-pulse" />
+            )}
+            {/* E-UX: offered-rung chip, anchored under the tutor message that made the
+                offer. Rendered ONLY on the last segment, so a later turn/reply clears it
+                (stale-offer clearing = pure render condition, no extra state). */}
+            {seg.type === 'answer' && i === segments.length - 1 && seg.offerModality && OFFER_CHIPS[seg.offerModality] && (
+              <button
+                type="button"
+                onClick={() => onOfferChip?.(seg.offerModality)}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-muted px-3.5 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent hover:text-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <span aria-hidden="true">✦</span>
+                {OFFER_CHIPS[seg.offerModality].label}
+                <span aria-hidden="true">→</span>
+              </button>
             )}
           </div>
         ))}

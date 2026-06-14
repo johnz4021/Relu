@@ -6,7 +6,7 @@ import { track } from '../lib/posthog';
 import { setTimelineSpeed } from '../lib/rendererRegistry';
 
 
-export default function Controls({ status, agentStatus, onInterrupt, onPause, onResume, onSkip, onRestart, onSpeedChange, onTtsMuteToggle, ttsMuted, explanationMode, guidedOptions, onGuidedResponse, mode, onGuidedMessage, guidedPrompt, registerInsertRef, independentWork, onIndependentWorkSubmit, onKeepGuiding, onRevealHint }) {
+export default function Controls({ status, agentStatus, onInterrupt, onPause, onResume, onSkip, onRestart, onSpeedChange, onTtsMuteToggle, ttsMuted, explanationMode, guidedOptions, onGuidedResponse, mode, onGuidedMessage, guidedPrompt, registerInsertRef, independentWork, onIndependentWorkSubmit, onKeepGuiding, onRevealHint, companion, onStuck }) {
   const [question, setQuestion] = useState('');
   const [pausePending, setPausePending] = useState(false);
   const [independentText, setIndependentText] = useState('');
@@ -148,6 +148,20 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
         >
           <MathText>{guidedOptions?.prompt || guidedPrompt}</MathText>
         </div>
+      )}
+      {/* E-UX: companion-only "I'm stuck" — a quiet pull that does NOT deliver a hint;
+          it sends a standalone bid ("I'm stuck") the tutor reads as consent to OFFER the
+          next rung (which then surfaces as a chip). Routes through the normal message
+          channel, so it never outruns the ladder. Sits just above the input. */}
+      {companion && onStuck && showInput && (
+        <button
+          type="button"
+          onClick={onStuck}
+          disabled={agentBusy}
+          className="text-xs text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          I'm stuck
+        </button>
       )}
       {showInput && (
         <div className="bg-surface-2 border border-border rounded-xl overflow-hidden focus-within:border-accent transition-colors">

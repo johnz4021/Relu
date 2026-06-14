@@ -145,6 +145,11 @@ export function reducer(state, action) {
             narration: action.answer,
             type: 'answer',
             active: false,
+            // E-UX (2026-06-13): a companion turn that OFFERS a visual rung carries
+            // offer_modality. Store it on the segment so the transcript can anchor a
+            // tappable chip under THIS message. Only the latest segment renders it
+            // (Transcript), so a new turn/reply supersedes a stale offer for free.
+            offerModality: action.companion?.offer_made ? (action.companion.offer_modality || null) : null,
           },
         ],
       };
@@ -430,6 +435,7 @@ export function useTutorState() {
           rewind: msg.rewind,
           ghost_alternative: msg.ghost_alternative,
           illustrate: msg.illustrate,
+          companion: msg.companion, // E-UX: carries offer_made/offer_modality → chip
         });
         break;
       case 'explanation_complete':

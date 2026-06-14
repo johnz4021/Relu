@@ -268,6 +268,11 @@ export const tools = [
           type: 'boolean',
           description: 'COMPANION MODE only: true when this turn explicitly OFFERS an escalation (names the next step or the drawing and asks). An open thinking-question is NOT an offer.',
         },
+        offer_modality: {
+          type: 'string',
+          enum: ['highlight', 'diagram'],
+          description: "COMPANION MODE only: set ALONGSIDE offer_made=true when the offered next step is a VISUAL rung — 'highlight' (point at the relevant part of the problem on the page) or 'diagram' (draw the structure view). Omit for non-visual offers. The client renders a tappable chip from this; button copy and consent text are client-owned, so DO NOT author labels here.",
+        },
         escalation_consented: {
           type: 'boolean',
           description: "COMPANION MODE only: true ONLY when this turn's specificity rise was explicitly licensed (student asked, accepted your offer, or gave up).",
@@ -641,6 +646,11 @@ export const tools = [
         offer_made: {
           type: 'boolean',
           description: 'COMPANION MODE only: true when this turn explicitly OFFERS an escalation (names the next step or the drawing and asks). An open thinking-question is NOT an offer.',
+        },
+        offer_modality: {
+          type: 'string',
+          enum: ['highlight', 'diagram'],
+          description: "COMPANION MODE only: set ALONGSIDE offer_made=true when the offered next step is a VISUAL rung — 'highlight' (point at the relevant part of the problem on the page) or 'diagram' (draw the structure view). Omit for non-visual offers. The client renders a tappable chip from this; the button copy and the consent text are owned by the client, so DO NOT author button labels here.",
         },
         escalation_consented: {
           type: 'boolean',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeActiveTools, isOutOfScopeSession, buildIntakeUserText, buildGuidedSystemPrompt } from './guidedAgent.js';
+import { computeActiveTools, isOutOfScopeSession, buildIntakeUserText, buildGuidedSystemPrompt, withPromptCaching, PROMPT_CACHE_CONTROL } from './guidedAgent.js';
 import { companionSelfReport } from './agentLib.js';
 
 // Minimal mock tool list matching the union of tools.js + guidedAgent-specific tools.
@@ -305,7 +305,7 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
   // eng-1: the no-spoiler fix doctrine — taxonomy, one-rung pacing, reserve, self-report.
   it('companion doctrine encodes the graduated-escalation fix', () => {
     expect(companion).toContain('READ THE LEARNER EACH TURN');
-    expect(companion).toContain('ONE RUNG PER TURN');
+    expect(companion).toContain('ONE rung at a time');
     expect(companion).toContain('RESERVE THE KEY INSIGHT');
     expect(companion).toContain('SELF-REPORT EACH TURN');
     // The bug case is named explicitly so the model recognizes it.
@@ -313,18 +313,26 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('is NOT permission to hand over the answer');
   });
 
-  // 2026-06-12 consent-gating (eng+CEO review, supersedes model-paced D1 06-09):
-  // specificity never rises uninvited; offers are named and prefer the visual rung;
-  // consent semantics are pinned; honoring a give-up is mandatory (Opus baseline
-  // failed case 4 by over-withholding — the doctrine now names that failure).
-  it('companion doctrine encodes consent-gated escalation', () => {
+  // 2026-06-12 consent-gating (eng+CEO review, supersedes model-paced D1 06-09);
+  // E1 2026-06-13 (leveled ladder): the five rungs each carry an explicit MAY / MUST
+  // NOT; L2 (point-at-input) is the only un-consented rung and is stall-gated (never
+  // on turn 1); L3+ needs consent; and the "not sure" collision is resolved — it is
+  // consent only when answering an offer or a standalone bid, engagement otherwise.
+  it('companion doctrine encodes the leveled consent-gated ladder', () => {
     expect(companion).toContain('CONSENT-GATED ESCALATION');
-    expect(companion).toContain('Specificity NEVER rises uninvited');
-    expect(companion).toContain('one CONSENTED rung');
-    expect(companion).toContain('NAME what you are');
+    expect(companion).toContain('Default to vagueness');
+    // The five rungs as a checkable table (E1).
+    expect(companion).toContain('L1 OPEN (free, the default)');
+    expect(companion).toContain('L2 POINT AT THE INPUT (stall-gated, second resort)');
+    expect(companion).toContain('L5 FULL REVEAL (consent only');
+    expect(companion).toContain('the ONLY rung you may reach un-consented');
+    expect(companion).toContain('CONSENT advances ONE rung into L3+');
+    expect(companion).toContain('rung and NAME it');
     expect(companion).toContain('offering the drawing');
     expect(companion).toContain('NOT consent: silence');
-    expect(companion).toContain('COUNTS as consent');
+    // The collision fix: "not sure" answering a thinking-question is engagement.
+    expect(companion).toContain('standalone bid for help');
+    expect(companion).toContain('it is ENGAGEMENT: hold the level');
     expect(companion).toContain('HONORING CONSENT IS MANDATORY');
     expect(companion).toContain('offer_made');
     expect(companion).toContain('escalation_consented');
@@ -334,17 +342,21 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
   // are permission-gated, verified, co-discovered, borrowed-and-returned, and
   // level-neutral. Five decisions, five pinned phrases.
   it('companion doctrine encodes the mid-struggle visuals contract', () => {
-    expect(companion).toContain('MID-STRUGGLE VISUALS (permissions, not obligations)');
+    expect(companion).toContain('MID-STRUGGLE VISUALS (offered, never imposed)');
     expect(companion).toContain('EARLY STRUCTURE VIEW');
     expect(companion).toContain('COUNTEREXAMPLE INSTANCE');
     expect(companion).toContain('wrong_direction or partial');           // D2 gate
-    expect(companion).toContain("VERIFY OR DON'T DRAW");                 // D5
+    expect(companion).toContain("VERIFY OR DON'T OFFER");                // D5 (offer-gated 2026-06-14)
     expect(companion).toContain('CO-DISCOVERY');                         // D4
     expect(companion).toContain('BORROW AND RETURN');                    // D3
     expect(companion).toContain('RULES OF RESTRAINT');                   // D2 never-rules
     expect(companion).toContain('never draw on two consecutive turns');
     expect(companion).toContain('if prose covers it, use prose');        // judgment test inside the gate
     expect(companion).toContain('level-neutral');                        // D6
+    // E-UX (2026-06-14): the canvas is offered first, drawn on accept — no uninvited draws.
+    expect(companion).toContain('never draw uninvited');
+    expect(companion).toContain('offer_modality="diagram"');
+    expect(companion).toContain('do NOT annotate it with structural observations');
   });
 
   // eng review 2026-06-09: page-highlight doctrine — the "point at the input" rung
@@ -391,6 +403,50 @@ describe('buildGuidedSystemPrompt — reserved key-insight payload (eng-3)', () 
   });
 });
 
+// E2 (2026-06-14): prompt caching. withPromptCaching is the request-only annotator —
+// cache_control on the system block (tools+system tier) + a rolling breakpoint on the
+// last message block (history tier), ttl 1h, without mutating the stored messages.
+describe('withPromptCaching (E2 — prompt caching breakpoints)', () => {
+  const CC = { type: 'ephemeral', ttl: '1h' };
+
+  it('exports the 1h ephemeral cache_control', () => {
+    expect(PROMPT_CACHE_CONTROL).toEqual(CC);
+  });
+
+  it('wraps the system prompt in a cached text block', () => {
+    const { system } = withPromptCaching('DOCTRINE', [{ role: 'user', content: 'hi' }]);
+    expect(system).toEqual([{ type: 'text', text: 'DOCTRINE', cache_control: CC }]);
+  });
+
+  it('puts the rolling breakpoint on the LAST block of the last message only', () => {
+    const { messages } = withPromptCaching('D', [
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: [{ type: 'text', text: 'a' }, { type: 'tool_use', id: 't', name: 'x', input: {} }] },
+    ]);
+    const last = messages[messages.length - 1];
+    expect(last.content[last.content.length - 1].cache_control).toEqual(CC); // last block cached
+    expect(last.content[0].cache_control).toBeUndefined();                   // earlier block not
+    expect(messages[0].content).toBe('q1');                                  // prior message untouched
+  });
+
+  it('converts string content on the last message to a cached text block', () => {
+    const { messages } = withPromptCaching('D', [{ role: 'user', content: 'just text' }]);
+    expect(messages[0].content[0]).toEqual({ type: 'text', text: 'just text', cache_control: CC });
+  });
+
+  it('does NOT mutate the caller’s messages (request-only annotation)', () => {
+    const input = [{ role: 'user', content: 'x' }];
+    withPromptCaching('D', input);
+    expect(input[0].content).toBe('x'); // still a string, no cache_control leaked onto stored state
+  });
+
+  it('is safe on empty messages', () => {
+    const { system, messages } = withPromptCaching('D', []);
+    expect(system[0].cache_control).toEqual(CC);
+    expect(messages).toEqual([]);
+  });
+});
+
 describe('companionSelfReport (eng-2 — self-report seam)', () => {
   it('returns null when no self-report fields are present (non-companion turns)', () => {
     expect(companionSelfReport({ text: 'hi' })).toBe(null);
@@ -403,6 +459,7 @@ describe('companionSelfReport (eng-2 — self-report seam)', () => {
       specificity_level: 2,
       reveals_key_insight: false, // absent → false, never accidentally "truthy"
       offer_made: false,
+      offer_modality: null, // absent → null
       escalation_consented: false,
     });
     expect(companionSelfReport({ learner_state: 'disengaged', specificity_level: 5, reveals_key_insight: true, escalation_consented: true })).toEqual({
@@ -410,6 +467,7 @@ describe('companionSelfReport (eng-2 — self-report seam)', () => {
       specificity_level: 5,
       reveals_key_insight: true,
       offer_made: false,
+      offer_modality: null,
       escalation_consented: true,
     });
   });
@@ -419,6 +477,14 @@ describe('companionSelfReport (eng-2 — self-report seam)', () => {
   it('treats offer/consent fields as first-class self-report signals', () => {
     expect(companionSelfReport({ offer_made: true })).toMatchObject({ offer_made: true, escalation_consented: false });
     expect(companionSelfReport({ escalation_consented: 'yes' })).toMatchObject({ escalation_consented: false }); // strict boolean
+  });
+
+  // E-UX (2026-06-13): offer_modality is normalized to the allowed enum or null.
+  it('normalizes offer_modality to the allowed enum or null', () => {
+    expect(companionSelfReport({ offer_made: true, offer_modality: 'highlight' })).toMatchObject({ offer_modality: 'highlight' });
+    expect(companionSelfReport({ offer_made: true, offer_modality: 'diagram' })).toMatchObject({ offer_modality: 'diagram' });
+    expect(companionSelfReport({ offer_made: true, offer_modality: 'bogus' })).toMatchObject({ offer_modality: null });
+    expect(companionSelfReport({ offer_made: true })).toMatchObject({ offer_modality: null });
   });
 });
 

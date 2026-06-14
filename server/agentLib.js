@@ -38,7 +38,7 @@ export function sendJSON(ws, obj) {
 // precise funnel events (nudge_given, key-insight reveal) instead of guessing from viz.
 export function companionSelfReport(input) {
   if (!input) return null;
-  const { learner_state, specificity_level, reveals_key_insight, offer_made, escalation_consented } = input;
+  const { learner_state, specificity_level, reveals_key_insight, offer_made, offer_modality, escalation_consented } = input;
   if (learner_state == null && specificity_level == null && reveals_key_insight == null
     && offer_made == null && escalation_consented == null) return null;
   return {
@@ -49,6 +49,10 @@ export function companionSelfReport(input) {
     // escalation offer; escalation_consented marks a specificity rise the student
     // licensed (ask / accepted offer / give-up).
     offer_made: offer_made === true,
+    // E-UX (2026-06-13): when the offer is a VISUAL rung the model tags its
+    // modality so the client can render a tappable chip. 'highlight' | 'diagram'
+    // | null. The client owns the chip label and the consent text it sends.
+    offer_modality: offer_modality === 'highlight' || offer_modality === 'diagram' ? offer_modality : null,
     escalation_consented: escalation_consented === true,
   };
 }
@@ -89,6 +93,7 @@ export function emitCompanionTurn(session, report, turnKind) {
       specificity_level: report?.specificity_level ?? null,
       reveals_key_insight: report?.reveals_key_insight ?? null,
       offer_made: report?.offer_made ?? null,
+      offer_modality: report?.offer_modality ?? null,
       escalation_consented: report?.escalation_consented ?? null,
       algorithm_key: session._leetcodeAlgorithmKey ?? null,
     },

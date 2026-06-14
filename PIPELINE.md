@@ -1259,15 +1259,26 @@ agent. The seams (all in `server/guidedAgent.js`):
 - **`buildGuidedSystemPrompt(session)`** — appends `COMPANION_MODE_PROMPT` to the base
   prompt when `companionMode`. The doctrine: open by asking for the student's read, no
   solver up front, **consent-gated escalation** (2026-06-12, supersedes the 06-09
-  model-paced design for the companion surface ONLY): specificity never rises uninvited;
-  the model may OFFER the next step (offers name their object and prefer the visual rung)
-  and only the student's explicit request/acceptance advances it, one consented rung per
-  turn. Consent semantics are pinned: silence / ignoring an offer / answering the pending
-  question ≠ consent; ambiguous assent counts as consent; honoring a give-up is MANDATORY
-  (the Opus baseline failed by over-withholding after "just show me" — the doctrine names
-  that failure). The learner-state read each turn (not_attempted / wrong_direction /
-  partial / understands / disengaged) now times the OFFERS rather than licensing
-  unsolicited steps. **Reserve the key insight**, terminal rung is the visualization,
+  model-paced design for the companion surface ONLY). **The ladder is a leveled table
+  (E1, 2026-06-13):** five rungs (L1 open · L2 point-at-input · L3 name the sub-question /
+  idea-kind · L4 concrete co-construction · L5 full reveal), each carrying an explicit
+  MAY and MUST-NOT line the model checks itself against. **L2 is the only rung reachable
+  un-consented** — and it is stall-gated: permitted without an explicit ask only on a
+  genuine stall (wrong_direction / repeated not_attempted / sustained partial), never on
+  the opening turn, and only after re-asking smaller or offering hasn't landed (`highlight_
+  problem_text` leaks nothing, so pointing at the input is the gentle nudge floor). **L3
+  and above require consent**, one rung per turn. Offers are level-neutral and prefer the
+  visual rung. Consent semantics are pinned: silence / ignoring an offer / working the
+  problem ≠ consent; ambiguous assent counts; honoring a give-up is MANDATORY (the Opus
+  baseline failed by over-withholding after "just show me"). **The "not sure" collision is
+  resolved (E1):** "I don't know" / "not sure" is consent only when it answers an offer or
+  is a standalone bid for help — when it answers a thinking-question the tutor just asked
+  it is ENGAGEMENT (hold the level), the bug behind the founder's Search-in-Rotated-II
+  `L3→L4` jump. Pinned in `companionMode.eval.test.js` case 15 (collision) + cases 3/8
+  (gradient/floor) and the doctrine-content unit pins in `guidedAgent.test.js`. The
+  learner-state read each turn (not_attempted / wrong_direction / partial / understands /
+  disengaged) times the OFFERS and the L2 stall-gate rather than licensing unsolicited
+  steps. **Reserve the key insight**, terminal rung is the visualization,
   level-neutral mid-struggle visuals unchanged. The web-app guided ladder keeps the
   prior doctrine (different consent context — see TODOS ladder-alignment entry).
   Every system-prompt construction site routes through this, so the doctrine holds
@@ -1278,7 +1289,7 @@ agent. The seams (all in `server/guidedAgent.js`):
   DO NOT REVEAL]` block once it resolves (the ~turn-3-4 danger zone; opening turns rely
   on the taxonomy). Never leaks into non-companion sessions.
 - **Per-turn self-report** — in companion mode the model sets optional
-  `{learner_state, specificity_level, reveals_key_insight, offer_made,
+  `{learner_state, specificity_level, reveals_key_insight, offer_made, offer_modality,
   escalation_consented}` on `conversational_reply` / `emit_segment` (a metacognitive
   checkpoint that stops the jump; non-companion modes omit them). The two consent
   fields (2026-06-12) are the audit trail of the consent contract: `offer_made` marks
@@ -1290,6 +1301,16 @@ agent. The seams (all in `server/guidedAgent.js`):
   (nudge_given, solution-reveal) off it instead of guessing from viz. The
   pre-registered readout (metric formulas, decision rules, minimum-N) lives in
   TODOS.md §"Consent-gating readout".
+- **Hint-affordance chips (E-UX, 2026-06-13)** — `offer_modality` (`highlight` | `diagram`,
+  set alongside `offer_made` for a VISUAL offer) is the only new field; the client
+  (`Transcript.jsx`) renders a tappable chip anchored under the offering turn (latest
+  segment only → stale offers clear for free). A tap sends an explicit consent SENTENCE
+  (client-owned copy in `client/src/lib/offerChips.js`) through the existing
+  `guided_message` channel — consent stays in the model, NO server-side consent flag.
+  "I'm stuck" (`Controls.jsx`, companion-only) sends the literal `"I'm stuck"` (a
+  standalone-bid consent), prompting an offer rather than a direct hint. Both tag the
+  client `companion_escalation_requested` event (`via: chip|stuck`, + `modality`),
+  un-retiring the precise escalation signal that freeform follow-ups can't carry.
 - **`buildIntakeUserText(session, problemText)`** — pure assembly of the first user
   turn; swaps the closing instruction to the companion opener. Off-registry companion
   gets a `[COMPANION — OFF REGISTRY]` block (structure viz works; the terminal reveal
@@ -1323,14 +1344,18 @@ agent. The seams (all in `server/guidedAgent.js`):
   (`abortHighlightWait`). Tool result tells the model how to degrade: anchored
   false/unknown → make the point in prose; visible false (off-screen or fullscreen
   overlay) → reply must stand alone. Funnel: `extension_highlight_shown {ok, method}`.
-- **Mid-struggle visuals** (design review 2026-06-09 D2-D6) — the canvas is usable
-  DURING the struggle, not just at the endgame, under a permission-gated contract:
-  EARLY STRUCTURE VIEW (once, after the first concrete reference — the shared
-  whiteboard) and COUNTEREXAMPLE INSTANCE (only on `wrong_direction`/`partial`, one
-  per misconception, paired with its walk-through question). Both operate on the
-  problem or the student's own idea — never the solution — so they are spoiler-safe
-  and **specificity-level-neutral** (report the previous turn's level; the ladder
-  budget is for solution disclosure). Hard restraints: verify-or-don't-draw (mentally
+- **Mid-struggle visuals** (design review 2026-06-09 D2-D6; **offer-gated 2026-06-14**) —
+  the canvas is usable DURING the struggle, but **never drawn uninvited**: drawing the
+  input FOR the student offloads the model-building that is half the learning, so each
+  visual move is now OFFERED first (set `offer_made=true` + `offer_modality="diagram"`,
+  do NOT draw that turn) and drawn only on the student's accept — which is exactly what
+  surfaces the E-UX "Draw it for me" chip. EARLY STRUCTURE VIEW (the shared whiteboard,
+  input only — annotating it with "two sorted runs" / pre-placed L/M/R pointers is
+  forbidden, it edges toward the insight) and COUNTEREXAMPLE INSTANCE (only on
+  `wrong_direction`/`partial`, one per misconception, paired with its walk-through
+  question). Both operate on the problem or the student's own idea — never the solution —
+  so they are spoiler-safe and **specificity-level-neutral** (the offer and the accepted
+  draw both report the previous turn's level; the ladder budget is for solution disclosure). Hard restraints: verify-or-don't-draw (mentally
   execute THEIR approach on the candidate input first; no breaking input → don't
   draw, consider the gap may be a constraint, not correctness), co-discovery (the
   student names the break, never the tutor), borrow-and-return (counterexample

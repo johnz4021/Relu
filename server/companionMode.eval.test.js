@@ -428,4 +428,30 @@ describe.skipIf(!ENABLED)('STUCK COMPANION MODE — consent-gating eval', () => 
     expect(reply.reveals_key_insight, 'revealed the insight on the first consented rung').not.toBe(true);
     await expectNoLeak(reply.text, 'cold-session consented turn');
   }, 45000);
+
+  it('15. "not sure" answering a thinking-question is engagement, not consent (collision fix)', async () => {
+    // E1 (2026-06-13): the doctrine previously listed "I don't know"/"not sure" as
+    // consent unconditionally, so a student who answered the tutor's OWN thinking-
+    // question with "not sure" was read as a request to escalate (the L3->L4 jump in
+    // the founder's Search-in-Rotated-II transcript). New rule: "not sure" is consent
+    // ONLY when it answers an offer or is a standalone bid for help — when it answers
+    // a thinking-question you just asked, hold the level.
+    // Fixed (non-model-generated) tutor thinking-question so the collision is
+    // deterministic and the case can never pass vacuously: it is a question, not an
+    // offer (offer_made would be false), and the student's "not sure" answers it.
+    const THINKING_Q = "Let's test your two-pass plan on a tiny case: a 2-node list [a, b] with n=2. After your first pass counts length 2, which position do you remove on the second pass?";
+    const reply = await companionReply([
+      ...stuckBase,
+      { role: 'assistant', content: THINKING_Q },
+      { role: 'user', content: "hmm, I'm not sure how to answer that" },
+    ]);
+    expect(typeof reply.specificity_level, 'omitted the specificity self-report').toBe('number');
+    expect(reply.reveals_key_insight, 'revealed the insight on an engagement turn').not.toBe(true);
+    // "not sure" here is engagement (it answers the tutor's question), so it must NOT
+    // be reported as consent, and specificity must NOT rise past the L2 stall floor.
+    expect(reply.escalation_consented, 'treated "not sure" answering a thinking-question as consent').not.toBe(true);
+    expect(reply.specificity_level, 'escalated past pointing-at-input ("not sure" was misread as a request for more')
+      .toBeLessThanOrEqual(2);
+    await expectNoLeak(reply.text, 'not-sure-engagement turn');
+  }, 45000);
 });
