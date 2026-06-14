@@ -89,15 +89,7 @@ export default function Transcript({ segments, agentStatus, centered, onOfferChi
                 offer. Rendered ONLY on the last segment, so a later turn/reply clears it
                 (stale-offer clearing = pure render condition, no extra state). */}
             {seg.type === 'answer' && i === segments.length - 1 && seg.offerModality && OFFER_CHIPS[seg.offerModality] && (
-              <button
-                type="button"
-                onClick={() => onOfferChip?.(seg.offerModality)}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-muted px-3.5 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent hover:text-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <span aria-hidden="true">✦</span>
-                {OFFER_CHIPS[seg.offerModality].label}
-                <span aria-hidden="true">→</span>
-              </button>
+              <OfferChip modality={seg.offerModality} onTap={onOfferChip} />
             )}
           </div>
         ))}
@@ -128,5 +120,35 @@ export default function Transcript({ segments, agentStatus, centered, onOfferChi
       </div>
 
     </div>
+  );
+}
+
+// E-UX (ISSUE-001, /qa 2026-06-14): the offer chip fires exactly once. A rapid
+// double-tap used to send two guided_messages because the chip only un-mounts on
+// the next render, leaving a synchronous double-click window. A useState guard
+// can't fix this (both clicks read the stale `used` in the same tick) — the guard
+// MUST be a ref, which updates synchronously, so the second click bails. The
+// disabled state is cosmetic (the ref is what prevents the double-send).
+function OfferChip({ modality, onTap }) {
+  const usedRef = useRef(false);
+  const [used, setUsed] = useState(false);
+  const chip = OFFER_CHIPS[modality];
+  if (!chip) return null;
+  return (
+    <button
+      type="button"
+      disabled={used}
+      onClick={() => {
+        if (usedRef.current) return;
+        usedRef.current = true;
+        setUsed(true);
+        onTap?.(modality);
+      }}
+      className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-muted px-3.5 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent hover:text-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 disabled:cursor-default"
+    >
+      <span aria-hidden="true">✦</span>
+      {chip.label}
+      <span aria-hidden="true">→</span>
+    </button>
   );
 }

@@ -111,6 +111,19 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
   const hasGuidedOptions = !!guidedOptions;
   // Disable sending when the model is thinking/running tools (not waiting for input)
   const agentBusy = (isGuided || isExplain || hasGuidedOptions) && !!agentStatus;
+
+  // E-UX (ISSUE-001, /qa 2026-06-14): "I'm stuck" fires once per turn. A rapid
+  // double-tap used to send two "I'm stuck" messages (the disabled={agentBusy} only
+  // kicks in after the round-trip). A synchronous ref guard blocks the second click in
+  // the same tick; it resets when the turn finishes (agentBusy → false) so the student
+  // can tap again next time they stall. (A useState guard can't do this — async.)
+  const stuckGuardRef = useRef(false);
+  useEffect(() => { if (!agentBusy) stuckGuardRef.current = false; }, [agentBusy]);
+  const handleStuckClick = () => {
+    if (stuckGuardRef.current || agentBusy) return;
+    stuckGuardRef.current = true;
+    onStuck?.();
+  };
   const placeholder = hasGuidedOptions
     ? (guidedOptions.mode === 'open_ended' && guidedOptions.input_placeholder)
       ? guidedOptions.input_placeholder
@@ -156,7 +169,7 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
       {companion && onStuck && showInput && (
         <button
           type="button"
-          onClick={onStuck}
+          onClick={handleStuckClick}
           disabled={agentBusy}
           className="text-xs text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
