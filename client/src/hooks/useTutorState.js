@@ -1,5 +1,13 @@
 import { useReducer, useCallback } from 'react';
 
+// Unique segment ids (ISSUE-002, /qa 2026-06-14). Bare `'prefix' + Date.now()` ids
+// collide when two segments are created in the same millisecond — a rapid double-tap,
+// or the model emitting segments back-to-back — yielding React "duplicate key" warnings
+// and possibly duplicated/omitted transcript rows. A monotonic counter makes the id
+// unique regardless of timing while keeping the timestamp for readability.
+let _segSeq = 0;
+const segId = (prefix) => `${prefix}${Date.now()}_${++_segSeq}`;
+
 const initialState = {
   status: 'idle', // idle | connecting | teaching | paused | interrupted | complete | error | independent_work
   algorithm: null,
@@ -141,7 +149,7 @@ export function reducer(state, action) {
         segments: [
           ...state.segments,
           {
-            id: 'ir_' + Date.now(),
+            id: segId('ir_'),
             narration: action.answer,
             type: 'answer',
             active: false,
@@ -177,7 +185,7 @@ export function reducer(state, action) {
         segments: [
           ...state.segments,
           {
-            id: 'q_' + Date.now(),
+            id: segId('q_'),
             narration: action.question,
             type: 'question',
             active: false,
@@ -270,10 +278,10 @@ export function reducer(state, action) {
       return { ...state, guidedOptions: null, guidedPrompt: null };
 
     case 'ADD_GUIDED_QUESTION':
-      return { ...state, agentStatus: null, segments: [...state.segments, { id: 'gq_' + Date.now(), narration: action.text, type: 'guided_question', active: false }] };
+      return { ...state, agentStatus: null, segments: [...state.segments, { id: segId('gq_'), narration: action.text, type: 'guided_question', active: false }] };
 
     case 'ADD_GUIDED_ANSWER':
-      return { ...state, segments: [...state.segments, { id: 'ga_' + Date.now(), narration: action.text, type: 'guided_answer', active: false }] };
+      return { ...state, segments: [...state.segments, { id: segId('ga_'), narration: action.text, type: 'guided_answer', active: false }] };
 
     case 'GUIDED_PROMPT':
       return { ...state, guidedPrompt: action.prompt };
@@ -283,7 +291,7 @@ export function reducer(state, action) {
         ...state,
         segments: [
           ...state.segments,
-          { id: 'sm_' + Date.now(), narration: action.text, type: 'student_message', active: false },
+          { id: segId('sm_'), narration: action.text, type: 'student_message', active: false },
         ],
       };
 
@@ -294,7 +302,7 @@ export function reducer(state, action) {
         segments: [
           ...state.segments,
           {
-            id: 'vr_' + Date.now(),
+            id: segId('vr_'),
             narration: action.matches
               ? `Result matches expected output (${action.expected}).`
               : `Mismatch: expected ${action.expected}, got ${action.computed}.`,
