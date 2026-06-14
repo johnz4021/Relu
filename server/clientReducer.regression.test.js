@@ -8,7 +8,7 @@
 //
 // The reducer is a pure function, so it's testable from the server-side
 // vitest run without DOM. vite handles the JSX-free hook module fine.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { reducer } from '../client/src/hooks/useTutorState.js';
 
 const stateWithLogPanel = (data = {}) => ({
@@ -50,5 +50,41 @@ describe('APPEND_CONTEXT_LOG hardening (ISSUE-005)', () => {
       entries: [{ text: 'ok' }],
     });
     expect(next.contextPanels[0].data.entries).toEqual([{ text: 'ok' }]);
+  });
+});
+
+// Regression: ISSUE-002 — segment ids built as `'prefix' + Date.now()` collided when
+// two segments were created in the same millisecond (a rapid double-tap of the offer
+// chip / "I'm stuck", or back-to-back model segments), producing React "duplicate key"
+// warnings and possibly duplicated/omitted transcript rows. segId() appends a monotonic
+// counter so ids are unique regardless of timing.
+// Found by /qa on 2026-06-14 (companion hint chips)
+describe('unique segment ids under same-millisecond additions (ISSUE-002)', () => {
+  it('two identical student messages in the same ms get distinct ids', () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(1781460136008); // freeze the clock
+    try {
+      let state = { segments: [] };
+      state = reducer(state, { type: 'ADD_STUDENT_MESSAGE', text: 'Yes, please draw it out for me.' });
+      state = reducer(state, { type: 'ADD_STUDENT_MESSAGE', text: 'Yes, please draw it out for me.' });
+      const ids = state.segments.map((s) => s.id);
+      expect(ids).toHaveLength(2);
+      expect(new Set(ids).size).toBe(2); // unique despite identical text + frozen Date.now
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('ids across mixed segment types in the same ms are all unique', () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(1781460136008);
+    try {
+      let state = { segments: [] };
+      state = reducer(state, { type: 'ADD_STUDENT_MESSAGE', text: 'a' });
+      state = reducer(state, { type: 'INTERRUPT_RESPONSE', answer: 'b', explanation_mode: 'none' });
+      state = reducer(state, { type: 'ADD_STUDENT_MESSAGE', text: 'c' });
+      const ids = state.segments.map((s) => s.id);
+      expect(new Set(ids).size).toBe(ids.length); // no collisions
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
