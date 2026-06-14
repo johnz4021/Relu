@@ -125,12 +125,12 @@ export function buildIntakeUserText(session, problemText) {
       const trace = session._leetcodeTrace;
       const traceLen = trace ? trace.length : 0;
       const renderer = session._leetcodeRenderer || 'graph';
-      lcContext += `\n\n[TIER 1 TRACE] A pre-built trace (${traceLen} steps) is available for ${session._leetcodeAlgorithmKey} (renderer: ${renderer}). The trace runs on the algorithm's CURATED default example (hand-picked so every step of the algorithm is visible) — not the problem's Example 1. Introduce it naturally ("let's watch it on this example"). After run_solver and build_example_graph, you MUST call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" and the input field OMITTED — that loads the same curated trace into the visualization. Do NOT manually construct viz_actions for the trace — run_algorithm handles all renderer updates automatically. After run_algorithm returns, use emit_segment with trace_step_indices to narrate each step. At the end, close the loop on the student's OWN instance: apply the approach to their Example 1 and confirm with verify_result.`;
+      lcContext += `\n\n[TIER 1 TRACE] A pre-built trace (${traceLen} steps) is available for ${session._leetcodeAlgorithmKey} (renderer: ${renderer}). The trace runs on the algorithm's CURATED default example (hand-picked so every step of the algorithm is visible) — not the problem's Example 1. Introduce it naturally ("let's watch it on this example"). After run_solver and build_example_graph, you MUST call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" and the input field OMITTED — that loads the same curated trace into the visualization. Do NOT manually construct viz_actions for the trace — run_algorithm handles all renderer updates automatically. run_algorithm also registers this algorithm's CURATED context panels, so when you call create_visualization pass ONLY the renderer panel — do NOT pass context_panels of your own (custom ones render empty next to the real panels the trace feeds). After run_algorithm returns, use emit_segment with trace_step_indices to narrate each step. At the end, close the loop on the student's OWN instance: apply the approach to their Example 1 and confirm with verify_result.`;
     } else if (session._leetcodeTier === 2) {
       const trace = session._leetcodeTrace;
       const traceLen = trace ? trace.length : 0;
       const t2Renderer = session._leetcodeRenderer || 'context';
-      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}, renderer: ${t2Renderer}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" EXACTLY — this mounts the visualization panels (they are NOT visible until run_algorithm is called) and loads the trace without regenerating it. After run_algorithm returns, narrate the trace using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panels will stay blank. Steps may carry embedded viz_actions that play automatically when referenced via trace_step_indices.`;
+      lcContext += `\n\n[TIER 2 TRACE] A generated trace (${traceLen} steps, indices 0–${traceLen - 1}, renderer: ${t2Renderer}) is available for ${session._leetcodeAlgorithmKey}. Call run_solver for solution context, then call run_algorithm with algorithm="${session._leetcodeAlgorithmKey}" EXACTLY — this mounts the visualization panels (they are NOT visible until run_algorithm is called) and loads the trace without regenerating it. run_algorithm registers this algorithm's curated context panels — do NOT create your own context_panels (pass only renderer panels to create_visualization; custom context panels render empty next to the real ones). After run_algorithm returns, narrate the trace using emit_segment with trace_step_indices. Do NOT describe trace steps as plain narration without trace_step_indices — the panels will stay blank. Steps may carry embedded viz_actions that play automatically when referenced via trace_step_indices.`;
     }
   }
 
@@ -2062,11 +2062,19 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
               session.graphVariants = plan.graph_variants;
             }
           }
+          // For Tier 1/2 (registry-backed) algorithms, run_algorithm registers the
+          // CURATED context panels (contextPanelDefaults). The planner's improvised
+          // context_panels would mount in parallel under different ids, so the trace
+          // mapper feeds the registry panels while the planner's sit empty — the
+          // student sees blank panels (QA 2026-06-14). Strip them here so run_algorithm
+          // is authoritative. Tier 3 (run_algorithm unavailable) keeps planner panels.
+          const runAlgorithmOwnsContextPanels = session._leetcodeTier === 1 || session._leetcodeTier === 2;
+          const planContextPanels = runAlgorithmOwnsContextPanels ? [] : plan.context_panels;
           result = {
             success: plan.success,
             panels: plan.panels,
             algorithm_runs: plan.algorithm_runs,
-            context_panels: plan.context_panels,
+            context_panels: planContextPanels,
             teaching_notes: plan.teaching_notes,
             graph_variants: plan.graph_variants ? Object.keys(plan.graph_variants).map(k => ({
               id: k,
@@ -2074,7 +2082,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
               algorithm_runs: plan.graph_variants[k].algorithm_runs,
             })) : [],
             message: plan.success
-              ? `Visualization planned: ${plan.panels.length} panel(s). ${plan.graph_variants ? Object.keys(plan.graph_variants).length + ' graph variant(s) available.' : ''} ${plan.teaching_notes || ''} Now call create_visualization with these panels, then run_algorithm for each planned run. To swap graphs mid-lesson, call create_graph with variant_id.`
+              ? `Visualization planned: ${plan.panels.length} panel(s). ${plan.graph_variants ? Object.keys(plan.graph_variants).length + ' graph variant(s) available.' : ''} ${plan.teaching_notes || ''} Now call create_visualization with these panels${runAlgorithmOwnsContextPanels ? ' (renderer panels ONLY — do NOT pass context_panels; run_algorithm registers this algorithm\'s curated context panels)' : ''}, then run_algorithm for each planned run. To swap graphs mid-lesson, call create_graph with variant_id.`
               : 'Viz planning failed. Construct visualization manually.',
           };
         } else if (block.name === 'get_renderer_docs') {
