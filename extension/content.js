@@ -106,15 +106,17 @@
 
   // ----- design tokens + a11y styles (Step 8) -------------------------------
   // A minimal CSS-variable token set, scoped with relu-* names so it can't clash
-  // with leetcode's chrome, plus focus-visible rings on our controls. The font is
-  // Inter (best-effort load; leetcode CSP may block the link, in which case the
-  // fallback stack — NOT bare system-ui — applies).
+  // with leetcode's chrome, plus focus-visible rings on our controls. Fonts +
+  // accent MIRROR the in-app theme (client/src/index.css @theme: Instrument Sans /
+  // Source Sans 3, --color-accent #d4a574) so the launcher + overlay chrome read as
+  // the same product. Best-effort load; leetcode CSP may block the link, in which
+  // case the fallback stack — NOT bare system-ui — applies.
   function injectReluStyles() {
     if (document.getElementById('relu-tokens')) return;
     try {
       const font = document.createElement('link');
       font.rel = 'stylesheet';
-      font.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+      font.href = 'https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap';
       document.head.appendChild(font);
     } catch { /* head not ready / blocked — fallback stack covers it */ }
 
@@ -122,11 +124,12 @@
     style.id = 'relu-tokens';
     style.textContent = `
       :root {
-        --relu-accent: #4f46e5;
-        --relu-accent-press: #4338ca;
-        --relu-bar-bg: #111827;
+        --relu-accent: #d4a574;
+        --relu-accent-press: #c0956c;
+        --relu-bar-bg: #161615;
+        --relu-text: #e8e5e0;
         --relu-radius: 12px;
-        --relu-font: 'Inter', ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        --relu-font: 'Instrument Sans', 'Source Sans 3', ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       }
       #relu-stuck-btn:focus-visible,
       #relu-overlay button:focus-visible {
@@ -135,11 +138,11 @@
       }
       #relu-rail-grip:hover,
       #relu-rail-grip:focus-visible {
-        background: rgba(99, 102, 241, 0.35);
+        background: rgba(212, 165, 116, 0.35);
         outline: none;
       }
       ::highlight(relu-hint) {
-        background-color: rgba(99, 102, 241, 0.32);
+        background-color: rgba(212, 165, 116, 0.32);
         color: inherit;
       }
     `;
@@ -272,7 +275,7 @@
     if (document.getElementById('relu-stuck-btn')) return;
     const btn = document.createElement('button');
     btn.id = 'relu-stuck-btn';
-    // Anti-slop: no emoji, single restrained indigo accent (no gradient), real font.
+    // Anti-slop: no emoji, the app's warm tan accent (no gradient), real font.
     btn.textContent = 'Stuck? Ask ReLU';
     btn.setAttribute('aria-label', 'Open the ReLU stuck helper');
     Object.assign(btn.style, {
@@ -285,7 +288,7 @@
       borderRadius: '999px',
       border: 'none',
       background: 'var(--relu-accent)',
-      color: '#fff',
+      color: '#0d0d0d', // dark text on the light tan accent (matches the app's text-surface-0 on accent buttons; white would fail contrast)
       font: '600 14px var(--relu-font)',
       cursor: 'pointer',
       boxShadow: '0 4px 14px rgba(0,0,0,.25)',
@@ -332,19 +335,20 @@
     railWidth = clampRail(railWidth); // re-clamp against the current window
     const wrap = document.createElement('div');
     wrap.id = 'relu-overlay';
-    // a11y: a labelled modal dialog; distinct white panel + dark bar, not leetcode chrome.
+    // a11y: a labelled modal dialog in the app's dark theme (surface-0), not leetcode
+    // chrome. Dark panel bg also avoids a white flash before the iframe app paints.
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', 'ReLU helper');
     Object.assign(wrap.style, {
       position: 'fixed', top: '0', right: '0', height: '100vh', width: railWidth + 'px',
-      zIndex: '2147483647', boxShadow: '-8px 0 24px rgba(0,0,0,.3)', background: '#fff',
+      zIndex: '2147483647', boxShadow: '-8px 0 24px rgba(0,0,0,.3)', background: '#0d0d0d',
       display: 'flex', flexDirection: 'column', font: '400 14px var(--relu-font)',
       transition: 'width 0.2s ease', // D2: hybrid sidebar <-> fullscreen
     });
 
     const bar = document.createElement('div');
-    Object.assign(bar.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 4px 14px', background: 'var(--relu-bar-bg)', color: '#fff', font: '600 13px var(--relu-font)' });
+    Object.assign(bar.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px 4px 14px', background: 'var(--relu-bar-bg)', color: 'var(--relu-text)', borderBottom: '1px solid #2a2a28', font: '600 13px var(--relu-font)' });
     bar.innerHTML = '<span>ReLU</span>';
 
     const btnGroup = document.createElement('div');
@@ -362,7 +366,7 @@
     }
 
     // a11y: 44px tap targets, real icon buttons with labels + focus rings.
-    const iconBtnStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '44px', minHeight: '44px', background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '18px', lineHeight: '1', borderRadius: '8px' };
+    const iconBtnStyle = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '44px', minHeight: '44px', background: 'transparent', color: 'var(--relu-text)', border: 'none', cursor: 'pointer', fontSize: '18px', lineHeight: '1', borderRadius: '8px' };
 
     // D2: expand-to-fullscreen toggle. Sidebar default (stay on the problem),
     // pop to full screen for dense viz, collapse back.
@@ -564,7 +568,7 @@
   // text (the SAME source the tutoring model will quote from), runs
   // ReLUAnchor.locateQuote against the live DOM's text nodes, paints the first
   // hit via CSS Custom Highlight API (the per-world open question — VISUALLY
-  // confirm the indigo wash appears), and dumps a fixture pair for
+  // confirm the tan wash appears), and dumps a fixture pair for
   // extension/anchor.test.js. Run on ~20 problems; the hit-rate decides whether
   // the server-side highlight pipeline gets built. Everything logs under TAG.
 
@@ -629,7 +633,7 @@
         if (typeof Highlight !== 'undefined' && CSS.highlights) {
           CSS.highlights.set('relu-hint', new Highlight(range));
           nodes[first.loc.start.seg].parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          log('SPIKE: painted via CSS.highlights — VISUAL CHECK: is an indigo wash visible on:', first.quote);
+          log('SPIKE: painted via CSS.highlights — VISUAL CHECK: is a tan wash visible on:', first.quote);
         } else {
           warn('SPIKE: CSS Custom Highlight API unavailable in this world — mark fallback would be the only path');
         }
@@ -705,7 +709,7 @@
         // node only, strict unwrap on clear).
         const mark = document.createElement('mark');
         mark.className = 'relu-mark';
-        mark.style.backgroundColor = 'rgba(99, 102, 241, 0.32)';
+        mark.style.backgroundColor = 'rgba(212, 165, 116, 0.32)'; // tan accent wash, matches ::highlight(relu-hint)
         mark.style.color = 'inherit';
         range.surroundContents(mark);
         activeMark = mark;

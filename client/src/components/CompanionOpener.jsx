@@ -5,9 +5,9 @@
 //   "Nudge me — no spoilers" → the no-spoiler escalating-hint companion (companionMode)
 //   "Show me how it works"    → the viz-first walkthrough (tpaul's path)
 //
-// The choice is remembered (App persists it) so a returning student is not
-// re-gated every open. Anti-slop: no emoji, a single restrained indigo accent
-// (no gradient). Full token set + focus-trap a11y land in Step 8.
+// The choice is per-open, NOT persisted — re-asked on every overlay open so a
+// remembered "Show me" never spoilers the next problem (/investigate 2026-06-15).
+// Anti-slop: no emoji, the app's warm tan accent (--color-accent), no gradient.
 export default function CompanionOpener({ onChoose, problemTitle }) {
   return (
     <div className="h-full flex flex-col items-center justify-center bg-surface-0 px-6">
@@ -29,12 +29,12 @@ export default function CompanionOpener({ onChoose, problemTitle }) {
             // panel on open (a11y); this opener is the overlay's first interactive view.
             autoFocus
             onClick={() => onChoose('nudge')}
-            className="w-full rounded-lg border border-[#4f46e5] bg-[#4f46e5] px-4 py-3 text-left text-white transition-colors hover:bg-[#4338ca] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4f46e5] focus-visible:ring-offset-2"
+            className="w-full rounded-lg border border-accent bg-accent px-4 py-3 text-left text-surface-0 transition-colors hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0"
           >
             <span className="block text-sm font-semibold font-display">Nudge me — no spoilers</span>
             {/* The consent guarantee, surfaced (CEO review 2026-06-12): states the
                 interaction RULE — escalation only happens when the student asks. */}
-            <span className="mt-0.5 block text-xs font-body text-indigo-100">
+            <span className="mt-0.5 block text-xs font-body text-surface-0/70">
               Hints that get you unstuck — it won&apos;t get more specific unless you ask
             </span>
           </button>
@@ -42,7 +42,7 @@ export default function CompanionOpener({ onChoose, problemTitle }) {
           <button
             type="button"
             onClick={() => onChoose('showme')}
-            className="w-full rounded-lg border border-border-default bg-surface-1 px-4 py-3 text-left text-text-primary transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4f46e5] focus-visible:ring-offset-2"
+            className="w-full rounded-lg border border-border bg-surface-1 px-4 py-3 text-left text-text-primary transition-colors hover:bg-surface-2 hover:border-border-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0"
           >
             <span className="block text-sm font-semibold font-display">Show me how it works</span>
             <span className="mt-0.5 block text-xs font-body text-text-tertiary">
