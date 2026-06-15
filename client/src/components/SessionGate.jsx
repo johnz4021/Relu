@@ -23,13 +23,21 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
   const [keySuccess, setKeySuccess] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
+  const [checkoutOpened, setCheckoutOpened] = useState(false);
 
   const handleSubscribe = async () => {
     setCheckoutLoading(true);
     setCheckoutError(null);
     track('gate_subscribe_clicked', { count, limit });
     try {
-      await startCheckout(); // navigates away to Stripe on success
+      // In the web app this navigates away; in the extension it opens Stripe in
+      // a new tab (returns true) and we stay mounted — so clear loading and let
+      // the user reopen Stripe if they closed the tab without paying.
+      const openedNewTab = await startCheckout();
+      if (openedNewTab) {
+        setCheckoutLoading(false);
+        setCheckoutOpened(true);
+      }
     } catch (err) {
       setCheckoutError(err.message);
       setCheckoutLoading(false);
@@ -129,8 +137,17 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
                 disabled={checkoutLoading}
                 className="w-full px-4 py-2.5 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {checkoutLoading ? 'Redirecting to Stripe...' : 'Subscribe — $20/month'}
+                {checkoutLoading
+                  ? 'Opening Stripe…'
+                  : checkoutOpened
+                    ? 'Reopen Stripe checkout'
+                    : 'Subscribe — $20/month'}
               </button>
+              {checkoutOpened && !checkoutError && (
+                <p className="mt-2 text-xs text-text-tertiary">
+                  Stripe opened in a new tab — finish there, then come back. This unlocks automatically once payment goes through.
+                </p>
+              )}
               {checkoutError && <p className="mt-2 text-xs text-red-400">{checkoutError}</p>}
             </div>
             <div className="border-t border-border my-6" />

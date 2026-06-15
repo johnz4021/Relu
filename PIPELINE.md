@@ -906,6 +906,25 @@ students. The worked example for all of them is `tree_level_order`.
    coverage test (`mapper.coverage.test.js` #2), so they're excluded from the
    alignment checks above.
 
+### Client-side reveal-gate (companion nudge mode)
+
+In the leetcode companion overlay's "Nudge me — no spoilers" mode, context panels can
+front-run the hint ladder — `log` panels print the answer order (TRAVERSAL LOG),
+`collection` panels show the mechanism (QUEUE), the `pseudocode` panel hints the approach.
+So the client gates ALL context panels behind the reveal: `selectVisibleContextPanels`
+(`client/src/lib/companionPanels.js`) returns `[]` while `companionNudge && !keyInsightRevealed`,
+and `App.jsx` derives every panel render site (state panels, pseudocode, the context-only
+layout) from that gated list. `keyInsightRevealed` mirrors the server's per-turn
+`reveals_key_insight` self-report, reset at idle so each lesson re-gates. Concept /
+"show me" walkthrough / web-app modes are never gated. Doctrine + decision: TODOS.md
+"Companion context-panel reveal-gate", /plan-design-review 2026-06-15.
+
+Once revealed, the panels are also width-gated in the embed rail: below Tailwind `md`
+(the sidebar width) the state-panel block is `hidden md:block` and a slim
+"▸ State · … · expand ⤢" disclosure takes its place, posting `relu_request_expand` over
+the private port so `content.js` (`setExpanded`) widens the rail to fullscreen — where the
+iframe crosses `md` and the panels render beside the transcript.
+
 ### Critical constraints
 
 **Panel registry closes at `run_algorithm` time.** Panels listed in
@@ -1351,7 +1370,9 @@ agent. The seams (all in `server/guidedAgent.js`):
 - **Per-turn self-report** — in companion mode the model sets optional
   `{learner_state, specificity_level, reveals_key_insight, offer_made, offer_modality,
   escalation_consented}` on `conversational_reply` / `emit_segment` (a metacognitive
-  checkpoint that stops the jump; non-companion modes omit them). The two consent
+  checkpoint that stops the jump; non-companion modes omit them). `reveals_key_insight`
+  also drives the client context-panel reveal-gate (§8 "Client-side reveal-gate"): the
+  panels stay hidden in nudge mode until it flips true. The two consent
   fields (2026-06-12) are the audit trail of the consent contract: `offer_made` marks
   an explicit escalation offer, `escalation_consented` marks a licensed specificity
   rise. `companionSelfReport()` (agentLib.js) normalizes it; the server forwards it on

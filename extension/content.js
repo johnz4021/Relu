@@ -374,8 +374,12 @@
     expandBtn.title = 'Expand to full screen';
     expandBtn.setAttribute('aria-label', 'Expand to full screen');
     Object.assign(expandBtn.style, iconBtnStyle);
-    expandBtn.addEventListener('click', () => {
-      expanded = !expanded;
+    // Single source of truth for the sidebar<->fullscreen toggle, so the in-frame app
+    // can request expansion (the "State · expand" disclosure that reveals the context
+    // panels post-reveal) over the private port — not only the button.
+    function setExpanded(next) {
+      if (next === expanded) return;
+      expanded = next;
       overlayExpanded = expanded; // module-level mirror for the highlight ack's `visible`
       wrap.style.width = expanded ? '100vw' : railWidth + 'px';
       grip.style.display = expanded ? 'none' : ''; // no resize affordance over a fullscreen panel
@@ -384,7 +388,8 @@
       expandBtn.title = label;
       expandBtn.setAttribute('aria-label', label);
       log(expanded ? 'expanded to fullscreen' : 'collapsed to sidebar');
-    });
+    }
+    expandBtn.addEventListener('click', () => setExpanded(!expanded));
 
     const close = document.createElement('button');
     close.type = 'button';
@@ -515,6 +520,9 @@
       }
       if (d && d.type === 'relu_highlight') {
         handleHighlightCommand(d);
+      }
+      if (d && d.type === 'relu_request_expand') {
+        setExpanded(true); // the in-frame "State · expand" disclosure asked to reveal panels
       }
     };
     let authSent = false; // transfer the port exactly once per overlay

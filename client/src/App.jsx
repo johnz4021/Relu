@@ -30,6 +30,7 @@ import { initContextManager, destroyContextManager } from './lib/contextManager'
 import { supabase } from './lib/supabase';
 import { track } from './lib/posthog';
 import { OFFER_CHIPS, STUCK_MESSAGE } from './lib/offerChips';
+import { selectVisibleContextPanels } from './lib/companionPanels';
 
 
 export default function App() {
@@ -58,6 +59,10 @@ export default function App() {
   // before embedIntent — can read companion state and fire each rung once.
   const companionActiveRef = useRef(false);
   const companionFunnelRef = useRef({ nudgeGiven: false, structureShown: false, solutionShown: false });
+  // Reactive mirror of the funnel's once-only reveal signal. Drives the companion
+  // context-panel reveal-gate (design /plan-design-review 2026-06-15): panels stay
+  // hidden in nudge mode until the tutor reports it revealed the key insight.
+  const [keyInsightRevealed, setKeyInsightRevealed] = useState(false);
   // Private MessagePort to the extension content script (declared here, before
   // onMessage, for the same reason as the companion refs above). Set in the embed
   // handshake below; carries session updates out AND highlight commands/results.
@@ -141,6 +146,10 @@ export default function App() {
           f.solutionShown = true;
           track('companion_solution_viz_shown', { learner_state: report.learner_state });
         }
+        // Un-gate the context panels for the reveal/trace rung. Kept OUTSIDE the
+        // once-only funnel guard so a restarted lesson (funnel already fired) still
+        // re-reveals after its own reveal turn; reset to false at idle.
+        if (report?.reveals_key_insight) setKeyInsightRevealed(true);
       }
 
       // Route all viz actions through the renderer registry.
@@ -346,6 +355,17 @@ export default function App() {
     if (connected && user) send({ type: 'check_session_status' });
   }, [connected, user, send]);
 
+  // Re-check the gate whenever the user returns to the tab — e.g. after paying
+  // in the Stripe popup (Checkout can't be framed, so it opens a top-level tab).
+  // The webhook has already synced the subscription server-side; this re-asks so
+  // the embed panel unlocks the moment the user switches back, without a reload.
+  useEffect(() => {
+    if (!connected || !user) return;
+    const recheck = () => { if (!document.hidden) send({ type: 'check_session_status' }); };
+    document.addEventListener('visibilitychange', recheck);
+    return () => document.removeEventListener('visibilitychange', recheck);
+  }, [connected, user, send]);
+
   // Returning from Stripe Checkout (?checkout=success|cancel). The webhook has
   // already synced the subscription in the success case; the on-connect
   // check_session_status above refreshes the gate. Just acknowledge + clean URL.
@@ -355,10 +375,25 @@ export default function App() {
     if (!checkout) return;
     track(checkout === 'success' ? 'checkout_completed' : 'checkout_canceled', {});
     if (checkout === 'success') {
-      setCheckoutToast('Subscription active — welcome to ReLU Pro!');
-      setTimeout(() => setCheckoutToast(null), 6000);
+      // popup=1 marks the embed checkout popup tab (set server-side on the
+      // success_url). Its job is done once payment completes, so close it and
+      // drop the user straight back to the leetcode panel — which re-checks the
+      // gate on focus. window.close() only works on script-opened tabs, so the
+      // standalone web tab is an automatic no-op; if the browser refuses, fall
+      // back to a clear "you can close this" message.
+      if (params.get('popup') === '1') {
+        setCheckoutToast('Subscription active — closing this tab…');
+        setTimeout(() => {
+          window.close();
+          setCheckoutToast('Subscription active — you can close this tab and return to LeetCode.');
+        }, 1200);
+      } else {
+        setCheckoutToast('Subscription active — welcome to ReLU Pro!');
+        setTimeout(() => setCheckoutToast(null), 6000);
+      }
     }
     params.delete('checkout');
+    params.delete('popup');
     const rest = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
   }, []);
@@ -430,6 +465,18 @@ export default function App() {
       companionFunnelRef.current = { nudgeGiven: false, structureShown: false, solutionShown: false };
     }
   }, [embedMode, embedIntent]);
+
+  // Re-gate the context panels between lessons: a fresh problem starts at idle, so a
+  // returning/restarted nudge lesson hides its panels again until the next reveal.
+  useEffect(() => {
+    if (state.status === 'idle') setKeyInsightRevealed(false);
+  }, [state.status]);
+
+  // The in-rail "State · expand" disclosure asks the content script to go fullscreen
+  // (the iframe can't resize its own rail). Mirrors the highlight relay over the port.
+  const requestExpand = useCallback(() => {
+    try { embedAuthPortRef.current?.postMessage({ type: 'relu_request_expand' }); } catch { /* port closed */ }
+  }, []);
 
   // Latest auth session, mirrored to a ref so the message handler can post the
   // current session the instant the port arrives (no wait for the next render).
@@ -755,12 +802,21 @@ export default function App() {
     state.vizPanels.length > 1 || state.vizPanels.some((p) => p.renderer !== 'graph')
   );
   const noVis = !state.graph && (!state.vizPanels || state.vizPanels.length === 0);
-  const contextOnly = noVis && state.contextPanels.length > 0;
-  const transcriptOnly = noVis && state.contextPanels.length === 0 && !showSelector;
+
+  // Companion reveal-gate (design /plan-design-review 2026-06-15): in nudge mode the
+  // context panels can spoil the hint ladder — TRAVERSAL LOG prints the answer order,
+  // QUEUE shows the mechanism, pseudocode hints the approach — so suppress ALL of them
+  // until the tutor reports it revealed the key insight. Concept / "show me" / web-app
+  // modes are never gated. Everything below derives from this gated list, so a fresh
+  // nudge lesson shows just graph + transcript until the reveal.
+  const companionNudge = embedIntent === 'nudge';
+  const visibleContextPanels = selectVisibleContextPanels(state.contextPanels, { companionNudge, keyInsightRevealed });
+  const contextOnly = noVis && visibleContextPanels.length > 0;
+  const transcriptOnly = noVis && visibleContextPanels.length === 0 && !showSelector;
 
   // Split context panels: pseudocode lives alongside the viz; state panels live in the sidebar
-  const pseudocodePanel = state.contextPanels.find(p => p.type === 'pseudocode') || null;
-  const statePanels = state.contextPanels.filter(p => p.type !== 'pseudocode');
+  const pseudocodePanel = visibleContextPanels.find(p => p.type === 'pseudocode') || null;
+  const statePanels = visibleContextPanels.filter(p => p.type !== 'pseudocode');
 
   return (
     <LazyMotion features={domAnimation}>
@@ -922,7 +978,7 @@ export default function App() {
               <ResizableSplit
                 initialRatio={0.35}
                 className="flex-1"
-                top={<ContextPanelHost panels={state.contextPanels} className="h-full overflow-auto max-h-[40vh]" />}
+                top={<ContextPanelHost panels={visibleContextPanels} className="h-full overflow-auto max-h-[40vh]" />}
                 bottom={<Transcript segments={state.segments} agentStatus={state.agentStatus} onOfferChip={handleOfferChip} centered />}
               />
               <Controls
@@ -1007,9 +1063,32 @@ export default function App() {
             {/* Right (stacked: bottom): state panels (capped) + transcript + controls */}
             <div className="w-full md:w-1/3 flex-1 md:flex-none min-h-0 flex flex-col overflow-hidden bg-surface-1">
               {statePanels.length > 0 && (
-                <div className="flex-shrink-0 border-b border-border overflow-y-auto" style={{ maxHeight: 200 }}>
-                  <ContextPanelHost panels={statePanels} />
-                </div>
+                <>
+                  {/* In the embed rail the panels are hidden below md (the sidebar
+                      width) and restored when expanded to fullscreen; on the
+                      standalone web app they always show. */}
+                  <div className={`flex-shrink-0 border-b border-border overflow-y-auto ${embedMode ? 'hidden md:block' : ''}`} style={{ maxHeight: 200 }}>
+                    <ContextPanelHost panels={statePanels} />
+                  </div>
+                  {/* Sidebar disclosure (embed, narrow only): names the live state
+                      that's been collapsed and expands the rail to reveal it. Safe to
+                      expose because statePanels are already reveal-gated upstream. */}
+                  {embedMode && (
+                    <button
+                      type="button"
+                      onClick={requestExpand}
+                      title="Expand to see the live state panels"
+                      className="md:hidden flex items-center justify-between gap-2 px-3 py-2 border-b border-border bg-surface-1 text-xs text-text-tertiary hover:text-text-primary hover:bg-surface-2 transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span aria-hidden="true">▸</span>
+                        <span className="font-medium uppercase tracking-wide shrink-0">State</span>
+                        <span className="truncate text-text-tertiary normal-case">{statePanels.map((p) => p.title).filter(Boolean).join(', ')}</span>
+                      </span>
+                      <span className="flex items-center gap-1 text-accent font-medium shrink-0">expand <span aria-hidden="true">⤢</span></span>
+                    </button>
+                  )}
+                </>
               )}
               <div className="flex-1 overflow-hidden">
                 <Transcript segments={state.segments} agentStatus={state.agentStatus} onOfferChip={handleOfferChip} />

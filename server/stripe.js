@@ -144,7 +144,10 @@ export function registerStripeRoutes(app) {
         ...(existing?.stripe_customer_id
           ? { customer: existing.stripe_customer_id }
           : { customer_email: user.email }),
-        success_url: `${appUrl(req)}/?checkout=success`,
+        // The embed checkout runs in a popup tab (Stripe can't be framed); flag
+        // it so the success page can auto-close and drop the user back to the
+        // leetcode panel. The standalone web flow omits the flag (no popup).
+        success_url: `${appUrl(req)}/?checkout=success${req.body?.embed ? '&popup=1' : ''}`,
         cancel_url: `${appUrl(req)}/?checkout=cancel`,
       });
       res.json({ url: session.url });
