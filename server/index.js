@@ -633,6 +633,10 @@ function attachHandlers(ws, session) {
           // overlay sets this so the intake/system prompt switches to the no-spoiler
           // escalating-hint frame instead of the paste-to-learn walkthrough.
           session.companionMode = !!msg.companionMode;
+          // SHOW ME / DIRECT WALKTHROUGH (eng review 2026-06-15): the overlay's "Show me
+          // how it works" intent — skip the STAGE 0 intake and jump straight to viz +
+          // explanation. companionMode takes precedence if both are somehow set.
+          session.directWalkthrough = !!msg.directWalkthrough;
 
           if (session.userId) {
             const convId = await createConversation(session.userId, `[LeetCode] ${title || msg.problemText.slice(0, 100)}`);

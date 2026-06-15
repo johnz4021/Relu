@@ -403,8 +403,9 @@ export default function App() {
       setVizTier(null);
       setLcParsed({ loading: true, problemText: data.problemText });
       // companionMode comes from the overlay opener intent ("Nudge me" → true);
-      // the web app omits it (false → paste-to-learn walkthrough).
-      startLesson({ problemText: data.problemText, companionMode: data.companionMode });
+      // directWalkthrough comes from "Show me how it works" → skip intake, jump to viz.
+      // The web app omits both (false → paste-to-learn walkthrough with STAGE 0 intake).
+      startLesson({ problemText: data.problemText, companionMode: data.companionMode, directWalkthrough: data.directWalkthrough });
     },
     [startLesson]
   );
@@ -584,6 +585,7 @@ export default function App() {
     handleSelectAlgorithm(null, {
       problemText: embedPendingProblemRef.current,
       companionMode: embedIntent === 'nudge',
+      directWalkthrough: embedIntent === 'showme',
     });
   }, [embedMode, connected, embedTick, embedIntent, handleSelectAlgorithm]);
 

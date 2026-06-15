@@ -240,6 +240,45 @@ describe('buildIntakeUserText', () => {
     // LC context is preserved regardless of mode.
     expect(text).toContain('[TIER 1 TRACE]');
   });
+
+  // directWalkthrough (eng review 2026-06-15): "Show me how it works" swaps the closing
+  // instruction to skip the STAGE 0 intake and jump straight to viz, but keeps LC context.
+  it('directWalkthrough: swaps to SHOW ME — DIRECT WALKTHROUGH, skips intake, keeps LC context', () => {
+    const session = {
+      mode: 'leetcode',
+      hasViz: true,
+      directWalkthrough: true,
+      _leetcodeAlgorithmKey: 'two_sum',
+      _leetcodeTier: 1,
+      _leetcodeTrace: [{}, {}, {}],
+      _leetcodeRenderer: 'array',
+    };
+    const text = buildIntakeUserText(session, PROBLEM);
+    expect(text).toContain('[SHOW ME — DIRECT WALKTHROUGH]');
+    expect(text).toContain('SKIP the STAGE 0 intake');
+    // Must NOT carry the standard intake instruction, and must NOT be no-spoiler companion.
+    expect(text.endsWith(STANDARD_TAIL)).toBe(false);
+    expect(text).not.toContain('start with the STAGE 0 intake question');
+    expect(text).not.toContain('[STUCK COMPANION MODE]');
+    // LC trace context is still assembled — the viz flow it points at is reused as-is.
+    expect(text).toContain('[TIER 1 TRACE]');
+  });
+
+  // REGRESSION PIN: a session without directWalkthrough is byte-unchanged (standard tail).
+  it('directWalkthrough absent: standard intake instruction is unchanged', () => {
+    const text = buildIntakeUserText({ mode: 'leetcode', hasViz: true, _leetcodeAlgorithmKey: 'two_sum', _leetcodeTier: 1, _leetcodeTrace: [{}], _leetcodeRenderer: 'array' }, PROBLEM);
+    expect(text.endsWith(STANDARD_TAIL)).toBe(true);
+    expect(text).not.toContain('[SHOW ME — DIRECT WALKTHROUGH]');
+  });
+
+  // PRECEDENCE PIN: companionMode (no-spoiler ladder) is NEVER downgraded by
+  // directWalkthrough, even if both flags are somehow set on the session.
+  it('companionMode wins over directWalkthrough (no-spoiler ladder is never downgraded)', () => {
+    const session = { mode: 'leetcode', hasViz: true, companionMode: true, directWalkthrough: true, _leetcodeAlgorithmKey: 'two_sum', _leetcodeTier: 1, _leetcodeTrace: [{}], _leetcodeRenderer: 'array' };
+    const text = buildIntakeUserText(session, PROBLEM);
+    expect(text).toContain('[STUCK COMPANION MODE]');
+    expect(text).not.toContain('[SHOW ME — DIRECT WALKTHROUGH]');
+  });
 });
 
 describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {

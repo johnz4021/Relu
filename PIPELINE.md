@@ -34,11 +34,10 @@ Client (WebSocket)
        ▼
   index.js (WS gateway + session manager)
        │
-  ┌────┴────────────────────────────────────────┐
-  │                                             │
-  ▼
+       │
+       ▼
 guidedAgent.js
-(Socratic — student-driven)
+(Socratic — student-driven; single agent for both Guided + LeetCode modes)
        │
        ▼
    solver.js    graphBuilder.js
@@ -46,10 +45,12 @@ guidedAgent.js
        │
        ▼
   algorithms/registry.js
-  ┌────┴──────────────────────────────────────┐
-  │ Tier 1: hand-written run() (103 algorithms) │
-  │ Tier 2: authorAgent.js (unknown patterns)  │
-  └────────────────────────────────────────────┘
+  ┌────┴───────────────────────────────────────────────────┐
+  │ Tier 1: hand-written run() (104 algorithms)             │
+  │ Tier 2: authorAgent.js — DORMANT (see §5 Stage 2)       │
+  │ Tier 3: agent-authored live viz ← unknown patterns      │
+  │         (hand-built viz_actions, no trace)              │
+  └─────────────────────────────────────────────────────────┘
        │
        ▼
    vizMapper.js
@@ -79,6 +80,12 @@ session = {
   guidedResponse: object,      // pending student MC/text response
   guidedResponseResolver: fn,  // promise resolver awaiting student response
   followUpResolver: fn,        // promise resolver awaiting post-lesson follow-up
+  pauseResolver: fn,           // promise resolver awaiting pause→resume
+  interruptFlag: object|null,  // pending interrupt payload (drives interrupt handling)
+  interruptAbortFlag: bool,    // (set dynamically) abort current TTS step on interrupt
+  pendingGuidedResponses: [],  // buffered student MC/text responses
+  guidedMessageQueue: [],      // buffered student free-text messages
+  conversationId,              // DB conversation linkage
   anthropicClient: Anthropic,  // default or BYOK client
   currentGraph, currentTrace,  // live algorithm state
   _emittedTraceSteps: [],       // trace indices already played
@@ -89,7 +96,7 @@ session = {
 
 **Reconnect grace period:** 15 minutes. If a WS disconnects mid-lesson, the session stays alive and the new WS is swapped in on reconnect.
 
-**Session gate:** 30 free sessions per user. Beyond that, requires a BYOK Anthropic key stored encrypted in Supabase.
+**Session gate:** 50 free sessions per user (`FREE_SESSION_LIMIT`, `index.js`). Beyond that, the user needs either an active paid subscription (which runs on the server's own Anthropic key) or a BYOK Anthropic key stored encrypted (AES-256-GCM, `crypto.js`) in Supabase's `user_settings` table. `checkSessionGate()` checks subscription first, then falls back to BYOK.
 
 ---
 
@@ -97,8 +104,10 @@ session = {
 
 | WS message | Handler | Notes |
 |---|---|---|
-| `start_leetcode` | `leetcodeAgent.parseLeetcodeProblem()` → pre-run trace → `guidedAgent.startGuidedSession()` | LeetCode entry |
+| `start_leetcode` | `leetcodeAgent.parseLeetcodeProblem()` → pre-run trace → `guidedAgent.startGuidedSession()` | **Universal new-lesson entry** (despite the name). One message for all new lessons: web-app paste-to-learn walkthrough (`companionMode=false` & `directWalkthrough=false`), the LeetCode overlay's no-spoiler "Nudge me" companion (`companionMode=true`), and "Show me how it works" direct walkthrough (`directWalkthrough=true`). These sub-modes are server-side params on this single message, not distinct WS messages. |
 | `resume_conversation` | `guidedAgent.resumeGuidedSession()` | Restores saved agent state from DB |
+
+There is no separate `start`/`start_guided` message — `start_leetcode` and `resume_conversation` are the only two session-entry WS messages.
 
 Both modes drive the same teaching loop using the same tool set.
 
@@ -160,7 +169,7 @@ No trace. The agent constructs the visualization entirely through **manual viz_a
 
 ### The `run_algorithm` guardrail
 
-Both agent system prompts enforce this explicitly:
+The guided agent system prompt (`GUIDED_SYSTEM_PROMPT` in `server/guidedAgent.js`) enforces this explicitly in its GUARDRAILS section:
 
 > "In non-execution modes (modeling, greedy_design, dp_design, dc_design, runtime), do NOT call run_algorithm unless the student explicitly asks."
 
@@ -249,7 +258,7 @@ This is what gates whether `run_algorithm` can legally be called. If either cond
 
 When `paradigmShift: true`, the solver also returns `obviousApproach` — the approach most students would try first. The agent is explicitly instructed:
 
-> "PARADIGM SHIFT ALERT — the obvious approach (X) won't achieve the target complexity. Explain the non-obvious insight clearly — don't follow the obvious path."
+> "PARADIGM SHIFT ALERT — the obvious approach (X) won't achieve the target complexity. Scaffold toward the non-obvious insight early. Do not let the student invest heavily in the wrong approach."
 
 In practice this means the agent will acknowledge the naive approach, explain why it fails (usually a complexity argument), and then reveal the non-obvious technique. This is injected directly into the solver context block appended to the system prompt, not something the agent infers on its own.
 
@@ -286,6 +295,7 @@ Tier 3 (`leetcodeRouting.eval.test.js` pins this).
 
 | Field | Description |
 |---|---|
+| `solution` | Complete solution text — the approach and key steps (the full north-star answer; injected as `SOLUTION:` in the solver context block) |
 | `reasoning_mode` | Teaching mode — drives everything downstream |
 | `target_algorithm` | Algorithm registry key (e.g. `dijkstra`) — `algorithm_execution` only |
 | `closest_algorithm` | For design modes, the most related algorithm (teaching context only) |
@@ -308,7 +318,7 @@ Tier 3 (`leetcodeRouting.eval.test.js` pins this).
 The solver result is injected into the agent's system prompt as a hidden `SOLVER CONTEXT` block immediately after `run_solver` returns:
 
 ```
-===== SOLVER CONTEXT (INTERNAL — do not reveal to student) =====
+===== SOLVER CONTEXT (INTERNAL — NEVER REVEAL TO STUDENT) =====
 CLASSIFICATION: DP_DESIGN | ALGORITHM: knapsack
 OPTIMAL APPROACH: Bottom-up DP with 2D table
 COMPLEXITY: O(n * W) time, O(n * W) space
@@ -316,9 +326,9 @@ KEY INSIGHT: Subproblem dp[i][w] = max value using first i items with capacity w
 SOLUTION: [full solution text]
 [PARADIGM SHIFT ALERT if applicable]
 RULES:
-- Explain using THIS verified approach
+- Guide toward THIS verified approach
 - Never mention you pre-solved it
-- Explain directly and completely
+- Still use Socratic method, but steer toward the known answer
 =====
 ```
 
@@ -339,6 +349,8 @@ Constructs a concrete example graph for the problem. Returns:
 
 ```
 {
+  success: true,          // false on planner failure/timeout → caller skips graph registration
+  reasoning: "...",       // planner's rationale string (logged, not rendered)
   panels: [{ id, renderer, title, graph: { nodes, edges, positions, directed } }],
   algorithm_runs: [{ algorithm, graph_id, source, sink }],
   context_panels: [...],
@@ -377,7 +389,7 @@ Context panels are **auto-configured** server-side via `getModeDefaultPanels(rea
 Every algorithm in the registry has:
 ```js
 {
-  run: fn | null,      // null = Tier 2 only
+  run: fn,             // synchronous trace generator — present on every entry (all Tier 1)
   renderer: string,    // which renderer to use
   category: string,
   defaultInput: {},    // used when no input is provided
@@ -388,8 +400,9 @@ Every algorithm in the registry has:
                        // are ambiguous with two panels of one type and get stripped).
                        // pipeline.coverage's multi-panel gate asserts each declared
                        // panel receives a structural action. (median_finder, merge_k_sorted)
-  tier: 2,            // explicitly marked for Tier 2-only
 }
+// NOTE: no entry carries a `tier` field, and no entry sets `run: null` — `tier` (1|2)
+// is set dynamically on the run RESULT, not on the registry entry.
 ```
 
 **Curating `defaultInput`.** Tier 1 lessons teach on `defaultInput` (not the
@@ -432,18 +445,18 @@ illustrate auto-save now captures `lastVizMessage`/`rendererVizHistory` so
 restore remounts non-graph (incl. multi-panel) layouts; an empty `set_tree`
 (root: null) is legal and clears a panel's waiting state.
 
-**Tier 1 algorithms by renderer (103 total):**
+**Tier 1 algorithms by renderer (104 total):**
 
 | Renderer | Algorithms |
 |---|---|
-| `graph` | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, poly_reduction, trie, union_find, topological_sort, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
-| `array` | mergesort, quickselect, sliding_window, binary_search, two_pointers, max_subarray, rotate_array, container_water, trapping_rain_water, product_except_self, move_zeroes, find_peak, search_rotated, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
-| `table` | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum, stock_dp, interval_dp, palindrome_dp, bitmask_dp, valid_sudoku, board_backtracking, maximal_square |
-| `tree` | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path, tree_dp, top_k_heap, median_finder, k_closest_points, lca_tree, validate_bst, linked_list_cycle, merge_k_sorted |
-| `linked` | linked_list_reversal, stack_operations, queue_operations, monotonic_stack |
-| `interval` | interval_merge, interval_scheduling |
-| `string` | sliding_window_string, min_window_substring, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
-| `context` | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, longest_consecutive, bit_ops, math_simulation, greedy_choice, jump_game_ii, valid_parentheses, task_scheduler, lru_cache, fast_power, gcd_algorithm, majority_vote |
+| `graph` (20) | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, poly_reduction, trie, union_find, topological_sort, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
+| `array` (27) | mergesort, quickselect, sliding_window, binary_search, koko_eating_speed, two_pointers, two_sum_hash, max_subarray, rotate_array, container_water, trapping_rain_water, product_except_self, move_zeroes, find_peak, search_rotated, prefix_sum, difference_array, lis, house_robber, sieve_primes, spiral_matrix, rotate_matrix, combination_sum, subsets, permutations, sliding_window_max, jump_game |
+| `table` (14) | knapsack, edit_distance, coin_change, lcs, word_break, climbing_stairs, min_path_sum, stock_dp, interval_dp, palindrome_dp, bitmask_dp, valid_sudoku, board_backtracking, maximal_square |
+| `tree` (13) | huffman, heap_ops, bst_insert, tree_depth_dfs, tree_level_order, tree_path, tree_dp, top_k_heap, median_finder, k_closest_points, lca_tree, validate_bst, merge_k_sorted |
+| `linked` (5) | linked_list_reversal, stack_operations, queue_operations, monotonic_stack, linked_list_cycle |
+| `interval` (2) | interval_merge, interval_scheduling |
+| `string` (8) | sliding_window_string, min_window_substring, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
+| `context` (15) | hash_map_grouping, frequency_count, string_hash, set_operations, longest_consecutive, bit_ops, math_simulation, greedy_choice, jump_game_ii, valid_parentheses, task_scheduler, lru_cache, fast_power, gcd_algorithm, majority_vote |
 
 #### Tier 2: AI-Generated Trace Generators (DORMANT)
 
@@ -462,7 +475,7 @@ restore remounts non-graph (incl. multi-panel) layouts; an empty `set_tree`
 
 As designed: Tier 2 fired when a LeetCode problem did **not** match any registry entry (or matched below the 0.7 confidence bar). The extraction schema (`leetcodeAgent.js`) keeps `algorithm_key` enum-constrained to registry keys, but additionally requires a free-form **`pattern_key`** (snake_case pattern descriptor, e.g. `product_except_self`) plus a **`pattern_renderer`** whenever `algorithm_key` is null or low-confidence — these still flow to the session today: the Tier 3 intake block uses the renderer hint, and the pattern data feeds the Tier 1 promotion loop. There are no pre-defined `run: null` stubs in the registry.
 
-Mid-session, `run_algorithm` (`agentLib.js`) accepts off-registry keys: the tool schema has **no enum** on `algorithm` (a static registry enum would make pattern keys unpassable — the N-Queens incident: the model rerouted to the nearest registry key and ran the wrong algorithm). Typo protection lives server-side instead: an unknown key that is not the session's pattern key is rejected with an error (a hallucinated key must never trigger a 20-60s authoring call). When the key IS the session's Tier 2 pattern key, the handler **reuses `session._leetcodeTrace`** from the start_leetcode pre-run rather than regenerating — regeneration could stall the lesson and paint a different trace than the one already on screen. For off-registry keys generally: capability validation is skipped, empty agent input defaults to the parsed Example 1 `test_case`, the renderer comes from the generated result, and context-renderer traces get an auto-registered `algorithm_state` panel. The parser's `pattern_renderer` is honored at generation time (`context.renderer` in `runAlgorithmWithFallback`, ahead of `guessRenderer`; `recursion_tree` maps to `graph`). `applyClassification` likewise accepts the session pattern key as an execution target while still rejecting solver-hallucinated names.
+Mid-session, `run_algorithm` (`agentLib.js`) accepts off-registry keys: the tool schema has **no enum** on `algorithm` (a static registry enum would make pattern keys unpassable — the N-Queens incident: the model rerouted to the nearest registry key and ran the wrong algorithm). Typo protection lives server-side instead: an unknown key that is not the session's pattern key is rejected with an error (a hallucinated key must never trigger a 20-60s authoring call). When the key IS the session's Tier 2 pattern key, the handler **reuses `session._leetcodeTrace`** from the start_leetcode pre-run rather than regenerating — regeneration could stall the lesson and paint a different trace than the one already on screen. For off-registry keys generally: capability validation is skipped, empty agent input defaults to the parsed Example 1 `test_case`, the renderer comes from the generated result, and context-renderer traces get an auto-registered `algorithm_state` panel. The parser's `pattern_renderer` is honored at generation time (`context.renderer` in `runAlgorithmWithFallback`, ahead of `guessRenderer`). `recursion_tree` is a first-class renderer (its own manifest entry + `RecursionTreeRenderer`), passed through unchanged — there is no remap to `graph`. `applyClassification` likewise accepts the session pattern key as an execution target while still rejecting solver-hallucinated names.
 
 The trace0-graph synthesis in the `run_algorithm` graph branch normalizes edge fields (`{from,to}` → `{source,target}`) — backtracking's trace emits `{from,to}` and the client GraphRenderer hard-crashed on undefined sources before this. The client also skips malformed edges defensively (`GraphRenderer.jsx`).
 
@@ -475,7 +488,7 @@ runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
        │    └── if cached: executeTraceInSandbox(cached.code, input)
        └── if not cached:
             ├── generateTraceGenerator(algorithmId, renderer, description)  ← authorAgent.js
-            ├── executeTraceInSandbox(code, input, 5000ms)                   ← sandbox.js
+            ├── executeTraceInSandbox(code, input, 5000ms, renderer)         ← sandbox.js
             ├── Validate node IDs (graph renderer only)
             └── if trace.length >= 3 AND outputMatchesExpected(trace, expectedOutput):
                  └── cacheGenerator(algorithmId, code, description)
@@ -488,28 +501,28 @@ runAlgorithmWithFallback(algorithmId, input, { description, expectedOutput })
 
 **`authorAgent.js`:** Writes a JS function `run(input) { return trace; }` for the given algorithm + renderer. Each step must include `type`, `description`, and renderer-specific fields. The final `result` step must include `output: "<answer as plain string>"`. For `context` renderer, every step must include `viz_actions` that update the `algorithm_state` panel. The generation prompt embeds `buildRendererDocs([renderer])` from `rendererManifest.js` as the authoritative action reference: any step on any renderer MAY embed `viz_actions` (they take precedence over the step-field mapping and are schema-checked by the emit_segment enforcement ladder), but for non-context renderers the standard step fields are preferred.
 
-**`sandbox.js`:** Executes generated code in isolation with a 5-second timeout.
+**`sandbox.js`:** Executes generated code in an isolated VM context with a 5-second timeout, then — when a `renderer` (4th arg, passed by the registry call sites) is present — runs `validateTraceStructure(trace, renderer)`. That gate THROWS on: fewer than 2 steps; per-renderer minimum step counts (`MIN_STEPS` = 4 for context/array/table/graph/string, 3 for tree); and, for the `context` renderer, any step missing `viz_actions[algorithm_state]` or no non-init step with non-empty entries ("panel will be blank" guard). Missing array/table/graph field references only warn. A throw here drives the 3-attempt retry loop in `runAlgorithmWithFallback`.
 
 **`cache.js`:** Two-level cache (L1 in-memory Map, L2 Supabase `generated_traces` table). Persists generated code keyed by compound `algorithmId:title` so it doesn't regenerate on every request. Hit count tracked per key. Exports `buildCacheKey`, `outputMatchesExpected`, `getCachedGenerator`, `cacheGenerator`, `incrementHitCount`.
 
-**Key difference:** Tier 1 traces are guaranteed correct (hand-written, deterministic, covered by `tier1.deep.test.js`). Tier 2 traces are generated on-demand for unknown patterns — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1 | 2` to the client so it can display appropriate confidence UI.
+**Key difference:** Tier 1 traces are guaranteed correct (hand-written, deterministic, covered by `tier1.deep.test.js`). Tier 2 traces are generated on-demand for unknown patterns — they get cached only when the trace passes both a 3-step minimum and an output correctness check against Example 1. The LeetCode entry point exposes `viz_tier: 1` (Tier 1 trace) or `viz_tier: 3` (Tier 3 live viz) on `lc_parsed`, with `null` when the Tier 1 pre-run fails, so the client can display appropriate confidence UI. While Tier 2 is dormant, `viz_tier: 2` is never emitted.
 
 #### Tier 3: Model-Authored Live Viz (the designed fallback)
 
-When no registry trace exists (classifier returned no key, or below the 0.7 confidence bar), the session runs in **Tier 3 live viz** mode — the designed fallback under the 2026-06-11 viz strategy, not a degradation. `hasViz` stays `false` (`viz_tier: 3` on `lc_parsed`), the client shows a one-shot transparency toast ("drawn live, may be rougher — Looks wrong? Report it" → `/api/viz-request`, the demand signal for Tier 1 promotion), `computeActiveTools` filters ONLY `run_algorithm` (there is no trace to load), and the intake text carries a `[LEETCODE MODE — TIER 3 LIVE VIZ]` block (or the companion `[COMPANION — OFF REGISTRY]` variant): the agent mounts the recommended renderer (`pattern_renderer` from the parser, default `array`), renders the problem's own Example 1 input, and hand-builds `viz_actions` in every `emit_segment` — the same model-authored path the on-the-fly eval suite measures at ≥95%. The renderer's manifest docs are injected into the intake block so the action contract is in context from turn 1. The enforcement ladder (loud per-action rejection, whole-call failure when everything is invalid) is what makes improvised viz safe — before it, these sessions hard-filtered the viz pipeline and opened with "I don't have a visualization for this one."
+When no registry trace exists (classifier returned no key, or below the 0.7 confidence bar), the session runs in **Tier 3 live viz** mode — the designed fallback under the 2026-06-11 viz strategy, not a degradation. `hasViz` stays `false` (`viz_tier: 3` on `lc_parsed`), the client shows a one-shot transparency toast (heading "Live-drawn visualization", body "No curated visualization for this one yet — your tutor draws it live, so it may be rougher than usual.", CTA "Looks wrong? Report it" → `/api/viz-request`, the demand signal for Tier 1 promotion), `computeActiveTools` filters ONLY `run_algorithm` (there is no trace to load), and the intake text carries a `[LEETCODE MODE — TIER 3 LIVE VIZ]` block (or the companion `[COMPANION — OFF REGISTRY]` variant): the agent mounts the recommended renderer (`pattern_renderer` from the parser, default `array`), renders the problem's own Example 1 input, and hand-builds `viz_actions` in every `emit_segment` — the same model-authored path the on-the-fly eval suite measures at ≥95%. The renderer's manifest docs are injected into the intake block so the action contract is in context from turn 1. The enforcement ladder (loud per-action rejection, whole-call failure when everything is invalid) is what makes improvised viz safe — before it, these sessions hard-filtered the viz pipeline and opened with "I don't have a visualization for this one."
 
 The same Tier 3 instruction applies on the web app when the solver classifies a problem `algorithm_execution` but out-of-scope (`applyClassification`): the agent builds the viz manually against the closest algorithm's renderer and never calls `run_algorithm`.
 
 #### Renderer Fallback Heuristic
 
-For unknown algorithm IDs, `guessRenderer()` uses name-based pattern matching:
-- Contains `hash`, `freq`, `group`, `set_op`, `bit_op`, `math_sim` → `context`
-- Contains `sort`, `search`, `pointer`, `window`, `prefix`, `array_manip` → `array`
-- Contains `knapsack`, `lcs`, `edit`, `coin`, `matrix`, `string_dp` → `table`
-- Contains `tree`, `bst`, `avl`, `heap` → `tree`
+For unknown algorithm IDs, `guessRenderer()` uses name-based pattern matching. Checks are **first-wins** (`String.includes`), so order matters for overlapping substrings — e.g. `window_string` matches both the `string` and `array` checks but resolves to `string` because it is tested first. The actual check order:
+- Contains `palindrome`, `kmp`, `anagram`, `window_string`, `rabin_karp` → `string`
+- Contains `hash`, `freq`, `group`, `set_op`, `bit_op`, `math_sim`, `greedy_choice` → `context`
+- Contains `sort`, `search`, `pointer`, `window`, `prefix`, `array_manip`, `divide_conquer` → `array`
+- Contains `knapsack`, `lcs`, `edit`, `coin`, `matrix`, `string_dp`, `recursion_memo`, `dp` → `table`
+- Contains `tree`, `bst`, `avl`, `heap`, `red_black` → `tree`
 - Contains `linked`, `stack`, `queue` → `linked`
-- Contains `interval`, `schedule`, `machine`, `job`, `timeline` → `interval`
-- Contains `palindrome`, `kmp`, `anagram`, `window_string` → `string`
+- Contains `interval`, `schedule`, `machine`, `job`, `timeline`, `gantt`, `activity_selection` → `interval`
 - Default → `graph`
 
 ---
@@ -532,7 +545,7 @@ The renderer is set on each algorithm's registry entry. The client receives it a
 
 For `algorithm_execution` mode with known algorithms, the renderer is pulled from the registry. For concept flows (A1 path), `run_algorithm` auto-configures graph + context panels via `getDefaultContextPanels(algorithmId)`.
 
-For all modes, `applyClassification()` (`guidedAgent.js`) overrides the registry renderer when the algorithm name contains `interval`, `schedule`, `machine`, `job`, or `activity` → forces `interval` renderer. This applies to both `algorithm_execution` and non-execution modes.
+`applyClassification()` (`guidedAgent.js`) applies a keyword override to a local `rendererType` (algorithm name contains `interval`, `schedule`, `machine`, `job`, or `activity` → `interval`), but its *effect* differs by mode. In **non-execution** modes the override drives both the injected renderer docs and the auto-created visualization panel (`autoRenderer = modeDefaults.renderer || rendererType`), so it genuinely changes the rendered panel. In **`algorithm_execution`** mode it only changes the renderer DOCS injected into the agent prompt (`buildRendererDocs([rendererType])`) — `applyClassification` creates no visualization there. The actual execution-mode panel renderer is set later by `run_algorithm` from the registry (`algoInfo?.renderer || result.renderer`) and ignores the keyword override. E.g. `interval_dp` (registry renderer `table`) still renders as the table DP grid in execution mode despite matching the `interval` keyword.
 
 ---
 
@@ -582,7 +595,7 @@ After the per-renderer mapper returns, `mapTraceStep` appends one universal acti
 
 #### Helpers
 
-`distancesEntries(distances, statusFn)` (top of `vizMapper.js`) builds entries for any distances-style `key_value` panel. Handles common value sentinels: `-1 → 'wall'`, `Infinity` / `'∞' → '∞'`. Used by dijkstra, bellman_ford, dag_shortest, multi_source_bfs, floyd_warshall, dijkstra_k_stops. Pass `statusFn = (key, value) => 'highlight'|'updated'|'default'` to mark per-entry status.
+`distancesEntries(distances, statusFn)` (top of `vizMapper.js`) builds entries for any distances-style `key_value` panel. Handles common value sentinels: `-1 → 'wall'`, `Infinity` / `'∞' → '∞'`. Used by multi_source_bfs, floyd_warshall, dijkstra_k_stops. (dijkstra, bellman_ford, and dag_shortest build their distances entries inline rather than via this helper.) Pass `statusFn = (key, value) => 'highlight'|'updated'|'default'` to mark per-entry status.
 
 #### Coverage contract & test gate
 
@@ -592,8 +605,11 @@ After the per-renderer mapper returns, `mapTraceStep` appends one universal acti
 2. Every produced `step.type` has a matching `case` block in `vizMapper.js` (static reconciliation).
 3. Every algorithm whose registry renderer is referenced has a case in the outer switch.
 4. Every trace step on algorithms that have a pseudocode entry sets `pseudocode_line`.
+5. Every emitted viz action references valid trace geometry — no `node`/`id`/`from`/`to` equal to `undefined` or `''`; graph/tree node ids must exist in the trace; array indices / table rows in bounds.
+6. Per-algorithm mapper output is more than the generic `algorithm_state` description-only fallback (fails if >50% of non-narration steps emit only `ctxUpdate('algorithm_state', …)`).
+7. After replicating agentLib's `emit_segment` renderer→panel-id rewrite, every emitted action routes to a registered panel (catches mapper emitting `renderer:'graph'` when the panel registered as `graph_main`).
 
-**Snapshot semantics:** the test pins the current state via four `WIP_*` sets (`WIP_MAPPER_GAPS`, `WIP_PSEUDOCODE_GAPS`, `WIP_MISSING_CASE_TYPES`, `WIP_RENDERER_GAPS`). Algorithms in those sets are allowed to fail the corresponding check; everything outside the sets must pass. The test fails on **either direction** — a regression (passing → failing) AND an improvement that wasn't reflected (failing → passing). The latter forces contributors to remove an entry from the WIP set when they fix it, preventing the lists from drifting.
+**Snapshot semantics:** the test pins the current state via seven `WIP_*` sets (`WIP_MAPPER_GAPS`, `WIP_PSEUDOCODE_GAPS`, `WIP_MISSING_CASE_TYPES`, `WIP_RENDERER_GAPS`, `WIP_ACTION_VALIDITY_GAPS`, `WIP_GENERIC_ONLY_GAPS`, `WIP_RENDERER_ROUTING_GAPS` — the last currently pinning `mergesort`). Algorithms in those sets are allowed to fail the corresponding check; everything outside the sets must pass. The test fails on **either direction** — a regression (passing → failing) AND an improvement that wasn't reflected (failing → passing). The latter forces contributors to remove an entry from the WIP set when they fix it, preventing the lists from drifting.
 
 **`KNOWN_NARRATION_ONLY`** lists step types where empty mapper output is correct (`error` only, today).
 
@@ -603,7 +619,7 @@ After the per-renderer mapper returns, `mapTraceStep` appends one universal acti
 - If the algorithm has a `pseudocode.js` entry, every `trace.push` must include `pseudocode_line: <N>`.
 - The algorithm's `renderer` must have a `case` in `mapTraceStep`'s outer switch.
 
-**Adding a new step type.** If you introduce a `step.type` string that no existing case handles, add a new `case 'X':` block in the right per-renderer mapper. Generic step types (`fill`, `compute`, `update`, `build`, `mark`, `reverse`, `traverse`, `record`, `choose`, `backtrack`, `push`, `pop`, `dequeue`, `window_max`) already have shared fallback handlers in `mapArrayStep` and `mapTreeStep` that surface `step.description` and any `step.array`/`step.indices` data — so a minimal new algorithm reusing those step types may need no mapper changes at all.
+**Adding a new step type.** If you introduce a `step.type` string that no existing case handles, add a new `case 'X':` block in the right per-renderer mapper. Generic step types (`fill`, `compute`, `update`, `build`, `mark`, `reverse`, `traverse`, `record`, `choose`, `backtrack`, `push`, `pop`, `dequeue`, `window_max`) already have a shared grouped fallback handler in `mapArrayStep` that surfaces `step.description` and any `step.array`/`step.indices` data — so a minimal new array-renderer algorithm reusing those step types may need no mapper changes at all. `mapTreeStep` has no such generic fallback (and no `default` case); it handles only `traverse`, `push`, `pop`, and `backtrack` via individual tree/heap-specific cases that do not read `step.array`/`step.indices`.
 
 ---
 
@@ -611,7 +627,7 @@ After the per-renderer mapper returns, `mapTraceStep` appends one universal acti
 
 **File:** `server/guidedAgent.js`  
 **Model:** `TEACHING_MODEL` (`server/models.js`), `max_tokens: 4096`  
-**Max API calls per session:** 150
+**Max API calls per session:** 100 (`MAX_API_CALLS_PER_SESSION`)
 
 The guided agent runs this loop structure:
 
@@ -645,22 +661,23 @@ while (continueLoop):
 Tools split into two groups:
 
 **Locally handled (fast, no API call):**
-- `run_solver` / `run_solver_batch` → calls `solver.js` (LC path: `solveLeetcodeProblem`, else `solveProblem`)
+- `run_solver` → calls `solver.js` (LC path: `solveLeetcodeProblem`, else `solveProblem`)
+- `run_solver_batch` → calls `solver.js` `solveProblems()` (batch entry point; one solve over all sub-problems, no LC-path branch)
 - `build_example_graph` → calls `graphBuilder.js`
-- `run_algorithm` → calls `registry.runAlgorithmWithFallback()` or `runRegisteredAlgorithm()`
 - `send_options` → sends guided_options to client, awaits student response via promise
 - `verify_result` → compares expected vs computed
 - `lesson_complete` → sends lesson_complete to client, enters follow-up wait
 - `get_renderer_docs` → returns renderer documentation from `rendererManifest.js`
+- `conversational_reply` → sends `interrupt_response` (+ `guided_prompt` when waiting) to client, runs TTS, and (unless `wait_for_response: false`) awaits the student's reply (handled inline in the loop, not via `handleToolCall`)
 
 **Delegated to `agentLib.handleToolCall()` (shared logic):**
 - `create_graph` → sends `create_graph` to client, registers panels, stores on session
 - `create_visualization` → sends `create_visualization` to client, registers panels
 - `update_graph` → sends `update_graph` to client, merges graph state
+- `run_algorithm` → local branch sends `guided_transition`/`guided_phase: 'executing'` status, then delegates to `handleToolCall()`, which calls `registry.runAlgorithmWithFallback()` — Tier 1 fast path (no API call); off-registry Tier 2 pattern keys reuse the pre-run trace when available, else take the author-agent fallback (cache → generate via `AUTHOR_MODEL` API call → sandbox → correctness gate)
 - `emit_segment` → maps trace steps, validates viz_actions, runs TTS, sends `segment_start`
 - `respond_to_interrupt` → saves graph state, sends interrupt response, queues restore
 - `end_illustration` → restores saved graph state
-- `conversational_reply` → sends `conversational_reply` to client, optionally awaits response
 
 #### emit_segment deep-dive
 
@@ -674,8 +691,9 @@ Tools split into two groups:
 3. Send `segment_start` message to client (contains narration text + viz_actions)
 4. Call `synthesizeAndStream()` (TTS) — streams audio chunks via binary WS messages
 5. Wait for TTS completion (or pause/skip/interrupt signals)
-6. Send `audio_flush` + `segment_end`
-7. Check `session.interruptFlag` — if set, snapshot graph state, stub remaining tools, inject `[LEARNER INTERRUPT]` message
+6. Send `segment_end` (preceded by `audio_flush` only when TTS was aborted by pause/skip/interrupt)
+
+After `emit_segment` *or* `conversational_reply` returns, the **teaching loop** (`guidedAgent.js`, not the agentLib handler) checks `session.interruptFlag`; if set, it snapshots graph state into `session._savedGraphState`, stubs the remaining unprocessed tool_use blocks with `{ skipped: true, reason: 'learner interrupt' }`, and injects a `[LEARNER INTERRUPT]` user message prompting `respond_to_interrupt`.
 
 #### Viz-action enforcement ladder (consistency architecture)
 
@@ -695,7 +713,7 @@ panel:
    near-misses (case/hyphens), param aliases (`data`→`values`, `node`↔`id`,
    `index`→`indices`), numeric-string→number coercion, scalar→array wrapping. Output
    is normalized to nested `{ renderer, action, params }`. System-emitted actions
-   (residual overlays) live in `SYSTEM_ACTIONS` and pass without a published contract.
+   (residual overlays + multi-graph table sync) live in `SYSTEM_ACTIONS` and pass without a published contract.
 4. **Graph node-id validation** (`agentLib.validateVizActions`): highlight/path targets
    must exist in `session.currentGraph` — or have been introduced by an accepted
    `add_node` (tracked in `session._addedNodeIds`, reset on every graph replacement).
@@ -726,7 +744,7 @@ the contract.
 
 ## 6. Reasoning Modes
 
-The solver classifies every problem into one of six modes. Mode determines: which context panels auto-configure, which visualization planner runs, and which teaching template the agent follows.
+The solver classifies every problem into one of six modes. Mode determines: which context panels auto-configure, which renderer/panels the agent is steered toward, and which teaching template the agent follows. (For design modes there is no separate viz planner — the renderer is the agent's in-flight choice.)
 
 ```
 algorithm_execution
@@ -737,8 +755,8 @@ algorithm_execution
 greedy_design
   └── Solver identifies the greedy criterion + exchange argument
   └── auto-panels: greedy_rule, proof_skeleton
-  └── Guided: student-produces rule → example trace → student-produces algorithm → student-produces proof
-  └── Explain: RULE → EXAMPLE → ALGORITHM → PROOF → RUNTIME
+  └── Guided: student-produces greedy rule → student-produces exchange-argument proof
+  └── Explain: RULE → PROOF (exchange argument)
 
 dp_design
   └── Solver defines subproblem + recurrence
@@ -749,7 +767,8 @@ dp_design
 dc_design
   └── Solver identifies divide/combine steps + recurrence
   └── auto-panels: dc_structure, recurrence
-  └── rendererAdvisor → recursion_tree (clean T(n)) or graph (case tree) or none
+  └── agent chooses (static classification prompt in applyClassification) → recursion_tree (clean T(n)) / graph (case tree) / none
+  └── NOTE: server/rendererAdvisor.js (adviseRenderer) exists but is currently unwired/dead code
   └── SPLIT → SUBPROBLEMS → COMBINE → RECURRENCE (Master Theorem viz)
 
 modeling
@@ -802,27 +821,30 @@ Every Tier 1 algorithm's `run()` produces a `trace[]` array. Each trace step is 
 
 The mapper coverage test (`server/algorithms/mapper.coverage.test.js`) enforces this contract on every algorithm in the registry. See [Stage 4 → Coverage contract](#stage-4-trace--viz-actions-vizmapper) for details.
 
-Algorithm categories (all Tier 1):
+Algorithm categories — the registry's actual `category` field values, all Tier 1 (104 total).
+The `category` field is granular and historically inconsistent (note the `Searching` vs
+`Searching / Two Pointers`, `Hashing` vs `Hashing / Sets`, `Trees` vs `Tree Algorithms`
+splits, and the `Algorithms` catch-all). Each key appears exactly once, under its own
+`category` value:
 
 | Category | Algorithms |
 |---|---|
-| Graph Algorithms | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, dag_shortest, union_find, topological_sort, trie, backtracking, word_search, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
-| Sorting | mergesort |
-| Dynamic Programming | knapsack, edit_distance, coin_change, lcs, max_subarray, word_break, climbing_stairs, min_path_sum, lis, stock_dp, interval_dp, palindrome_dp, bitmask_dp, tree_dp, house_robber, maximal_square |
-| Divide and Conquer | quickselect |
-| Greedy Algorithms | huffman, interval_merge, interval_scheduling, greedy_choice, jump_game, jump_game_ii |
-| Data Structures | heap_ops, bst_insert, linked_list_reversal, stack_operations, queue_operations, monotonic_stack, top_k_heap, median_finder, k_closest_points, lru_cache, trie |
-| Trees | tree_depth_dfs, tree_level_order, tree_path, tree_dp, lca_tree, validate_bst |
-| Linked Lists | linked_list_cycle, merge_k_sorted |
-| Searching / Two Pointers | binary_search, two_pointers, sliding_window, sliding_window_max, container_water |
-| Prefix / Difference Arrays | prefix_sum, difference_array |
-| Matrix | spiral_matrix, rotate_matrix, number_of_islands |
-| Backtracking | backtracking, word_search, combination_sum, subsets, permutations, board_backtracking (table renderer; N-Queens — `{ puzzle: 'n_queens', n }`, parametric for future board puzzles) |
-| String Algorithms | sliding_window_string, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
-| Hashing / Sets | hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, valid_parentheses, task_scheduler |
-| Math / Bit Manipulation | sieve_primes, fast_power, gcd_algorithm, majority_vote, bit_ops, math_simulation |
-| Complexity Theory | poly_reduction |
-| Misc | rotate_array |
+| Algorithms (15) | sliding_window, rotate_array, product_except_self, bit_ops, math_simulation, prefix_sum, difference_array, k_closest_points, sieve_primes, fast_power, gcd_algorithm, majority_vote, spiral_matrix, rotate_matrix, sliding_window_max |
+| Backtracking (6) | backtracking, word_search, combination_sum, subsets, permutations, board_backtracking (table renderer; N-Queens — `{ puzzle: 'n_queens', n }`, parametric for future board puzzles) |
+| Complexity Theory (1) | poly_reduction |
+| Data Structures (18) | heap_ops, trie, bst_insert, linked_list_reversal, stack_operations, queue_operations, monotonic_stack, hash_map_grouping, frequency_count, two_sum_hash, string_hash, set_operations, valid_parentheses, lru_cache, top_k_heap, median_finder, linked_list_cycle, merge_k_sorted |
+| Divide and Conquer (1) | quickselect |
+| Dynamic Programming (17) | knapsack, edit_distance, dag_shortest, coin_change, lcs, max_subarray, word_break, climbing_stairs, min_path_sum, lis, stock_dp, interval_dp, palindrome_dp, bitmask_dp, tree_dp, house_robber, maximal_square |
+| Graph Algorithms (15) | dijkstra, bfs, dfs, kruskal, prim, maxflow, bellman_ford, union_find, topological_sort, multi_source_bfs, floyd_warshall, tarjan_bridges, bipartite_check, dijkstra_k_stops, number_of_islands |
+| Greedy Algorithms (7) | huffman, interval_merge, interval_scheduling, greedy_choice, jump_game_ii, task_scheduler, jump_game |
+| Hashing (1) | valid_sudoku |
+| Hashing / Sets (1) | longest_consecutive |
+| Searching (3) | binary_search, koko_eating_speed, two_pointers |
+| Searching / Two Pointers (5) | container_water, trapping_rain_water, move_zeroes, find_peak, search_rotated |
+| Sorting (1) | mergesort |
+| String Algorithms (8) | sliding_window_string, min_window_substring, valid_palindrome, expand_palindrome, kmp_search, find_anagrams, rabin_karp, manacher |
+| Tree Algorithms (2) | lca_tree, validate_bst |
+| Trees (3) | tree_depth_dfs, tree_level_order, tree_path |
 
 ---
 
@@ -838,10 +860,13 @@ Auto-configured per algorithm from `server/contextPanelDefaults.js`. Five panel 
 | `expression` | Structured label + text lines | Recurrences, LP formulations, D&C structure |
 | `pseudocode` | Highlighted code lines | Algorithm pseudocode with active line tracking |
 
-Algorithms with pseudocode panels: bellman_ford, bfs, binary_search,
-bipartite_check, dag_shortest, dijkstra, dijkstra_k_stops, floyd_warshall,
-huffman, knapsack, kruskal, lca_tree, maxflow, multi_source_bfs,
-number_of_islands, quickselect, tarjan_bridges, topological_sort, validate_bst.
+Algorithms with pseudocode panels (the full set of `PSEUDOCODE` keys): bellman_ford,
+bfs, binary_search, bipartite_check, board_backtracking, container_water,
+dag_shortest, dijkstra, dijkstra_k_stops, find_peak, floyd_warshall, huffman,
+knapsack, kruskal, lca_tree, longest_consecutive, maxflow, maximal_square,
+min_window_substring, move_zeroes, multi_source_bfs, number_of_islands,
+product_except_self, quickselect, search_rotated, tarjan_bridges, topological_sort,
+trapping_rain_water, valid_sudoku, validate_bst.
 
 Pseudocode source: `server/pseudocode.js`. Each algorithm exports an array of
 strings; trace steps reference lines by 0-indexed `pseudocode_line` field.
@@ -927,12 +952,16 @@ iframe crosses `md` and the panels render beside the transcript.
 
 ### Critical constraints
 
-**Panel registry closes at `run_algorithm` time.** Panels listed in
-`getDefaultContextPanels(algorithmId)` are registered when `run_algorithm` executes.
-After that the registry is frozen — the agent can update registered panels but cannot
-create new ones mid-session. If a panel ID is not in `contextPanelDefaults.js` before
-the algorithm runs, `update_context_panel` calls targeting it are silently dropped by
-the frontend.
+**Panel registry is additive, not frozen.** `registerPanels` (`agentLib.js`) merges into
+`session._panels` and never resets it. An algorithm's default context panels
+(`getDefaultContextPanels(algorithmId)`) are registered when `run_algorithm` executes,
+but the agent can register additional renderer/context panels at any time by calling
+`create_visualization` (handler → `registerPanels`); `create_graph` also registers. The
+real constraint is narrower: an `emit_segment` viz_action whose `panel_id` (context) or
+`renderer` (renderer) was never registered by any `create_visualization` / `create_graph` /
+`run_algorithm` call is stripped server-side by `validatePanelIds` before it reaches the
+client. (There is no `update_context_panel` tool — context panels are updated via
+`emit_segment` viz_actions with `renderer: 'context', action: 'update' | 'append_log'`.)
 
 **Panel IDs must match `viz_actions` exactly.** Context-renderer algorithms (hashing,
 math patterns) hardcode `panel_id: 'algorithm_state'` inside their `ctxUpdate()` helper.
@@ -942,14 +971,16 @@ context-renderer algorithms — never the `id`.
 
 **`session._rendererPanelId` must be cleared on every `run_algorithm`.** When a
 prior algorithm in the same session set this field (set inside the non-graph branch
-of `run_algorithm` at `agentLib.js:449` — used to retarget mapper-emitted
-`renderer: '<type>'` actions to a custom-named panel like `'string_main'`), the
-field must be reset before the next algorithm runs. Otherwise the rewrite at
-`agentLib.js:561-567` mistargets the new algorithm's viz_actions to the previous
-algorithm's panel id (e.g. mapper emits `renderer: 'graph'`, gets rewritten to
-`renderer: 'table'` from a leftover knapsack run, and the client buffers the
-action against an unmounted renderer). The `run_algorithm` handler clears the
-field at entry: `session._rendererPanelId = null;` (`agentLib.js:391`).
+of `run_algorithm` at `agentLib.js:683`, and in the graph branch at `agentLib.js:654` —
+used to retarget mapper-emitted `renderer: '<type>'` actions to a custom-named panel
+like `'string_main'`), the field must be reset before the next algorithm runs.
+Otherwise the Tier 1 renderer-type→panel-id rewrite at `agentLib.js:788-795` (the
+parallel Tier 2 embedded-action rewrite is at `agentLib.js:756-759`) mistargets the
+new algorithm's viz_actions to the previous algorithm's panel id (e.g. mapper emits
+`renderer: 'graph'`, gets rewritten to `renderer: 'table'` from a leftover knapsack
+run, and the client buffers the action against an unmounted renderer). The
+`run_algorithm` handler clears the field after storing the trace on the session:
+`session._rendererPanelId = null;` (`agentLib.js:550`).
 
 ---
 
@@ -965,7 +996,7 @@ session.interruptFlag = { question, timestamp }
 session.interruptAbortFlag = true      ← aborts current TTS stream at next chunk boundary
         │
         ▼  (after active emit_segment or conversational_reply completes)
-guidedAgent.js:1888 — interrupt detected
+guidedAgent.js:2378 — interrupt detected
         │
         ├── snapshot session._savedGraphState
         ├── stub-cancel remaining tool calls in current LLM turn
@@ -978,7 +1009,7 @@ The interrupt is checked at the **tool boundary** (after `emit_segment` or `conv
 
 ### State snapshot (`session._savedGraphState`)
 
-Captured at `guidedAgent.js:1895` before any interrupt handling begins:
+Captured at `guidedAgent.js:2385` before any interrupt handling begins:
 
 | Field | Source | Purpose |
 |---|---|---|
@@ -992,9 +1023,9 @@ Captured at `guidedAgent.js:1895` before any interrupt handling begins:
 | `lastVizMessage` | `session._lastVizMessage` | The `create_graph` or `create_visualization` message used to mount the renderer |
 | `rendererVizHistory` | `session._rendererVizHistory` (copy) | Per-renderer action history for renderers built via manual viz_actions |
 
-### Restore strategy (`restoreGraphState`, `agentLib.js:117`)
+### Restore strategy (`restoreGraphState`, `agentLib.js:235`)
 
-Called after non-`illustrate` modes finish, and by `end_illustration`:
+Called **only** to restore the lesson graph after an `illustrate` detour — by `end_illustration` (`agentLib.js:1204`), by the `respond_to_interrupt` auto-cleanup of a leftover illustration (`agentLib.js:994`), and by the safety-valve / `lesson_complete` auto-restore paths in `guidedAgent.js` (lines 1639 and 2169), each gated on `session._illustrationActive`. Non-`illustrate` modes (overlay / rewind / ghost_alternative / none) do **not** call `restoreGraphState`; they send `explanation_complete` and set `session._savedGraphState = null`, and the client restores from its own pre-interrupt snapshot. The illustrate-restore sequence:
 
 ```
 1. Re-send lastVizMessage (create_graph or create_visualization)  → remounts renderer
@@ -1015,7 +1046,7 @@ Called after non-`illustrate` modes finish, and by `end_illustration`:
 
 **Use when:** "Why this node?" / "Why that edge?" / element-specific "what does this mean?" questions.
 
-**Server validation (`agentLib.js:693`):**
+**Server validation (`agentLib.js:999`):**
 ```js
 if (input.explanation_mode === 'overlay' && !input.overlay) {
   return { success: false, message: 'overlay mode requires the "overlay" property...' };
@@ -1063,7 +1094,7 @@ overlay: {
 
 **Use when:** "What just happened?" / "I'm lost" / "Can you slow down?" — replay recent steps with clearer re-narration.
 
-**Server validation (`agentLib.js:696`):**
+**Server validation (`agentLib.js:1002`):**
 ```js
 if (input.explanation_mode === 'rewind' && (
   !input.rewind ||
@@ -1106,7 +1137,7 @@ rewind: {
 
 **Use when:** "What if we took Y instead?" / "Why not that path?" — counterfactual comparison of the chosen path vs an alternative.
 
-**Server validation (`agentLib.js:699`):**
+**Server validation (`agentLib.js:1005`):**
 ```js
 if (input.explanation_mode === 'ghost_alternative' && !input.ghost_alternative) {
   return { success: false, message: 'ghost_alternative mode requires the "ghost_alternative" property...' };
@@ -1149,7 +1180,7 @@ ghost_alternative: {
 
 **Use when:** Conceptual "why does X work?" / "what is a cycle?" questions where the current lesson graph cannot demonstrate the concept. The lesson graph is temporarily replaced with a small 3–6 node example.
 
-**Server validation (`agentLib.js:702`):**
+**Server validation (`agentLib.js:1008`):**
 ```js
 if (input.explanation_mode === 'illustrate') {
   if (!input.illustrate?.graph?.nodes?.length) {
@@ -1184,9 +1215,9 @@ session._savedGraphState = { ... }    ← held until end_illustration calls rest
 
 The server returns immediately after mounting the example graph. The agent then teaches freely using `emit_segment` with manual viz_actions (no `trace_step_indices`) until it calls `end_illustration`.
 
-**Auto-save:** If `session._savedGraphState` is null when `illustrate` fires (can happen on the guided_message path rather than the interrupt path), the server auto-saves it before mounting the example graph (`agentLib.js:790`).
+**Auto-save:** If `session._savedGraphState` is null when `illustrate` fires (can happen on the guided_message path rather than the interrupt path), the server auto-saves it before mounting the example graph (`agentLib.js:1141`).
 
-**Auto-cleanup:** If a second `respond_to_interrupt` is called while `session._illustrationActive` is still `true` (agent forgot `end_illustration`), the server auto-restores the graph and logs a warning before processing the new interrupt (`agentLib.js:684`).
+**Auto-cleanup:** If a second `respond_to_interrupt` is called while `session._illustrationActive` is still `true` (agent forgot `end_illustration`), the server auto-restores the graph and logs a warning before processing the new interrupt (`agentLib.js:990`).
 
 **WS sequence:**
 ```
@@ -1267,8 +1298,10 @@ start_leetcode message
 parseLeetcodeProblem(problemText)         ← EXTRACTION_MODEL (models.js), 10s timeout
     │
     ▼
-{ title, algorithm_key, confidence, test_case, test_case_source, expected_output,
-  pattern_key, pattern_renderer, fallback_reason }
+{ title, problem_summary, algorithm_key, confidence, test_case, test_case_source,
+  expected_output, pattern_key, pattern_renderer, fallback_reason }
+    │   problem_summary: 1-2 sentence problem description; always returned (required
+    │   field) but discarded downstream by index.js
     │   expected_output: Example 1 answer as plain string ("MMMDCCXLIX", "3", "[0,1]")
     │   or null if student only pasted partial problem (no example output visible)
     │   pattern_key/pattern_renderer: required when algorithm_key is null or confidence < 0.7
@@ -1281,6 +1314,10 @@ parseLeetcodeProblem(problemText)         ← EXTRACTION_MODEL (models.js), 10s 
     │             │  verify_result at lesson end.
     │             └── sends lc_viz_ready { algorithm_key, renderer, trace, input, tier: 1 }
     │                (client can render the trace immediately, before teaching begins)
+    │             └── if runAlgorithmWithFallback throws: catch sets has_viz=false,
+    │                viz_tier=null (NOT a Tier 3 downgrade to viz_tier=3); no lc_viz_ready
+    │                is sent, but the session still continues into startGuidedSession —
+    │                so has_viz=false does not always imply viz_tier=3
     └── TIER 3: else hasViz = false, viz_tier = 3 → guided session runs in live-viz mode
                 (viz pipeline available, run_algorithm filtered — see Stage 2 Tier 3;
                  client shows the VizRequestToast transparency disclosure)
@@ -1290,7 +1327,7 @@ parseLeetcodeProblem(problemText)         ← EXTRACTION_MODEL (models.js), 10s 
     │   session._leetcodePatternKey / _leetcodePatternRenderer stored for intake hints
     │
     ▼
-sends lc_parsed { title, algorithm_key, confidence, has_viz, viz_tier } to client
+sends lc_parsed { title, algorithm_key, confidence, has_viz, viz_tier, fallback_reason } to client
     │
     ▼
 startGuidedSession(session, problemText)   ← normal guided session from here
@@ -1298,16 +1335,29 @@ startGuidedSession(session, problemText)   ← normal guided session from here
 
 **`lc_viz_ready`** is sent to the client _before_ the guided session starts. This means the student sees the visualization immediately on problem submission, not after the first few exchanges.
 
-After the session completes, `createLcSession()` persists the result to the `lc_sessions` table (title, algorithm_key, confidence, has_viz).
+After the session completes, `createLcSession()` persists the result to the `lc_sessions` table (`problem_title`, `algorithm_key`, `confidence`, `has_viz`) along with outcome telemetry (`solver_succeeded`, `viz_rendered`, `session_completed`), the latter passed as an `outcomes` object from `index.js`.
 
 **`lc_master_session`** WS message marks an LC session as mastered.
 
 ### Stuck Companion Mode (the leetcode overlay)
 
 The Chrome extension overlay on `leetcode.com/problems/*` runs the SAME guided
-session, parameterized by `session.companionMode` (set from `msg.companionMode` on
-`start_leetcode`, chosen by the overlay's two-choice opener: "Nudge me — no spoilers"
-→ `companionMode: true`; "Show me how it works" → `false`, the normal walkthrough).
+session, parameterized by two independent opening flags on `start_leetcode`, chosen by
+the overlay's two-choice opener. `buildIntakeUserText` (`guidedAgent.js`) picks the
+closing instruction with a three-way branch — `companionMode ? COMPANION_INTAKE_INSTRUCTION : directWalkthrough ? SHOWME_DIRECT_INTAKE_INSTRUCTION : STANDARD_INTAKE_INSTRUCTION`:
+- **"Nudge me — no spoilers"** → `companionMode: true` → `COMPANION_INTAKE_INSTRUCTION` (opens by
+  asking the student's read; no-spoiler escalating-hint ladder; terminal rung = viz).
+- **"Show me how it works"** → `directWalkthrough: true` → `SHOWME_DIRECT_INTAKE_INSTRUCTION` (eng
+  review 2026-06-15): **skips the STAGE 0 "what have you tried" intake** and jumps
+  straight to `run_solver → run_algorithm → emit_segment` viz + explanation — the same
+  flow the nudge ladder reaches at its terminal reveal, entered immediately. Reuses each
+  tier's `lcContext` viz instructions (DRY). Not no-spoiler.
+- **Web-app paste-to-learn** (both flags false) → `STANDARD_INTAKE_INSTRUCTION` (keeps the STAGE 0
+  intake — its deliberate calibration step).
+
+`companionMode` takes precedence (the no-spoiler ladder is never downgraded by
+`directWalkthrough`). The background warm-solve fires for `companionMode || directWalkthrough`
+so "Show me" doesn't stall on a cold solve when it jumps straight to `run_solver`.
 
 **Surface geometry (form factor v2, design review 2026-06-11):** a docked right
 rail that **pushes** the leetcode page (margin-right on `<html>`, restored on
@@ -1377,8 +1427,9 @@ agent. The seams (all in `server/guidedAgent.js`):
   an explicit escalation offer, `escalation_consented` marks a licensed specificity
   rise. `companionSelfReport()` (agentLib.js) normalizes it; the server forwards it on
   the `interrupt_response` / `segment_start` message and emits a server-side
-  `companion_turn` PostHog event per reply (null-report rows included, so missing
-  self-reports are themselves measurable); the client funnel posts precise events
+  `companion_turn` PostHog event per teaching turn — both `conversational_reply`
+  (turn_kind `'reply'`) and `emit_segment` (turn_kind `'segment'`) — (null-report rows
+  included, so missing self-reports are themselves measurable); the client funnel posts precise events
   (nudge_given, solution-reveal) off it instead of guessing from viz. The
   pre-registered readout (metric formulas, decision rules, minimum-N) lives in
   TODOS.md §"Consent-gating readout".
@@ -1390,8 +1441,9 @@ agent. The seams (all in `server/guidedAgent.js`):
   `guided_message` channel — consent stays in the model, NO server-side consent flag.
   "I'm stuck" (`Controls.jsx`, companion-only) sends the literal `"I'm stuck"` (a
   standalone-bid consent), prompting an offer rather than a direct hint. Both tag the
-  client `companion_escalation_requested` event (`via: chip|stuck`, + `modality`),
-  un-retiring the precise escalation signal that freeform follow-ups can't carry.
+  client `companion_escalation_requested` event (`via: chip` carries `+ modality`;
+  `via: stuck` carries none), un-retiring the precise escalation signal that freeform
+  follow-ups can't carry.
 - **`buildIntakeUserText(session, problemText)`** — pure assembly of the first user
   turn; swaps the closing instruction to the companion opener. Off-registry companion
   gets a `[COMPANION — OFF REGISTRY]` block (structure viz works; the terminal reveal
@@ -1404,7 +1456,7 @@ agent. The seams (all in `server/guidedAgent.js`):
   view** and the Tier 3 hand-built walkthrough render on ANY problem. (The old
   whole-pipeline filter for standard sessions — the Sudoku empty-graph bug — predates
   the enforcement ladder, which now rejects improvised invalid actions loudly instead.)
-- **Solver warming** — on companion open, `startGuidedSession` fires the solve in the
+- **Solver warming** — on companion OR direct-walkthrough open (`companionMode || directWalkthrough`), `startGuidedSession` fires the solve in the
   background (`session._warmSolver = { text, promise }`, fire-and-forget). The hint path
   and structure viz never await it; `run_solver` reuses the warmed result when the
   student escalates (cold ~12s wait avoided), falling back to a fresh solve on warm
@@ -1459,6 +1511,11 @@ agent. The seams (all in `server/guidedAgent.js`):
   `guidedAgent.test.js`. An explicit give-up may still jump straight to the full trace.
   Off-registry, rungs 2-3 become a hand-built animated walkthrough (Tier 3): the model
   authors the viz_actions itself on the structure view instead of loading a trace.
+  (**Known code inconsistency:** the operative `COMPANION_MODE_PROMPT` terminal-ladder
+  line, `guidedAgent.js:941`, still reads "Off-registry, rungs 2-3 degrade to text" —
+  stale, predating the enforcement ladder; the `[COMPANION — OFF REGISTRY]` intake block,
+  `guidedAgent.js:117`, carries the correct hand-built-walkthrough instruction. Worth
+  reconciling the prompt line.)
 
 **Instrumentation (eng D4):** the background worker is the funnel poster. Extension-side
 rungs (`extension_button_shown`, `_button_clicked`, `_extraction`, `_overlay_opened`,
@@ -1515,9 +1572,9 @@ Student pastes problem
     │  create_visualization / create_graph ─────────────────────► client: mount renderer
     │                                                             │
     │  run_algorithm ───────────────────────────────────────────► registry.js
-    │      └── Tier 1: hand-written run() (all 96 known algos)    │
+    │      └── Tier 1: hand-written run() (all 104 known algos)   │
     │          Tier 2: cache.js → sandbox.js → authorAgent.js     │
-    │                 (only for unknown LeetCode patterns)         │
+    │                 (DORMANT — unreachable from entry; see §5)   │
     │          returns: { trace, renderer, input, tier }          │
     │                                                             │
     │  emit_segment(narration, trace_step_indices) ─────────────► agentLib.handleToolCall

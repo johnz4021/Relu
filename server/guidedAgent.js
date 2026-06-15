@@ -79,16 +79,23 @@ export function withPromptCaching(systemText, messages) {
   return { system, messages: [...messages.slice(0, -1), { ...last, content: blocks }] };
 }
 
-// Closing instruction appended to the intake user message. Two variants:
+// Closing instruction appended to the intake user message. Three variants:
 //   - STANDARD: the web-app / paste-to-learn flow (STAGE 0 intake → run_solver → teach).
-//   - COMPANION: the in-problem "I'm stuck" overlay on leetcode.com (eng D2/D6, design
-//     Pass 1/2). No-spoiler by default; opens by asking for the student's read; escalates
-//     specificity only on request; the terminal rung is the problem-specific visualization.
+//   - COMPANION: the in-problem "Nudge me — no spoilers" overlay on leetcode.com (eng
+//     D2/D6, design Pass 1/2). No-spoiler by default; opens by asking for the student's
+//     read; escalates specificity only on request; terminal rung is the visualization.
+//   - SHOWME_DIRECT: the overlay's "Show me how it works" intent (eng review 2026-06-15).
+//     Skips the STAGE 0 intake and jumps straight to viz + explanation — the same
+//     run_solver → run_algorithm → emit_segment teaching the nudge ladder reaches at its
+//     terminal reveal, just entered immediately. Reuses each tier's viz flow from lcContext.
 const STANDARD_INTAKE_INSTRUCTION =
   '\n\nFirst, determine if this is a concept/general explanation request or a concrete problem with specific input. If it\'s a concept request, follow the CONCEPT FLOW — construct your own example and guide the student through it interactively. If it\'s a concrete problem, start with the STAGE 0 intake question to learn what the student has tried, then check for multiple parts (use send_options if needed), then call run_solver or run_solver_batch — classification is returned in the tool result, proceed directly to teaching.';
 
 const COMPANION_INTAKE_INSTRUCTION =
   '\n\n[STUCK COMPANION MODE] The student is working this problem live on leetcode.com and tapped a "Nudge me — no spoilers" helper. You are an in-problem companion, NOT a solution walkthrough. Hard rules: (1) Do NOT reveal the solution, the optimal approach, the data structure, or the algorithm name in your opening turns — that removes the productive struggle and sends them back to ChatGPT. (2) Open by asking for the student\'s read, e.g. "What\'s your read on this one so far? Even a rough guess at the approach helps." — do not lead with a hint. (3) Give the lightest useful nudge first (a thinking question, a reframing, a small observation about the input), then escalate specificity ONLY on the student\'s explicit request or their acceptance of an offer you made — you may OFFER the next step (name what you\'re offering; prefer offering to draw), but never add specificity uninvited, and never refuse or fight a request to escalate. (4) The terminal rung is the problem-specific visualization: when the student is still stuck after hints, or explicitly asks to see it, move toward the structure viz and then the solution trace. Do NOT run_solver up front; keep the loop conversational until escalation calls for the viz.';
+
+const SHOWME_DIRECT_INTAKE_INSTRUCTION =
+  '\n\n[SHOW ME — DIRECT WALKTHROUGH] The student tapped "Show me how it works" on leetcode.com. They want to SEE the solution worked through right now, not answer questions first. Hard rules: (1) SKIP the STAGE 0 intake entirely — do NOT ask "what have you tried" or any opening question; do NOT wait for a reply before showing anything. (2) Open with a single short orientation line (e.g. "Here\'s how this one works —"), then immediately follow the [TIER 1/2 TRACE] / [LEETCODE MODE] / [TIER 3 LIVE VIZ] flow described above: call run_solver, then run_algorithm (or build the visualization), then teach with emit_segment. This is the SAME viz + walkthrough the no-spoiler ladder reaches at its terminal reveal — just entered immediately. (3) Keep the teaching quality: Socratic gates between segments, explain WHY each step happens, and close the loop on the student\'s own Example 1. You are NOT in no-spoiler mode — showing the approach and the algorithm name up front is the point here.';
 
 // Pure helper exported for tests: assembles the first user-turn text for a guided session.
 // Mirrors the assembly previously inlined in startGuidedSession. The non-companion output
@@ -134,9 +141,12 @@ export function buildIntakeUserText(session, problemText) {
     }
   }
 
+  // Precedence: companionMode (no-spoiler ladder) is never downgraded by directWalkthrough.
   const instruction = session.companionMode
     ? COMPANION_INTAKE_INSTRUCTION
-    : STANDARD_INTAKE_INSTRUCTION;
+    : session.directWalkthrough
+      ? SHOWME_DIRECT_INTAKE_INSTRUCTION
+      : STANDARD_INTAKE_INSTRUCTION;
 
   return `${textPart}${lcContext}${instruction}`;
 }
@@ -1427,7 +1437,9 @@ export async function startGuidedSession(session, problemText, imageBase64, imag
   // when the student escalates; if the warm solve failed, run_solver falls back to a
   // fresh solve. The companion doctrine still forbids running it up front for output;
   // this only pre-computes so the answer is ready the moment it's actually wanted.
-  if (session.companionMode && (problemText || session.imageBase64)) {
+  // directWalkthrough (eng review 2026-06-15): "Show me" jumps straight to run_solver
+  // with no intake turn to mask the latency, so warm it here too or it's a cold stall.
+  if ((session.companionMode || session.directWalkthrough) && (problemText || session.imageBase64)) {
     const warmText = problemText || '';
     const noop = () => {};
     const promise = (session._leetcodeAlgorithmKey

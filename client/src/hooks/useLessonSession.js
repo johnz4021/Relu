@@ -21,16 +21,20 @@ export function useLessonSession({ send, reset, audioPlayer }) {
   // stamp it identically.
   const sessionStartRef = useRef(null);
 
-  // Start a fresh lesson. companionMode=false → the paste-to-learn walkthrough;
-  // companionMode=true → the no-spoiler escalating-hint companion (the overlay's
-  // "Nudge me" intent). Both hit the same start_leetcode handler server-side.
+  // Start a fresh lesson. Two independent opening parameters, both carried into the
+  // single server prompt (not copied client paths):
+  //   companionMode=true     → the no-spoiler escalating-hint companion ("Nudge me").
+  //   directWalkthrough=true  → the overlay's "Show me how it works": skip the STAGE 0
+  //                             intake and jump straight to viz + explanation.
+  //   both false              → the web-app paste-to-learn walkthrough (STAGE 0 intake).
+  // companionMode wins if both are somehow set (the no-spoiler ladder is never downgraded).
   const startLesson = useCallback(
-    ({ problemText, companionMode = false }) => {
+    ({ problemText, companionMode = false, directWalkthrough = false }) => {
       audioPlayer.init(); // must originate from a user gesture to unlock AudioContext
       reset();
       sessionStartRef.current = Date.now();
-      track('leetcode_started', { companion_mode: !!companionMode });
-      send({ type: 'start_leetcode', problemText, companionMode: !!companionMode });
+      track('leetcode_started', { companion_mode: !!companionMode, direct_walkthrough: !!directWalkthrough });
+      send({ type: 'start_leetcode', problemText, companionMode: !!companionMode, directWalkthrough: !!directWalkthrough });
     },
     [send, reset, audioPlayer],
   );
