@@ -439,20 +439,15 @@ export default function App() {
   const [embedTick, setEmbedTick] = useState(0);
 
   // Opener intent (design Pass 1/2): 'nudge' → no-spoiler companion, 'showme' →
-  // viz-first walkthrough. Seeded from the remembered last choice so a returning
-  // student isn't re-gated; null means show the blocking two-choice opener.
-  const [embedIntent, setEmbedIntent] = useState(() => {
-    if (!embedMode) return null;
-    try {
-      const remembered = localStorage.getItem('relu_embed_intent');
-      return remembered === 'nudge' || remembered === 'showme' ? remembered : null;
-    } catch {
-      return null;
-    }
-  });
+  // viz-first walkthrough. Intent is PER-OPEN, deliberately NOT persisted.
+  // Re-asking on every overlay open (fresh iframe mount → null → opener shows) is
+  // the point: a remembered 'showme' would hit the student with the answer the
+  // instant they open a DIFFERENT problem they wanted to work through — spoiler by
+  // default, and no way to switch back to nudge (bug: /investigate 2026-06-15,
+  // the old localStorage 'relu_embed_intent' seed locked the first pick forever).
+  const [embedIntent, setEmbedIntent] = useState(null);
 
   const chooseEmbedIntent = useCallback((intent) => {
-    try { localStorage.setItem('relu_embed_intent', intent); } catch { /* storage blocked */ }
     track('companion_intent_chosen', { intent }); // eng D4 funnel: the activation gate
     setEmbedIntent(intent);
   }, []);
