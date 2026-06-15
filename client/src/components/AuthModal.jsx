@@ -2,7 +2,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import Logo from './Logo';
 
-export default function AuthModal() {
+// `embed` = rendered inside the leetcode extension rail (a narrow sidebar). There
+// the desktop two-column marketing card (max-w-3xl + md: split) is the wrong shape:
+// it blows the panel out to ~768px just to show the sign-in form. In embed we drop
+// the marketing column and cap the card to a compact single column that fits a
+// sidebar at any rail width.
+export default function AuthModal({ embed = false }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,10 +71,11 @@ export default function AuthModal() {
 
   return (
     <div className="fixed inset-0 bg-surface-0 flex items-center justify-center z-50 p-4">
-      <div className="w-full max-w-3xl bg-surface-1 border border-border rounded-xl overflow-hidden flex">
+      <div className={`w-full bg-surface-1 border border-border rounded-xl overflow-hidden flex ${embed ? 'max-w-sm' : 'max-w-3xl'}`}>
 
-        {/* Left — product preview */}
-        <div className="hidden md:flex flex-col justify-between w-1/2 bg-surface-2 p-8 border-r border-border">
+        {/* Left — product preview. Hidden in the extension rail (sidebar); shown on
+            the standalone web app at md+ where there's room for the two-column card. */}
+        <div className={`${embed ? 'hidden' : 'hidden md:flex'} flex-col justify-between w-1/2 bg-surface-2 p-8 border-r border-border`}>
           <div>
             <Logo size="lg" />
             <p className="mt-4 text-sm text-text-secondary font-body leading-relaxed">
@@ -101,7 +107,7 @@ export default function AuthModal() {
 
         {/* Right — auth form */}
         <div className="flex-1 p-8">
-          <div className="md:hidden text-center mb-4">
+          <div className={`${embed ? '' : 'md:hidden'} text-center mb-4`}>
             <Logo size="lg" />
           </div>
 

@@ -1296,9 +1296,18 @@ close/SPA-nav) instead of occluding the editor — description AND code stay vis
 beside the tutor. The rail is **resizable** (left-edge grip in `content.js`: pointer
 drag or arrow keys, clamped to [420px, 60vw], persisted to `localStorage
 relu_rail_width`) and keeps the expand-to-fullscreen toggle for dense graph/tree viz.
-Inside the embed, below Tailwind's `md` (768px) the viz+chat split **stacks
-vertically** (viz top ~45%, state strip, transcript, controls — `App.jsx`), so the
-default rail gets the designed viz-first column instead of a crushed ~173px chat.
+It opens at a true sidebar width (`RAIL_DEFAULT = 440px`), not a half-window, so the
+first pull-up reads as a sidebar; students drag wider if they want. The saved width
+is versioned (`relu_rail_width_v` / `RAIL_PREF_VERSION`): because the value lives in
+leetcode.com's localStorage and survives extension/page reloads, a version bump drops
+a stale half-window drag from an earlier build ONCE so existing testers actually get
+the new default instead of their old wide rail. Inside the embed,
+below Tailwind's `md` (768px) the viz+chat split **stacks vertically** (viz top ~45%,
+state strip, transcript, controls — `App.jsx`), so the default rail gets the designed
+viz-first column instead of a crushed ~173px chat. The sign-in card is embed-aware
+(`AuthModal embed={embedMode}`): in the rail it drops the desktop two-column marketing
+split and renders a compact single column (`max-w-sm`), so a first-time login never
+blows the panel out to the wide `max-w-3xl` card.
 A floating/draggable overlay window was evaluated and rejected (occludes the user's
 own code nondeterministically, breaks `highlight_problem_text` visibility, adds
 window management mid-struggle); approved mockup:

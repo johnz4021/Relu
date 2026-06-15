@@ -54,11 +54,26 @@
   // is what must stay visible.
   const RAIL_MIN = 420;          // below this the embed's chat column is unusable
   const RAIL_MAX_FRACTION = 0.6; // never take more than 60% of the window from the page
-  const RAIL_DEFAULT = 520;
+  // Open at a true sidebar width, not a half-window. 440 keeps the embed below
+  // Tailwind's md (768px) so the app stays single-column (auth form, stacked
+  // viz+chat) instead of unfolding the wide two-column desktop layouts. Students
+  // who want more room drag the grip; the choice persists (relu_rail_width).
+  const RAIL_DEFAULT = 440;
+  // Bump when the default/sizing design changes. A persisted width lives in the
+  // leetcode.com page's localStorage and survives extension/page reloads — so a
+  // stale half-window drag from an earlier build (e.g. ~520–768px) would keep
+  // overriding the new sidebar default forever. A version mismatch drops the old
+  // value ONCE (reset to RAIL_DEFAULT); the next drag re-persists under v2.
+  const RAIL_PREF_VERSION = '2';
   let railWidth = RAIL_DEFAULT;
   try {
     const saved = parseInt(localStorage.getItem('relu_rail_width'), 10);
-    if (Number.isFinite(saved)) railWidth = saved;
+    const savedVer = localStorage.getItem('relu_rail_width_v');
+    if (savedVer === RAIL_PREF_VERSION && Number.isFinite(saved)) {
+      railWidth = saved; // honored: saved under the current design
+    } else if (localStorage.getItem('relu_rail_width') !== null) {
+      localStorage.removeItem('relu_rail_width'); // stale design — reset to default once
+    }
   } catch { /* storage blocked — default stands */ }
   let pagePushed = false;      // whether <html> currently carries our margin/transition
   let prevHtmlMargin = '';     // <html>'s prior inline margin-right, restored on close
@@ -419,7 +434,10 @@
       pushPage(railWidth, { animate });
     }
     function persistRail() {
-      try { localStorage.setItem('relu_rail_width', String(railWidth)); } catch { /* storage blocked */ }
+      try {
+        localStorage.setItem('relu_rail_width', String(railWidth));
+        localStorage.setItem('relu_rail_width_v', RAIL_PREF_VERSION);
+      } catch { /* storage blocked */ }
     }
 
     grip.addEventListener('pointerdown', (e) => {

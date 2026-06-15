@@ -746,7 +746,7 @@ export default function App() {
       );
     }
     if (!user) {
-      return <AuthModal />;
+      return <AuthModal embed={embedMode} />;
     }
   }
 

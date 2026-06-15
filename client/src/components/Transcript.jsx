@@ -134,21 +134,27 @@ function OfferChip({ modality, onTap }) {
   const [used, setUsed] = useState(false);
   const chip = OFFER_CHIPS[modality];
   if (!chip) return null;
+  // Block wrapper carries the top gap. The pill itself is inline-flex (hugs its
+  // label); a bare inline-flex with `mt-2` rides UP into the previous text line
+  // (vertical margin on an inline-level box doesn't open block space), which is
+  // why the chip used to overlap the tutor message above it.
   return (
-    <button
-      type="button"
-      disabled={used}
-      onClick={() => {
-        if (usedRef.current) return;
-        usedRef.current = true;
-        setUsed(true);
-        onTap?.(modality);
-      }}
-      className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-muted px-3.5 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent hover:text-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 disabled:cursor-default"
-    >
-      <span aria-hidden="true">✦</span>
-      {chip.label}
-      <span aria-hidden="true">→</span>
-    </button>
+    <div className="mt-3">
+      <button
+        type="button"
+        disabled={used}
+        onClick={() => {
+          if (usedRef.current) return;
+          usedRef.current = true;
+          setUsed(true);
+          onTap?.(modality);
+        }}
+        className="inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-muted px-3.5 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent hover:text-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 disabled:cursor-default"
+      >
+        <span aria-hidden="true">✦</span>
+        {chip.label}
+        <span aria-hidden="true">→</span>
+      </button>
+    </div>
   );
 }
