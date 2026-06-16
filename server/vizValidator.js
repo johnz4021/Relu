@@ -154,6 +154,78 @@ function extractParams(action) {
   return rest;
 }
 
+// ── structural canonicalizers ───────────────────────────────────────────────
+// PARAM_ALIASES above repairs TOP-LEVEL param-name slips (data→values). It cannot
+// reach a param's NESTED shape — and one renderer's canonical shape diverges from
+// what the model naturally hand-builds deeply enough to silently blank: the tree.
+//
+// The trace/vizMapper path emits the canonical tree ({id,value} nodes, {from,to,side}
+// edges, a `root`). The companion hint-mode structure view HAND-BUILDS set_tree and
+// usually arrives in build_example_graph's GRAPH shape: {id,label} nodes, {source,target}
+// edges, a `positions` map, and NO `root`. The schema gate below only checks that
+// `nodes`/`edges` are arrays — never their nested shape — so the graph shape passes
+// validation, then buildHierarchy returns null and the panel renders blank with no error
+// (QA /investigate 2026-06-15: hint-mode trees blanked ~7 of 8 times while the solution,
+// which goes through vizMapper, always rendered). Concept mode never hits this because the
+// model never writes the payload — vizMapper does, canonically. This is the parity fix:
+// canonicalize the hand-built shape at the same seam that already aliases params, so every
+// renderer receives the canonical shape regardless of who authored the action.
+//
+// A canonicalizer returns { params } on success, or { params, error } when the result
+// still can't render — turning the silent blank into a precise, retryable validator error
+// (the loud-failure path in agentLib hands it back to the model).
+
+function canonicalizeSetTree(params) {
+  const positions = params.positions || {};
+  const nodes = (params.nodes || []).map((n) => ({
+    ...n,
+    value: n.value !== undefined ? n.value : n.label !== undefined ? n.label : n.id,
+  }));
+  const edges = (params.edges || []).map((e) => ({
+    ...e,
+    from: e.from !== undefined ? e.from : e.source,
+    to: e.to !== undefined ? e.to : e.target,
+  }));
+  let root = params.root;
+  if (root === undefined || root === null) {
+    const incoming = new Set(edges.map((e) => e.to));
+    root = (nodes.find((n) => !incoming.has(n.id)) || nodes[0] || {}).id;
+  }
+  // Infer each missing left/right side from node x-positions (the graph shape ships
+  // them), else fall back to child order.
+  const byParent = {};
+  for (const e of edges) (byParent[e.from] = byParent[e.from] || []).push(e);
+  for (const group of Object.values(byParent)) {
+    if (group.every((e) => e.side === 'left' || e.side === 'right')) continue;
+    const haveX = group.every((e) => typeof positions[e.to]?.x === 'number');
+    const ordered = haveX ? [...group].sort((a, b) => positions[a.to].x - positions[b.to].x) : group;
+    ordered.forEach((e, i) => { if (e.side === undefined) e.side = i === 0 ? 'left' : 'right'; });
+  }
+  const out = { ...params, nodes, edges, root };
+  delete out.positions; // consumed into side inference; the canonical shape carries none
+
+  // Fail loud: a non-trivial tree that can't resolve a root or link its nodes is the
+  // silent-blank class — surface it instead of shipping a payload that renders nothing.
+  if (nodes.length > 0) {
+    const ids = new Set(nodes.map((n) => n.id));
+    if (root === undefined || !ids.has(root)) {
+      return { params: out, error: `set_tree has ${nodes.length} node(s) but no resolvable root` };
+    }
+    const linked = edges.filter((e) => ids.has(e.from) && ids.has(e.to));
+    if (nodes.length > 1 && linked.length === 0) {
+      return { params: out, error: `set_tree has ${nodes.length} nodes but no edges connect them` };
+    }
+  }
+  return { params: out };
+}
+
+// Keyed by `${rendererType}.${canonicalActionName}`. Add an entry only for actions whose
+// nested/structural shape can diverge from the model's hand-built form — most renderers'
+// set_* handlers default-tolerate ({values:[]}) and need no entry.
+const STRUCTURAL_CANONICALIZERS = {
+  'tree.set_tree': canonicalizeSetTree,
+};
+
 /**
  * Validate model-supplied viz_actions against the renderer manifest.
  *
@@ -260,7 +332,17 @@ export function validateVizActionSchemas(actions, panels, opts = {}) {
       continue;
     }
 
-    valid.push({ renderer: action.renderer, action: canonicalName, params });
+    // Structural canonicalization: normalize a hand-built nested shape into the
+    // renderer's canonical form (and fail loud if it still can't render).
+    const canonicalize = STRUCTURAL_CANONICALIZERS[`${type}.${canonicalName}`];
+    let outParams = params;
+    if (canonicalize) {
+      const { params: cp, error } = canonicalize(params);
+      if (error) { errors.push(`${type}.${canonicalName}: ${error}`); continue; }
+      outParams = cp;
+    }
+
+    valid.push({ renderer: action.renderer, action: canonicalName, params: outParams });
   }
 
   return { valid, errors };

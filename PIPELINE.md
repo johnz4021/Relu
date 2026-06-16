@@ -714,16 +714,36 @@ panel:
    `index`→`indices`), numeric-string→number coercion, scalar→array wrapping. Output
    is normalized to nested `{ renderer, action, params }`. System-emitted actions
    (residual overlays + multi-graph table sync) live in `SYSTEM_ACTIONS` and pass without a published contract.
+   - **Structural canonicalizers** (`STRUCTURAL_CANONICALIZERS`, keyed by
+     `${type}.${action}`): `PARAM_ALIASES` only repairs *top-level* param-name slips. One
+     renderer's canonical shape diverges from the model's hand-built form *deeply* enough
+     to silently blank — the **tree**. Trace-driven trees come from `vizMapper`'s canonical
+     shape (`{id,value}` nodes, `{from,to,side}` edges, a `root`); the companion hint-mode
+     structure view hand-builds `set_tree` in `build_example_graph`'s GRAPH shape
+     (`{id,label}` nodes, `{source,target}` edges, a `positions` map, no `root`), which
+     passes the array/array/optional-root schema check yet makes `TreeRenderer.buildHierarchy`
+     return null → blank, no error (QA /investigate 2026-06-15: hint-mode trees blanked
+     ~7/8 while the solution always rendered). `canonicalizeSetTree` normalizes the GRAPH
+     shape into canonical (alias `source/target`→`from/to`, `label`→`value`, infer `root`,
+     infer each `side` from node x-positions else child order) at this seam, so trace and
+     hand-built authors land on the same payload. This is the deterministic guardrail that
+     gives hint mode parity with concept mode (where the model never writes the payload —
+     `vizMapper` does). The client `TreeRenderer` trusts the canonical shape; it no longer
+     normalizes. Most renderers' `set_*` handlers default-tolerate (`{values: []}`) and need
+     no canonicalizer.
 4. **Graph node-id validation** (`agentLib.validateVizActions`): highlight/path targets
    must exist in `session.currentGraph` — or have been introduced by an accepted
    `add_node` (tracked in `session._addedNodeIds`, reset on every graph replacement).
 
 **Failure is loud, not silent.** Stripped actions come back to the model as precise
 per-action errors in the tool result (`WARNINGS: …`, including the renderer's valid
-action list). If the model supplied viz_actions and **every one** was rejected (and no
-trace actions carry the segment), `emit_segment` **fails the tool call** before sending
-anything — the model fixes the actions and re-emits instead of the student watching
-narration point at a blank panel. `respond_to_interrupt` runs the same ladder on its
+action list). A structural canonicalizer can also reject: a `set_tree` that still can't
+form a tree after canonicalization (a non-trivial tree with no resolvable root or no
+connecting edges) is pushed as an error rather than shipped as a blank — the silent-blank
+class becomes a retryable failure. If the model supplied viz_actions and **every one** was
+rejected (and no trace actions carry the segment), `emit_segment` **fails the tool call**
+before sending anything — the model fixes the actions and re-emits instead of the student
+watching narration point at a blank panel. `respond_to_interrupt` runs the same ladder on its
 `viz_actions` and validates overlay `spotlight_nodes`/`spotlight_edges` against the
 graph.
 

@@ -28,47 +28,6 @@ const SPRING_TRANSITION = { type: 'spring', stiffness: 200, damping: 25 };
 const FAST_SPRING = { type: 'spring', stiffness: 300, damping: 30 };
 
 /**
- * Normalize a set_tree payload into the renderer's canonical shape so a HAND-BUILT
- * tree renders the same as a trace-driven one.
- *
- * The trace/vizMapper path emits the canonical shape: {id,value} nodes, {from,to,side}
- * edges, and a `root` id. Hand-built payloads (the companion hint-mode structure view,
- * which the model writes itself) usually arrive in build_example_graph's GRAPH shape:
- * {id,label} nodes, {source,target} edges, a `positions` map, and NO `root`. The strict
- * renderer used to silently blank on that shape — the trace path worked only because
- * vizMapper emits the canonical shape (QA /investigate 2026-06-15: hint-mode trees blank
- * ~7 of 8 times while the solution always renders). Accept both: alias source/target →
- * from/to, label → value, infer the root, and infer each missing left/right side from
- * node x-positions (which the graph shape ships), else child order.
- */
-export function normalizeTreeParams(params = {}) {
-  const positions = params.positions || {};
-  const nodes = (params.nodes || []).map((n) => ({
-    ...n,
-    value: n.value !== undefined ? n.value : n.label !== undefined ? n.label : n.id,
-  }));
-  const edges = (params.edges || []).map((e) => ({
-    ...e,
-    from: e.from !== undefined ? e.from : e.source,
-    to: e.to !== undefined ? e.to : e.target,
-  }));
-  let root = params.root;
-  if (root === undefined || root === null) {
-    const incoming = new Set(edges.map((e) => e.to));
-    root = (nodes.find((n) => !incoming.has(n.id)) || nodes[0] || {}).id;
-  }
-  const byParent = {};
-  for (const e of edges) (byParent[e.from] = byParent[e.from] || []).push(e);
-  for (const group of Object.values(byParent)) {
-    if (group.every((e) => e.side === 'left' || e.side === 'right')) continue;
-    const haveX = group.every((e) => typeof positions[e.to]?.x === 'number');
-    const ordered = haveX ? [...group].sort((a, b) => positions[a.to].x - positions[b.to].x) : group;
-    ordered.forEach((e, i) => { if (e.side === undefined) e.side = i === 0 ? 'left' : 'right'; });
-  }
-  return { nodes, edges, root };
-}
-
-/**
  * Builds a D3 hierarchy from a flat node/edge list.
  */
 function buildHierarchy(nodes, edges, rootId) {
@@ -227,8 +186,11 @@ export default function TreeRenderer({
     const params = rawParams.params || rawParams;
     switch (action) {
       case 'set_tree': {
-        // Tolerant of both the canonical (vizMapper) and graph-shaped (hand-built) payloads.
-        setTreeData(normalizeTreeParams(params));
+        // Canonical shape ({id,value} nodes, {from,to,side} edges, root) is guaranteed
+        // upstream: trace-driven trees come from vizMapper, hand-built ones are normalized
+        // by vizValidator's set_tree canonicalizer. The DEV warn at buildHierarchy is the
+        // backstop if a non-canonical payload ever slips past both.
+        setTreeData(params);
         setNodeClasses({});
         setEdgeClasses({});
         setNodeColors({});
