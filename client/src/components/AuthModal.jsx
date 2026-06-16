@@ -101,7 +101,7 @@ export default function AuthModal({ embed = false }) {
           </div>
 
           <p className="text-xs text-text-tertiary font-body mt-8">
-            10 free sessions · No credit card
+            3 free sessions · No credit card
           </p>
         </div>
 

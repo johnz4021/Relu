@@ -135,14 +135,19 @@ export async function loadAgentState(conversationId) {
 }
 
 /**
- * Count total conversations for a user.
+ * Count conversations for a user. Pass `sinceISO` to count only those created
+ * on/after that timestamp (used for the Pro per-calendar-month cap); omit it for
+ * the lifetime total (used for the free-trial gate).
  */
-export async function countConversations(userId) {
+export async function countConversations(userId, sinceISO = null) {
   if (!supabase) return 0;
-  const { count, error } = await supabase
+  let query = supabase
     .from('conversations')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
+  if (sinceISO) query = query.gte('created_at', sinceISO);
+
+  const { count, error } = await query;
 
   if (error) {
     console.error('[DB] countConversations error:', error.message);

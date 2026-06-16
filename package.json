@@ -6,8 +6,9 @@
   "scripts": {
     "build": "npm install --prefix client && npm run build --prefix client",
     "start": "node server/index.js",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "concurrently \"npm run server:dev\" \"npm run client\"",
     "server": "node server/index.js",
+    "server:dev": "RELU_UNLIMITED_SESSIONS=1 node server/index.js",
     "client": "npm run dev --prefix client",
     "test": "vitest run"
   },

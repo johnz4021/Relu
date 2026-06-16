@@ -129,21 +129,57 @@ const wss = new WebSocketServer({ noServer: true });
 
 const PORT = process.env.PORT || 3001;
 
-const FREE_SESSION_LIMIT = 50;
+// Free trial: first N sessions ever, then pay (Pro) or BYOK. Pro is capped per
+// calendar month; heavy users go BYOK (their own key, unlimited, $0 to us).
+const FREE_SESSION_LIMIT = 3;
+const PRO_MONTHLY_LIMIT = 20;
+
+// Local/testing bypass — fail CLOSED: the gate is enforced unless this flag is
+// explicitly set (baked into `npm run dev`, never set in production). Host/origin
+// sniffing is avoided on purpose; those headers come from the client and are spoofable.
+const GATE_DISABLED = process.env.RELU_UNLIMITED_SESSIONS === '1';
+if (GATE_DISABLED) {
+  console.warn('[Server] ⚠️  RELU_UNLIMITED_SESSIONS=1 — session gate DISABLED (unlimited sessions). Never set this in production.');
+}
+
+// Start of the current calendar month (UTC) — the window for the Pro monthly cap.
+function monthStartISO() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
 
 const sessions = new Map();
 const sessionsByUserId = new Map();
 
 async function checkSessionGate(session) {
+  if (GATE_DISABLED) return { allowed: true, unlimited: true };
   if (!session.userId) return { allowed: true };
-  const count = await countConversations(session.userId);
-  if (count < FREE_SESSION_LIMIT) return { allowed: true, remaining: FREE_SESSION_LIMIT - count };
-  // Paid subscribers run on the server's API key
-  const sub = await getSubscription(session.userId);
-  if (isSubscriptionActive(sub)) return { allowed: true, subscribed: true };
+
+  // Free trial: first FREE_SESSION_LIMIT sessions, lifetime, no account checks needed.
+  const lifetime = await countConversations(session.userId);
+  if (lifetime < FREE_SESSION_LIMIT) {
+    return { allowed: true, remaining: FREE_SESSION_LIMIT - lifetime };
+  }
+
+  // BYOK runs on the user's own key — unlimited, never counts against the Pro cap.
+  // Checked before the subscription so a subscriber who adds a key for overflow
+  // isn't held to the monthly limit.
   const settings = await getUserSettings(session.userId);
   if (settings?.anthropic_api_key_encrypted) return { allowed: true, byok: true };
-  return { allowed: false, count };
+
+  // Pro: PRO_MONTHLY_LIMIT sessions per calendar month, running on the server's key.
+  const sub = await getSubscription(session.userId);
+  if (isSubscriptionActive(sub)) {
+    const usedThisMonth = await countConversations(session.userId, monthStartISO());
+    if (usedThisMonth < PRO_MONTHLY_LIMIT) {
+      return { allowed: true, subscribed: true, remaining: PRO_MONTHLY_LIMIT - usedThisMonth };
+    }
+    // Hit the monthly cap — the gate surfaces BYOK as the overflow path.
+    return { allowed: false, subscribed: true, capReached: true, count: usedThisMonth, limit: PRO_MONTHLY_LIMIT };
+  }
+
+  // Trial exhausted, not subscribed, no key.
+  return { allowed: false, count: lifetime, limit: FREE_SESSION_LIMIT };
 }
 
 function generateId() {
@@ -373,7 +409,7 @@ function attachHandlers(ws, session) {
           {
             const gate = await checkSessionGate(session);
             if (!gate.allowed) {
-              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT, billingEnabled }));
+              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: gate.limit ?? FREE_SESSION_LIMIT, capReached: !!gate.capReached, subscribed: !!gate.subscribed, billingEnabled }));
               return;
             }
             if (gate.byok) {
@@ -499,18 +535,21 @@ function attachHandlers(ws, session) {
             ws.send(JSON.stringify({ type: 'session_status', allowed: true }));
             return;
           }
+          // Single source of truth for access — also honors GATE_DISABLED and the Pro cap.
+          const gate = await checkSessionGate(session);
           const count = await countConversations(session.userId);
           const settings = await getUserSettings(session.userId);
           const hasByok = !!settings?.anthropic_api_key_encrypted;
           const subscribed = isSubscriptionActive(await getSubscription(session.userId));
-          const allowed = count < FREE_SESSION_LIMIT || subscribed || hasByok;
           ws.send(JSON.stringify({
             type: 'session_status',
-            allowed,
+            allowed: gate.allowed,
             count,
             limit: FREE_SESSION_LIMIT,
+            monthlyLimit: PRO_MONTHLY_LIMIT,
             hasByok,
             subscribed,
+            capReached: !!gate.capReached,
             billingEnabled,
           }));
           break;
@@ -539,7 +578,7 @@ function attachHandlers(ws, session) {
           {
             const gate = await checkSessionGate(session);
             if (!gate.allowed) {
-              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: FREE_SESSION_LIMIT, billingEnabled }));
+              ws.send(JSON.stringify({ type: 'session_limit_reached', count: gate.count, limit: gate.limit ?? FREE_SESSION_LIMIT, capReached: !!gate.capReached, subscribed: !!gate.subscribed, billingEnabled }));
               return;
             }
             if (gate.byok) {

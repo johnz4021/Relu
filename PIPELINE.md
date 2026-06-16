@@ -96,7 +96,13 @@ session = {
 
 **Reconnect grace period:** 15 minutes. If a WS disconnects mid-lesson, the session stays alive and the new WS is swapped in on reconnect.
 
-**Session gate:** 50 free sessions per user (`FREE_SESSION_LIMIT`, `index.js`). Beyond that, the user needs either an active paid subscription (which runs on the server's own Anthropic key) or a BYOK Anthropic key stored encrypted (AES-256-GCM, `crypto.js`) in Supabase's `user_settings` table. `checkSessionGate()` checks subscription first, then falls back to BYOK.
+**Session gate** (`checkSessionGate()`, `index.js`). Order of checks:
+1. **Dev bypass** — if `RELU_UNLIMITED_SESSIONS=1` (`GATE_DISABLED`), allow everything. Fail-closed: the gate is enforced unless this flag is explicitly set. It's baked into `npm run dev` (`server:dev` script) so localhost is unlimited automatically, and must never be set in production. No host/origin sniffing (client headers are spoofable).
+2. **Free trial** — first `FREE_SESSION_LIMIT` (3) sessions per user, lifetime (`countConversations(userId)`).
+3. **BYOK** — a BYOK Anthropic key stored encrypted (AES-256-GCM, `crypto.js`) in Supabase `user_settings` grants unlimited sessions on the user's own key. Checked *before* the subscription so a subscriber who adds a key for overflow isn't held to the monthly cap.
+4. **Pro subscription** — `PRO_MONTHLY_LIMIT` (20) sessions per **calendar month** (`countConversations(userId, monthStartISO())`), running on the server's own Anthropic key. At the cap, the gate returns `{ allowed: false, capReached: true }` and the client (`SessionGate.jsx`) shows the BYOK overflow path instead of the subscribe button.
+
+Pricing: 3 free → **$15/mo for 20 sessions** (`STRIPE_PRICE_ID`) or BYOK. Per-session cost ~$0.60 (two Opus 4.8 roles dominate; see `models.js`), so the cap sits near break-even — it rarely binds, and heavy users are steered to BYOK. To change the monthly window from calendar-month to billing-period, swap `monthStartISO()` for the subscription's `current_period_start`.
 
 ---
 

@@ -237,7 +237,7 @@ export default function App() {
         setGateStatus(msg);
       }
       if (msg.type === 'session_limit_reached') {
-        setGateStatus({ allowed: false, count: msg.count, limit: msg.limit, billingEnabled: msg.billingEnabled });
+        setGateStatus({ allowed: false, count: msg.count, limit: msg.limit, capReached: msg.capReached, subscribed: msg.subscribed, billingEnabled: msg.billingEnabled });
         reset();
       }
       if (msg.type === 'api_key_result') {
@@ -929,8 +929,9 @@ export default function App() {
                 send={send}
                 apiKeyResult={apiKeyResult}
                 onKeySuccess={() => setGateStatus((prev) => ({ ...prev, allowed: true, hasByok: true }))}
-                lastProblemText={lcParsed?.problemText || null}
                 billingEnabled={!!gateStatus.billingEnabled}
+                capReached={!!gateStatus.capReached}
+                subscribed={!!gateStatus.subscribed}
               />
             ) : embedMode ? (
               // Embed mode: never show the landing. Show the two-choice opener
@@ -1196,7 +1197,6 @@ export default function App() {
             send={send}
             apiKeyResult={apiKeyResult}
             billingEnabled={!!gateStatus?.billingEnabled}
-            lastProblemText={lcParsed?.problemText || null}
             onKeySuccess={() => {
               setShowCreditsModal(false);
               setApiKeyResult(null);

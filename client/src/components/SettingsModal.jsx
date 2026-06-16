@@ -104,13 +104,13 @@ export default function SettingsModal({ open, onClose, send, hasByok, subscribed
             ) : (
               <>
                 <p className="text-xs text-text-tertiary mb-3">
-                  Upgrade to ReLU Pro for unlimited sessions on our API key — $20/month.
+                  Upgrade to ReLU Pro for 20 sessions per month on our API key — $15/month.
                 </p>
                 <button
                   onClick={() => { setBillingError(null); startCheckout().catch((err) => setBillingError(err.message)); }}
                   className="px-3 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent/90 rounded-lg transition-colors"
                 >
-                  Upgrade — $20/month
+                  Upgrade — $15/month
                 </button>
               </>
             )}
