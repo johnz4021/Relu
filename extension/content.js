@@ -737,26 +737,40 @@
 
   function onRouteMaybeChanged() {
     const slug = slugFromUrl();
-    if (!slug) return; // not on a problem page
-    if (slug === currentSlug) return;
+    if (slug === currentSlug) return; // no change (covers null===null and same problem)
     currentSlug = slug;
-    log('problem switch →', slug);
-    // tear down a stale overlay so the frame never talks about the old problem
-    clearPageHighlight(); // never leave a highlight anchored to the OLD problem's text
+    // Any detected route change tears down a stale overlay + highlight so the
+    // frame never keeps talking about the PREVIOUS problem (the side-panel
+    // switch bug — investigate 2026-06-16).
+    clearPageHighlight();
     if (overlayEl) { overlayEl.remove(); overlayEl = null; clearReadyHandler(); unpushPage(); }
-    injectButton();
+    if (slug) {
+      log('problem switch →', slug);
+      injectButton(); // fresh launcher for the new problem; clicking reopens with it
+    } else {
+      log('left problem page — overlay torn down');
+      const btn = document.getElementById('relu-stuck-btn');
+      if (btn) { btn.remove(); launcherEl = null; }
+    }
   }
 
-  function hookHistory() {
-    for (const m of ['pushState', 'replaceState']) {
-      const orig = history[m];
-      history[m] = function (...args) {
-        const r = orig.apply(this, args);
-        queueMicrotask(onRouteMaybeChanged);
-        return r;
-      };
-    }
+  function watchForRouteChanges() {
+    // LeetCode is an SPA: problem→problem navigation (the side panel, next/prev)
+    // happens via history.pushState in the PAGE's MAIN world. We CANNOT intercept
+    // that from the ISOLATED world — patching history.pushState here only touches
+    // the isolated realm's History object, never the page's, so the old pushState
+    // hook silently missed every side-panel switch and the overlay stayed pinned
+    // to the old problem (investigate 2026-06-16). location.pathname DOES reflect
+    // the live URL across worlds, so we poll it. popstate (back/forward) crosses
+    // worlds too, so we keep it for instant response on those.
     window.addEventListener('popstate', onRouteMaybeChanged);
+    let lastHref = location.href;
+    setInterval(() => {
+      if (location.href !== lastHref) {
+        lastHref = location.href;
+        onRouteMaybeChanged();
+      }
+    }, 400);
   }
 
   // ----- boot ---------------------------------------------------------------
@@ -766,7 +780,7 @@
     log('booted on', currentSlug, '| nonce', NONCE, '| Alt+Shift+H = anchor spike');
     injectButton();
   }
-  hookHistory();
+  watchForRouteChanges();
   document.addEventListener('keydown', (e) => {
     // e.code (physical key), NOT e.key: on macOS Option+Shift+H yields e.key "Ó",
     // so a key-value check never fires there.
