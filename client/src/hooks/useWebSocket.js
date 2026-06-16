@@ -1,6 +1,39 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
+// Messages that survive a disconnect: queued while the socket is down and
+// replayed on reconnect. Lesson-start messages MUST be here. Dropping
+// start_leetcode / resume_conversation on a socket flap (server restart,
+// post-login reconnect, sleep/wake) silently strands the leetcode overlay on
+// "Loading your problem…" forever — no retry, no timeout, reload-only escape.
+// That was the root of the "stuck on loading" reports (investigate 2026-06-16).
+export const QUEUEABLE_TYPES = [
+  'start_leetcode',
+  'resume_conversation',
+  'guided_response',
+  'guided_message',
+  'interrupt',
+  'end_session',
+  'pause',
+  'resume',
+  'set_speed',
+  'set_tts_muted',
+];
+
+// Pure queue policy (unit-tested in useWebSocket.test.js). Returns a NEW array
+// when the message is queued, or the SAME array reference when it's dropped, so
+// callers can cheaply detect whether anything was enqueued. A fresh lesson-start
+// supersedes any still-queued start/resume, so a reconnect never replays two
+// lessons (which would double-bill and race two agent loops on the server).
+export function enqueueMessage(queue, msg) {
+  if (!QUEUEABLE_TYPES.includes(msg?.type)) return queue;
+  const isStart = msg.type === 'start_leetcode' || msg.type === 'resume_conversation';
+  const base = isStart
+    ? queue.filter((m) => m.type !== 'start_leetcode' && m.type !== 'resume_conversation')
+    : queue;
+  return [...base, msg];
+}
+
 export function useWebSocket(onMessage, onBinary, enabled = true) {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -100,11 +133,11 @@ export function useWebSocket(onMessage, onBinary, enabled = true) {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
     } else {
-      // Queue messages that should be delivered on reconnect
-      const queueableTypes = ['guided_response', 'guided_message', 'interrupt', 'end_session', 'pause', 'resume', 'set_speed', 'set_tts_muted'];
-      if (queueableTypes.includes(msg.type)) {
+      // Socket not open: queue replayable messages for reconnect, drop the rest.
+      const next = enqueueMessage(pendingMessages.current, msg);
+      if (next !== pendingMessages.current) {
         console.log(`[WS] Queuing message (disconnected): ${msg.type}`);
-        pendingMessages.current.push(msg);
+        pendingMessages.current = next;
       }
     }
   }, []);

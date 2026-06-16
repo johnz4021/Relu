@@ -438,6 +438,10 @@ export default function App() {
   // embedAuthPortRef is declared up top (next to the companion refs) so the WS
   // message handler can relay highlight commands over it.
   const [embedTick, setEmbedTick] = useState(0);
+  // Flips true when the embed loading state has spun past its grace period
+  // without the lesson starting — drives the retry UI instead of an infinite
+  // spinner (investigate 2026-06-16).
+  const [embedTimedOut, setEmbedTimedOut] = useState(false);
 
   // Opener intent (design Pass 1/2): 'nudge' → no-spoiler companion, 'showme' →
   // viz-first walkthrough. Intent is PER-OPEN, deliberately NOT persisted.
@@ -588,6 +592,40 @@ export default function App() {
       directWalkthrough: embedIntent === 'showme',
     });
   }, [embedMode, connected, embedTick, embedIntent, handleSelectAlgorithm]);
+
+  // Safety net for the embed loading screen. "Loading your problem…" only clears
+  // when the server answers start_leetcode. If that message is dropped on a
+  // socket flap, or no problem was ever extracted (premium/locked page), the
+  // panel would otherwise spin forever with no retry and no feedback — the
+  // silent dead-end behind the prior "stuck on loading" reports. Arm a grace
+  // timer whenever the spinner is up; if the lesson still hasn't started, flip
+  // to the retry UI (investigate 2026-06-16).
+  const embedSpinnerUp =
+    embedMode && !!embedIntent && state.status === 'idle' &&
+    !(gateStatus && !gateStatus.allowed) && !embedTimedOut;
+  useEffect(() => {
+    if (!embedSpinnerUp) return;
+    const t = setTimeout(() => setEmbedTimedOut(true), 12000);
+    return () => clearTimeout(t);
+  }, [embedSpinnerUp]);
+
+  // Manual retry after a stuck/failed embed start. Transient socket drops now
+  // auto-recover (start_leetcode is queued and flushes on reconnect); this is
+  // the backstop for "server never answered" and "no problem extracted". Re-ping
+  // the parent so content.js re-sends the problem if it has one, then let the
+  // start effect fire again. We only re-arm a fresh start WHEN CONNECTED — if
+  // we're offline a queued start is already waiting to flush, and re-arming
+  // would double it.
+  const retryEmbedStart = useCallback(() => {
+    track('companion_loading_retry', { connected });
+    setEmbedTimedOut(false);
+    reset();
+    try { window.parent.postMessage({ type: 'relu_embed_ready' }, '*'); } catch { /* not framed */ }
+    if (connected) {
+      embedStartedRef.current = false;
+      setEmbedTick((t) => t + 1);
+    }
+  }, [reset, connected]);
 
   const handleResumeConversation = useCallback(
     (conversationId) => {
@@ -898,11 +936,29 @@ export default function App() {
               // Embed mode: never show the landing. Show the two-choice opener
               // until the student picks an intent (or a remembered choice seeds
               // it), then a clean loading state until the lesson kicks out of idle.
+              // If the start handshake silently fails (dropped start_leetcode, no
+              // problem extracted, or a server error), offer a retry instead of
+              // spinning forever (investigate 2026-06-16).
               !embedIntent ? (
                 <CompanionOpener
                   onChoose={chooseEmbedIntent}
                   problemTitle={lcParsed?.title || null}
                 />
+              ) : (embedTimedOut || state.status === 'error') ? (
+                <div className="h-full flex flex-col items-center justify-center gap-3 bg-surface-0 px-6 text-center">
+                  <div className="text-text-secondary text-sm font-body">Couldn’t start the lesson.</div>
+                  <div className="text-text-tertiary text-xs font-body max-w-xs">
+                    {connected
+                      ? 'This problem may be premium or locked, or the connection hiccupped.'
+                      : 'You appear to be offline — reconnecting. Try again in a moment.'}
+                  </div>
+                  <button
+                    onClick={retryEmbedStart}
+                    className="mt-1 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-surface-0 transition-colors hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0"
+                  >
+                    Try again
+                  </button>
+                </div>
               ) : (
                 <div className="h-full flex items-center justify-center bg-surface-0">
                   <div className="text-text-tertiary text-sm font-body">Loading your problem…</div>
