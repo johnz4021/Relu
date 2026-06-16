@@ -82,6 +82,25 @@ function isUsableSession(s) {
   return !!(s && typeof s.access_token === 'string' && typeof s.refresh_token === 'string');
 }
 
+// Frictionless login: tell every open LeetCode problem tab that a session is now
+// available, so a still-open overlay adopts it without a manual reopen. Uses the
+// existing leetcode host permission (no "tabs" permission needed). Best effort — a
+// tab with no content script just drops the message.
+async function notifyLeetcodeTabs(s) {
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://leetcode.com/problems/*' });
+    for (const t of tabs) {
+      chrome.tabs.sendMessage(
+        t.id,
+        { type: 'relu_session_available', session: { access_token: s.access_token, refresh_token: s.refresh_token } },
+        () => void chrome.runtime.lastError,
+      );
+    }
+  } catch (err) {
+    console.warn('[ReLU] notifyLeetcodeTabs failed:', err?.message);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // Funnel event from the content script (or overlay, relayed via content script).
   // Fire-and-forget — no response awaited.
@@ -120,6 +139,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .set({ [SESSION_KEY]: { access_token: s.access_token, refresh_token: s.refresh_token, updated_at: Date.now() } })
       .then(() => {
         console.log('[ReLU] relu_set_session → persisted');
+        // Frictionless login: if this session came from the relu.run sign-in tab (the
+        // bridge) rather than an overlay token-rotation (relayed from a leetcode content
+        // script), ping open problem tabs so a still-open overlay logs in live. Gating
+        // on sender URL avoids echoing the ping back into the overlay during rotation.
+        // The bridge sign-in tab is relu.run in prod, localhost:5173 in dev. Overlay
+        // token rotations are relayed from the leetcode content script (leetcode.com) —
+        // never broadcast those or they echo back into the still-open overlay.
+        const senderUrl = _sender?.tab?.url || '';
+        const fromBridge = /^https:\/\/(www\.)?relu\.run\//.test(senderUrl) || /^http:\/\/localhost:5173\//.test(senderUrl);
+        if (fromBridge) notifyLeetcodeTabs(s);
+        // Close the sign-in handoff tab from the extension side: the page's own
+        // window.close() is blocked after the OAuth redirect (opener relationship lost).
+        // This keeps the user in the overlay instead of dumping them on the web app.
+        if (msg.closeSenderTab && _sender?.tab?.id != null) {
+          console.log('[ReLU] closing sign-in tab', _sender.tab.id);
+          chrome.tabs.remove(_sender.tab.id, () => {
+            if (chrome.runtime.lastError) console.warn('[ReLU] tabs.remove failed:', chrome.runtime.lastError.message);
+          });
+        } else {
+          console.log('[ReLU] relu_set_session: no tab close (closeSenderTab=' + !!msg.closeSenderTab + ', tabId=' + _sender?.tab?.id + ')');
+        }
         sendResponse({ ok: true });
       })
       .catch((err) => {

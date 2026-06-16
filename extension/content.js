@@ -26,9 +26,11 @@
   'use strict';
 
   // ----- config -------------------------------------------------------------
-  // Where the overlay iframe points. Use production to test the real CSP/origin,
-  // or http://localhost:5173 if you're running `npm run dev` locally.
-  const RELU_ORIGIN = 'http://localhost:5173';
+  // Where the overlay iframe points (and where the bridge sign-in tab opens).
+  // DEV TOGGLE: true = local `npm run dev` (localhost:5173); false = production.
+  // ⚠ MUST be false for any packaged / Web Store build (see TODOS: extension packaging).
+  const RELU_DEV = true;
+  const RELU_ORIGIN = RELU_DEV ? 'http://localhost:5173' : 'https://www.relu.run';
   const TAG = '[ReLU-spike]';
   const log = (...a) => console.log(TAG, ...a);
   const warn = (...a) => console.warn(TAG, ...a);
@@ -182,6 +184,24 @@
       );
     } catch { /* worker gone */ }
   }
+
+  // Live login (frictionless Google sign-in): the background worker pings us when a
+  // session arrives from the relu.run sign-in tab (via bridge.js), so a STILL-OPEN
+  // overlay logs in without a manual reopen. Re-post the auth message WITHOUT a port —
+  // the private port was transferred once on open; App.jsx adopts the session on the
+  // no-port path. No-op when no overlay is mounted: the next open reads it from storage.
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type !== 'relu_session_available') return;
+    const frame = overlayEl?.querySelector('iframe');
+    if (!frame || !msg.session) return;
+    try {
+      frame.contentWindow.postMessage(
+        { type: 'relu_auth_token', session: msg.session, nonce: NONCE },
+        RELU_ORIGIN,
+      );
+      log('live session ping → overlay (frictionless login)');
+    } catch { /* frame gone */ }
+  });
 
   // ----- 1. slug + extraction ----------------------------------------------
 
@@ -521,6 +541,10 @@
       if (d && d.type === 'relu_session_update' && d.session) {
         log('overlay → rotated session; persisting to background');
         saveSession(d.session);
+      }
+      if (d && d.type === 'relu_session_clear') {
+        log('overlay → dead session; clearing from background');
+        try { chrome.runtime.sendMessage({ type: 'relu_clear_session' }, () => void chrome.runtime.lastError); } catch { /* worker gone */ }
       }
       if (d && d.type === 'relu_highlight') {
         handleHighlightCommand(d);

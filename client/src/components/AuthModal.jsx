@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { extAuthTabUrl } from '../lib/extAuth';
 import Logo from './Logo';
 
 // `embed` = rendered inside the leetcode extension rail (a narrow sidebar). There
@@ -55,6 +56,22 @@ export default function AuthModal({ embed = false }) {
   const handleGoogleSignIn = async () => {
     setError(null);
     setMessage(null);
+
+    // In the leetcode overlay (embed) the iframe is third-party, so Google refuses to
+    // render (X-Frame-Options) and the redirect would land in partitioned storage. Do
+    // Google in a real relu.run tab instead: it signs in top-level, then bridge.js hands
+    // the session back to the extension and the overlay logs in live. (window.open is
+    // allowed here — it runs inside the button's user-gesture.)
+    if (embed) {
+      const tab = window.open(extAuthTabUrl(window.location.origin), '_blank');
+      if (!tab) {
+        setError('Popup blocked — allow popups for this site, or use email below.');
+      } else {
+        setMessage('Finishing sign-in in a new tab — you’ll be signed in here automatically.');
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({

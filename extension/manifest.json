@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "description": "Dev spike: on a LeetCode problem you're stuck on, inject a ReLU viz+tutor overlay. Throwaway, load-unpacked only. Not for the Web Store.",
   "permissions": ["storage", "declarativeNetRequest"],
-  "host_permissions": ["https://leetcode.com/*", "https://us.i.posthog.com/*"],
+  "host_permissions": ["https://leetcode.com/*", "https://us.i.posthog.com/*", "https://www.relu.run/*", "http://localhost:5173/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "ReLU Stuck Helper"
@@ -16,6 +16,11 @@
     {
       "matches": ["https://leetcode.com/problems/*"],
       "js": ["anchor.js", "content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.relu.run/*", "http://localhost:5173/*"],
+      "js": ["bridge.js"],
       "run_at": "document_idle"
     }
   ],

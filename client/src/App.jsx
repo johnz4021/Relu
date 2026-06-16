@@ -11,6 +11,7 @@ import Controls from './components/Controls';
 import LandingTabs from './components/LandingTabs';
 import CompanionOpener from './components/CompanionOpener';
 import AuthModal from './components/AuthModal';
+import { resolveExtAuthProvider, extAuthAction, extAuthScreen, extAuthTabUrl, isOAuthReturn, readExtAuthMarker, extAuthMarker, EXT_AUTH_KEY, EXT_AUTH_SCREEN_TEXT } from './lib/extAuth';
 import SessionFeedback from './components/SessionFeedback';
 import SessionGate from './components/SessionGate';
 import SettingsModal from './components/SettingsModal';
@@ -32,6 +33,13 @@ import { track } from './lib/posthog';
 import { OFFER_CHIPS, STUCK_MESSAGE } from './lib/offerChips';
 import { selectVisibleContextPanels } from './lib/companionPanels';
 
+// Captured at MODULE LOAD, before supabase's async init strips the OAuth hash via
+// history.replaceState. Reading window.location.hash at render time is too late — the
+// hash can already be gone, which would make the handoff tab fail to recognize itself
+// as returning from OAuth (the bug behind the tab never closing).
+const EXT_AUTH_INITIAL_HASH = typeof window !== 'undefined' ? window.location.hash : '';
+const EXT_AUTH_INITIAL_SEARCH = typeof window !== 'undefined' ? window.location.search : '';
+const EXT_AUTH_RETURNING = isOAuthReturn(EXT_AUTH_INITIAL_HASH, EXT_AUTH_INITIAL_SEARCH);
 
 export default function App() {
   const { session, user, loading: authLoading, signOut } = useAuth();
@@ -539,7 +547,13 @@ export default function App() {
           supabase.auth
             .setSession({ access_token: d.session.access_token, refresh_token: d.session.refresh_token })
             .then(({ error }) => {
-              if (error) console.warn('[ReLU embed] setSession failed:', error.message);
+              if (error) {
+                console.warn('[ReLU embed] setSession failed:', error.message);
+                // Dead stored session (refresh token expired/invalidated): tell the
+                // worker to drop it so it stops re-injecting a corpse on every open.
+                // Session stays null, so the overlay falls through to the login form.
+                try { embedAuthPortRef.current?.postMessage({ type: 'relu_session_clear' }); } catch { /* port closed */ }
+              }
             });
         } else {
           console.log('[ReLU embed] no stored session — login UI will show once, then persist');
@@ -817,6 +831,81 @@ export default function App() {
   const handleClearHistory = useCallback(() => {
     dispatchContext({ type: 'CLEAR_LOADED_CONVERSATION' });
   }, [dispatchContext]);
+
+  // --- EXTENSION AUTH HANDOFF (frictionless Google sign-in) ------------------
+  // This relu.run tab was opened by the overlay's "Continue with Google" because
+  // Google can't be framed inside leetcode. We sign in top-level here, then post the
+  // session to bridge.js, which relays it to the extension (background-owned session).
+  // All the decision logic lives in lib/extAuth.js (pure + tested); this is wiring.
+  const urlExtAuth = new URLSearchParams(EXT_AUTH_INITIAL_SEARCH).get('ext_auth');
+  // OAuth-return signal captured at module load (see top of file). The marker lives in
+  // localStorage (not sessionStorage — that doesn't survive the cross-origin OAuth
+  // round-trip) and is honored only while returning from OAuth, so a stale marker can't
+  // hijack a plain load.
+  const [returningFromOAuth] = useState(EXT_AUTH_RETURNING);
+  let storedExtAuth = null;
+  try { storedExtAuth = readExtAuthMarker(localStorage.getItem(EXT_AUTH_KEY), Date.now()); } catch { /* storage blocked */ }
+  const extAuthProvider = resolveExtAuthProvider(urlExtAuth, storedExtAuth, returningFromOAuth);
+  const [extHandoffDone, setExtHandoffDone] = useState(false);
+  const extTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    // Wait for auth to settle before deciding trigger vs handoff: otherwise a slow
+    // getSession() lets the trigger fire, then a late session flips us to handoff which
+    // clears the marker — a race that strands the return tap.
+    if (!extAuthProvider || !supabase || authLoading) return;
+    const action = extAuthAction({
+      provider: extAuthProvider,
+      hasSession: !!(session?.access_token && session?.refresh_token),
+      returningFromOAuth,
+    });
+
+    if (action === 'handoff') {
+      // Hand the session to bridge.js (same-origin postMessage). closeTab asks the
+      // worker to remove THIS tab from the extension side — the page's own window.close()
+      // is blocked after an OAuth redirect (opener relationship gone). We never fall back
+      // to the web app: extHandoffDone keeps the "signed in, close this tab" screen up.
+      console.log('[ReLU ext_auth] handoff → posting session to bridge (closeTab=true)');
+      window.postMessage(
+        { type: 'relu_ext_session', closeTab: true, session: { access_token: session.access_token, refresh_token: session.refresh_token } },
+        window.location.origin,
+      );
+      try { localStorage.removeItem(EXT_AUTH_KEY); } catch { /* storage blocked */ }
+      setExtHandoffDone(true);
+      return;
+    }
+    if (action === 'trigger' && !extTriggeredRef.current) {
+      // Carry the marker in BOTH the redirect URL (?ext_auth — survives the cross-origin
+      // round-trip when the Supabase redirect allowlist permits it; primary) AND
+      // localStorage (fallback). Either lets the return tab recognize itself; the URL is
+      // immune to the storage-eviction that was stranding us.
+      extTriggeredRef.current = true;
+      try { localStorage.setItem(EXT_AUTH_KEY, extAuthMarker(extAuthProvider, Date.now())); } catch { /* storage blocked */ }
+      supabase.auth
+        .signInWithOAuth({ provider: extAuthProvider, options: { redirectTo: extAuthTabUrl(window.location.origin, extAuthProvider) } })
+        .then(({ error }) => { if (error) console.warn('[ReLU ext_auth] OAuth start failed:', error.message); });
+    }
+  }, [extAuthProvider, session, returningFromOAuth, authLoading]);
+
+  // Handoff screen — short-circuits the normal app while this tab exists only to
+  // complete sign-in for the overlay.
+  if (extAuthProvider || extHandoffDone) {
+    const sp = new URLSearchParams(window.location.search);
+    const hp = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+    const screen = extHandoffDone
+      ? 'signed-in'
+      : extAuthScreen({
+          provider: extAuthProvider,
+          hasUser: !!user,
+          returningFromOAuth,
+          oauthError: sp.get('error') || hp.get('error'),
+        });
+    return (
+      <div className="h-screen flex items-center justify-center bg-surface-0 p-6">
+        <div className="text-text-secondary text-sm font-body text-center max-w-xs">{EXT_AUTH_SCREEN_TEXT[screen]}</div>
+      </div>
+    );
+  }
 
   // Auth gate: if Supabase is configured, require login
   if (supabase) {
