@@ -4,12 +4,16 @@ import GuidedOptions from './GuidedOptions';
 import MathText from './MathText';
 import { track } from '../lib/posthog';
 import { setTimelineSpeed } from '../lib/rendererRegistry';
+import { CAPABILITY_CHIPS, GIVE_UP_MESSAGE, GIVE_UP_AFFORDANCE_ENABLED, CAPS_SEEN_KEY } from '../lib/offerChips';
 
 
 export default function Controls({ status, agentStatus, onInterrupt, onPause, onResume, onSkip, onRestart, onSpeedChange, onTtsMuteToggle, ttsMuted, explanationMode, guidedOptions, onGuidedResponse, mode, onGuidedMessage, guidedPrompt, registerInsertRef, independentWork, onIndependentWorkSubmit, onKeepGuiding, onRevealHint, companion, onStuck }) {
   const [question, setQuestion] = useState('');
   const [pausePending, setPausePending] = useState(false);
   const [independentText, setIndependentText] = useState('');
+  // "What can I ask?" capability disclosure (plan-design-review 2026-06-17).
+  const [capsExpanded, setCapsExpanded] = useState(false);
+  const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
   const { isListening, transcript, isSupported, start, stop, clearTranscript } = useSpeechToText();
   const inputRef = useRef(null);
 
@@ -124,6 +128,32 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
     stuckGuardRef.current = true;
     onStuck?.();
   };
+
+  // First companion session: auto-expand the capability chips once (the coachmark
+  // moment), then remember so we default to collapsed afterward.
+  useEffect(() => {
+    if (!companion) return;
+    try {
+      if (!localStorage.getItem(CAPS_SEEN_KEY)) {
+        setCapsExpanded(true);
+        localStorage.setItem(CAPS_SEEN_KEY, '1');
+      }
+    } catch { /* storage blocked */ }
+  }, [companion]);
+
+  const handleCapabilityChip = (chip) => {
+    if (agentBusy) return;
+    if (chip.confirm) { setShowGiveUpConfirm(true); return; } // give-up: gate on confirm
+    onGuidedMessage?.(chip.message);
+    setCapsExpanded(false);
+  };
+
+  const handleGiveUpConfirm = () => {
+    if (agentBusy) return;
+    setShowGiveUpConfirm(false);
+    setCapsExpanded(false);
+    onGuidedMessage?.(GIVE_UP_MESSAGE);
+  };
   const placeholder = hasGuidedOptions
     ? (guidedOptions.mode === 'open_ended' && guidedOptions.input_placeholder)
       ? guidedOptions.input_placeholder
@@ -162,22 +192,78 @@ export default function Controls({ status, agentStatus, onInterrupt, onPause, on
           <MathText>{guidedOptions?.prompt || guidedPrompt}</MathText>
         </div>
       )}
-      {/* E-UX: companion-only "I'm stuck" — a quiet pull that does NOT deliver a hint;
-          it sends a standalone bid ("I'm stuck") the tutor reads as consent to OFFER the
-          next rung (which then surfaces as a chip). Routes through the normal message
-          channel, so it never outruns the ladder. Sits just above the input. */}
+      {/* Companion capability affordances (plan-design-review 2026-06-17): the existing
+          "I'm stuck" soft bid PLUS a discoverable "What can I ask?" expander that reveals
+          the specific asks. Tapping a hint chip sends its consent sentence through the
+          normal message channel (same as accepting a model offer); "Show the solution"
+          gates on a confirm so give-up is discoverable without being a one-tap spoiler.
+          Auto-expands once on the first companion session (coachmark), collapsed after. */}
       {companion && onStuck && showInput && (
-        <button
-          type="button"
-          onClick={handleStuckClick}
-          disabled={agentBusy}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:border-text-tertiary hover:bg-surface-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.5c0-.72.57-1.172 1.082-1.287A1.5 1.5 0 108.94 6.94zM10 15a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-          </svg>
-          I&apos;m stuck
-        </button>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleStuckClick}
+              disabled={agentBusy}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:border-text-tertiary hover:bg-surface-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.5c0-.72.57-1.172 1.082-1.287A1.5 1.5 0 108.94 6.94zM10 15a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              I&apos;m stuck
+            </button>
+            {/* Disclosure trigger: plain text + chevron, NOT a pill — distinct in kind
+                from the action chips so it reads as "open for options," not an action. */}
+            <button
+              type="button"
+              onClick={() => setCapsExpanded((v) => !v)}
+              aria-expanded={capsExpanded}
+              className="inline-flex items-center gap-1 px-1 py-1.5 text-xs font-medium text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              What can I ask?
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-3.5 h-3.5 transition-transform ${capsExpanded ? 'rotate-180' : ''}`}>
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {/* Revealed options keep the original pill shape, inline in the row. */}
+            {capsExpanded && CAPABILITY_CHIPS
+              .filter((chip) => chip.key !== 'giveup' || GIVE_UP_AFFORDANCE_ENABLED)
+              .map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => handleCapabilityChip(chip)}
+                  disabled={agentBusy}
+                  className="rounded-full border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:border-text-tertiary hover:bg-surface-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {chip.label}
+                </button>
+              ))}
+          </div>
+          {showGiveUpConfirm && (
+            <div className="rounded-xl border border-border bg-surface-2 p-3 space-y-2">
+              <div className="text-sm font-medium text-text-primary">See the full solution?</div>
+              <div className="text-xs text-text-secondary">You&apos;ll learn more if you try a bit longer — show it anyway?</div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleGiveUpConfirm}
+                  disabled={agentBusy}
+                  className="rounded-lg bg-accent hover:bg-accent-hover px-3 py-1.5 text-xs font-medium text-surface-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Show it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGiveUpConfirm(false)}
+                  className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:border-text-tertiary transition-colors"
+                >
+                  Keep trying
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       {showInput && (
         <div className="bg-surface-2 border border-border rounded-xl overflow-hidden focus-within:border-accent transition-colors">

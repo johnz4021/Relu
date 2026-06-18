@@ -414,6 +414,20 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('AND SO IS ITS CONCRETE FORM');
     expect(companion).toContain('reveals_key_insight');
   });
+
+  // PROPORTIONAL RESPONSE (investigate 2026-06-16, the "sort" dump): in NON-companion
+  // guided mode a correct PARTIAL idea was treated as license to advance a whole stage
+  // + the NARRATION GUARD emitted the complete solution on "mostly right". The base
+  // prompt (web-app + show-me walkthrough) now carries a partial-vs-complete rule so a
+  // first insight earns ONE step, not the full algorithm. This lives in the BASE prompt,
+  // not the companion append — that's the whole point (companion already had one-rung).
+  it('base doctrine encodes proportional response on a correct PARTIAL idea', () => {
+    expect(base).toContain('A correct PARTIAL idea or first insight');
+    expect(base).toContain('one correct piece earns one step, not the full algorithm');
+    // NARRATION GUARD no longer unlocks the full solution on a single correct piece.
+    expect(base).toContain('does NOT earn the full solution');
+    expect(base).not.toContain('they got it mostly right → emit a cleaned-up version as confirmation.');
+  });
 });
 
 describe('buildGuidedSystemPrompt — reserved key-insight payload (eng-3)', () => {

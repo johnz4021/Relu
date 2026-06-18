@@ -861,18 +861,23 @@ export default function App() {
     });
 
     if (action === 'handoff') {
-      // Hand the session to bridge.js (same-origin postMessage). closeTab asks the
-      // worker to remove THIS tab from the extension side — the page's own window.close()
-      // is blocked after an OAuth redirect (opener relationship gone). We never fall back
-      // to the web app: extHandoffDone keeps the "signed in, close this tab" screen up.
+      // Hand the session to bridge.js (same-origin postMessage). closeTab asks the worker
+      // to remove THIS tab from the extension side — the page's own window.close() is
+      // blocked after an OAuth redirect. We never fall back to the web app: extHandoffDone
+      // keeps the "signed in, close this tab" screen up.
+      // Retry the post briefly: a fast first-visit handoff (already signed into the web
+      // app, no OAuth round-trip) can fire BEFORE bridge.js finishes its document_idle
+      // injection, and a dropped post would strand the tab signed-in while the extension
+      // waits. The worker closes the tab on receipt, so the page unmounts and the retries
+      // stop on their own.
       console.log('[ReLU ext_auth] handoff → posting session to bridge (closeTab=true)');
-      window.postMessage(
-        { type: 'relu_ext_session', closeTab: true, session: { access_token: session.access_token, refresh_token: session.refresh_token } },
-        window.location.origin,
-      );
+      const payload = { type: 'relu_ext_session', closeTab: true, session: { access_token: session.access_token, refresh_token: session.refresh_token } };
+      window.postMessage(payload, window.location.origin);
+      const retry = setInterval(() => window.postMessage(payload, window.location.origin), 300);
+      setTimeout(() => clearInterval(retry), 3000);
       try { localStorage.removeItem(EXT_AUTH_KEY); } catch { /* storage blocked */ }
       setExtHandoffDone(true);
-      return;
+      return () => clearInterval(retry);
     }
     if (action === 'trigger' && !extTriggeredRef.current) {
       // Carry the marker in BOTH the redirect URL (?ext_auth — survives the cross-origin

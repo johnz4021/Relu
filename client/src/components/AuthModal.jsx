@@ -188,7 +188,7 @@ export default function AuthModal({ embed = false }) {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-2 ${isSignUp ? 'bg-[#b07a50] hover:bg-[#9a6a45]' : 'bg-accent hover:bg-accent-hover'} disabled:opacity-50 text-surface-0 text-sm font-medium font-body rounded-lg transition-colors`}
+              className={`w-full py-2 ${isSignUp ? 'bg-[#e0832e] hover:bg-[#c46f24]' : 'bg-accent hover:bg-accent-hover'} disabled:opacity-50 text-surface-0 text-sm font-medium font-body rounded-lg transition-colors`}
             >
               {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
             </button>

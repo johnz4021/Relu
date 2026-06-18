@@ -225,14 +225,42 @@ describe.skipIf(!ENABLED)('STUCK COMPANION MODE — live behavior eval (Standard
       { type: 'remove', description: 'Unlink the target node' },
       { type: 'result', description: 'Return head', output: 'list without nth-from-end' },
     ];
-    const emitSegmentTool = tools.find((t) => t.name === 'emit_segment');
+    // Offer the tools a real reveal uses — the model legitimately mounts the viz
+    // (create_visualization / build_example_graph) before it narrates the trace.
+    const VIZ_TOOLS = tools.filter((t) => ['emit_segment', 'conversational_reply', 'create_visualization', 'build_example_graph', 'run_algorithm', 'run_solver'].includes(t.name));
     const vizTurn = (messages) => client().messages.create({
       model: MODEL,
       max_tokens: 700,
       system: buildGuidedSystemPrompt(COMPANION_SESSION),
-      tools: [emitSegmentTool, conversationalReplyTool],
+      tools: VIZ_TOOLS,
       messages,
     });
+    // Drive the model to the reveal the way the production loop does: ack each setup tool
+    // call and continue until it narrates (emit_segment). The old harness offered only
+    // [emit_segment, conversational_reply] and checked ONE turn, so the model's correct
+    // "set up the example graph first" step looked like a withhold and hard-failed — it was
+    // measuring a mid-setup snapshot, not whether the give-up reveal actually lands.
+    async function driveToReveal(messages, maxHops = 4) {
+      let msgs = [...messages];
+      for (let hop = 0; hop < maxHops; hop++) {
+        const resp = await vizTurn(msgs);
+        const emit = resp.content.find((b) => b.type === 'tool_use' && b.name === 'emit_segment');
+        if (emit) return { resp, emit, msgs };
+        const toolUses = resp.content.filter((b) => b.type === 'tool_use');
+        if (toolUses.length === 0) return { resp, emit: null, msgs }; // text-only / stalled
+        msgs = [
+          ...msgs,
+          { role: 'assistant', content: resp.content },
+          { role: 'user', content: toolUses.map((b) => ({
+            type: 'tool_result',
+            tool_use_id: b.id,
+            // Re-running the algorithm returns the same loaded trace; other setup just succeeds.
+            content: JSON.stringify(b.name === 'run_algorithm' ? { success: true, trace: TRACE, renderer: 'linked' } : { success: true }),
+          })) },
+        ];
+      }
+      return { resp: null, emit: null, msgs };
+    }
     const base = [
       { role: 'user', content: intake(REMOVE_NTH) },
       { role: 'assistant', content: OPENER },

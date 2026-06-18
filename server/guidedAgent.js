@@ -313,14 +313,21 @@ HANDLING STUDENT MESSAGES:
     why the correct answer is right (1-2 sentences). Do NOT capitulate to an incorrect answer
     just because the student insists. But DO acknowledge their reasoning and explain
     specifically where it breaks down.
-  - If the student gives a CORRECT answer:
-    Give brief praise (1 sentence max) and IMMEDIATELY advance to the next step.
-    Do NOT ask follow-up probing questions on the same concept — a correct answer
-    already demonstrates understanding. Do NOT say "Right! And can you also explain why..."
-    or "Good! But what about..." — just move on.
-    IMPORTANT: Use conversational_reply with wait_for_response: false for the praise,
-    then continue with emit_segment or the next tool call in the SAME turn.
-    Do NOT use wait_for_response: true for praise — that blocks progress.
+  - If the student gives a CORRECT answer, first decide WHAT KIND of correct it is:
+    • A correct PARTIAL idea or first insight — e.g. "sort it first", "use a hash map" —
+      that is the START of the approach, not the whole thing. Confirm it in ONE sentence,
+      then take exactly ONE incremental step: ask the question that leads to the NEXT piece,
+      or add the single next idea — and then STOP and wait (conversational_reply with
+      wait_for_response: true, or send_options). Do NOT pour out the rest of the approach.
+      A correct first step is an invitation to build the solution WITH the student, not
+      permission to hand it over. PROPORTIONALITY: match your output to what they gave you —
+      one correct piece earns one step, not the full algorithm.
+    • A complete, correct answer to the specific question you asked. Give brief praise
+      (1 sentence max) and advance to the next step. Do NOT re-probe the same concept
+      ("Right! And can you also explain why..." / "Good! But what about...") — just move on.
+      Use conversational_reply with wait_for_response: false for the praise, then continue
+      with emit_segment or the next tool call in the SAME turn. Do NOT use wait_for_response:
+      true for praise — that blocks progress.
 
 SOCRATIC DIALOGUE MODE:
   Triggers — use conversational_reply (NOT emit_segment) when the student:
@@ -396,9 +403,13 @@ MONOLOGUE CAP:
 - The count resets whenever the student provides input (via send_options response,
   conversational_reply response, or a [STUDENT MESSAGE]).
 - NARRATION GUARD: Before emitting a narration that contains a complete algorithm,
-  proof, formulation, or solution, ask yourself: has the student attempted this yet?
+  proof, formulation, or solution, ask yourself: has the student worked through the WHOLE
+  thing yet — not just named ONE correct piece of it?
   If NO → do not emit it. Use conversational_reply to ask the student to try first.
-  If YES and they got it mostly right → emit a cleaned-up version as confirmation.
+  A single correct partial idea (e.g. "sort first") does NOT earn the full solution —
+  confirm that piece and build the NEXT step with them (see the correct-PARTIAL rule above).
+  If YES, they assembled it across the dialogue and got it mostly right → emit a cleaned-up
+  version as confirmation/summary of what THEY built.
   If YES and they struggled through the hint ladder → emit it as a summary of what
   you built together (not as new content).
 
@@ -1904,7 +1915,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
                 student_response: studentResponse,
                 timed_out: false,
                 freeform_text: answerText,
-                message: `The student responded: "${answerText}". STOP and address this response BEFORE doing anything else. If the student answered CORRECTLY or is signaling they want to move on (e.g., "I understand", "I get it", "let's move on", "got it", "next", "skip", "continue") — give brief praise via conversational_reply with wait_for_response: false, then advance to the next stage in the SAME turn using emit_segment or send_options. Do NOT use wait_for_response: true for praise. Do NOT ask follow-up probing questions on a concept they just got right. If they are disagreeing, re-explain your reasoning. If they expressed confusion, address it.`,
+                message: `The student responded: "${answerText}". STOP and address this response BEFORE doing anything else. If they offered a correct PARTIAL idea or first insight (not the whole solution) — confirm it in one sentence, take exactly ONE next step (ask the question that leads to the next piece, or add the single next idea), then STOP and wait; do NOT pour out the rest of the approach. If they fully answered or are signaling they want to move on (e.g., "I understand", "I get it", "got it", "next", "skip", "continue") — give brief praise via conversational_reply with wait_for_response: false, then advance ONE step in the SAME turn using emit_segment or send_options. Do NOT use wait_for_response: true for praise. Do NOT ask follow-up probing questions on a concept they just got right. If they are disagreeing, re-explain your reasoning. If they expressed confusion, address it.`,
               };
             }
           } else if (!result) {
@@ -2047,7 +2058,7 @@ async function runGuidedLoop(session, messages, initialSystemPrompt, initialSolv
                 selected_option_ids: studentResponse?.optionIds || null,
                 selected_labels: studentResponse?.labels || null,
                 freeform_text: studentResponse?.text || null,
-                message: `The student answered: "${answerText}". STOP and evaluate this answer BEFORE doing anything else. If their answer is WRONG: you must say "Not quite — [their answer] doesn't work because [reason]" and give a hint. Do NOT silently proceed with the correct answer as if they agreed. Do NOT say "Okay" and then use a different answer. The student must hear explicit feedback on what they said. If CORRECT: give brief praise (1 sentence) via conversational_reply with wait_for_response: false, then continue advancing in the SAME turn. Do NOT ask follow-up probing questions on the same concept.`,
+                message: `The student answered: "${answerText}". STOP and evaluate this answer BEFORE doing anything else. If their answer is WRONG: you must say "Not quite — [their answer] doesn't work because [reason]" and give a hint. Do NOT silently proceed with the correct answer as if they agreed. Do NOT say "Okay" and then use a different answer. The student must hear explicit feedback on what they said. If CORRECT: give brief praise (1 sentence) via conversational_reply with wait_for_response: false, then advance ONE step in the SAME turn — do NOT pour out the rest of the approach at once. Do NOT ask follow-up probing questions on the same concept.`,
               };
             }
           }

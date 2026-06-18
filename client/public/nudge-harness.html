@@ -1,0 +1,118 @@
+<!doctype html>
+<!--
+  DEV-ONLY harness for reproducing the LeetCode "Nudge me" (companion) overlay
+  locally without the Chrome extension. Served by Vite at the SAME origin
+  (http://localhost:5173) so it passes the embed's ALLOWED_PARENT_ORIGINS check.
+  It plays the role of content.js: iframes the app in embed mode and answers the
+  `relu_embed_ready` ping with the 3Sum problem text + matching nonce.
+  Safe to delete — it ships nothing and is only reachable at /nudge-harness.html.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Nudge harness — 3Sum</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0b0e; }
+      #bar { font: 12px monospace; color: #9aa; padding: 4px 8px; }
+      iframe { width: 100%; height: calc(100% - 24px); border: 0; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">nudge-harness: <span id="status">booting…</span></div>
+    <iframe id="app" allow="clipboard-read; clipboard-write"></iframe>
+    <script>
+      // Problem + nonce are read from URL params so we can swap test problems
+      // without editing this file. Defaults to Spiral Matrix (an off-registry /
+      // Tier 3 candidate — no registered algorithm, hand-built walkthrough).
+      const _params = new URLSearchParams(window.location.search);
+      const NONCE = _params.get('nonce') || 'harness-nonce';
+      const PROBLEMS = {
+        spiral: [
+          'Spiral Matrix',
+          '',
+          'Given an m x n matrix, return all elements of the matrix in spiral order.',
+          '',
+          'Example 1:',
+          'Input: matrix = [[1,2,3],[4,5,6],[7,8,9]]',
+          'Output: [1,2,3,6,9,8,7,4,5]',
+          '',
+          'Example 2:',
+          'Input: matrix = [[1,2,3,4],[5,6,7,8],[9,10,11,12]]',
+          'Output: [1,2,3,4,8,12,11,10,9,5,6,7]',
+          '',
+          'Constraints:',
+          '1 <= m, n <= 10',
+          '-100 <= matrix[i][j] <= 100',
+        ].join('\n'),
+        threesum: [
+          '3Sum',
+          '',
+          'Given an integer array nums, return all the triplets [nums[i], nums[j], nums[k]]',
+          'such that i != j, i != k, and j != k, and nums[i] + nums[j] + nums[k] == 0.',
+          'Notice that the solution set must not contain duplicate triplets.',
+          '',
+          'Example 1:',
+          'Input: nums = [-1,0,1,2,-1,-4]',
+          'Output: [[-1,-1,2],[-1,0,1]]',
+        ].join('\n'),
+        // Non-registry / Tier 3 candidates (no registry algorithm → hand-built):
+        zigzag: [
+          'Zigzag Conversion',
+          '',
+          'The string "PAYPALISHIRING" is written in a zigzag pattern on a given number of',
+          'rows like this: (you may want to display this pattern in a fixed font for legibility)',
+          'P   A   H   N',
+          'A P L S I I G',
+          'Y   I   R',
+          'And then read line by line: "PAHNAPLSIIGYIR".',
+          'Write the code that will take a string and make this conversion given a number of rows.',
+          '',
+          'Example 1:',
+          'Input: s = "PAYPALISHIRING", numRows = 3',
+          'Output: "PAHNAPLSIIGYIR"',
+        ].join('\n'),
+        textjust: [
+          'Text Justification',
+          '',
+          'Given an array of strings words and a width maxWidth, format the text so that each',
+          'line has exactly maxWidth characters and is fully (left and right) justified. Distribute',
+          'spaces between words as evenly as possible, leftmost-first when uneven; the last line is',
+          'left-justified.',
+          '',
+          'Example 1:',
+          'Input: words = ["This","is","an","example","of","text","justification."], maxWidth = 16',
+          'Output: ["This    is    an","example  of text","justification.  "]',
+        ].join('\n'),
+      };
+      // ?ptext=<uri-encoded problem> overrides the presets (test any problem).
+      const _ptext = _params.get('ptext');
+      const PROBLEM = _ptext
+        ? decodeURIComponent(_ptext)
+        : (PROBLEMS[_params.get('p') || 'spiral'] || PROBLEMS.spiral);
+
+      const statusEl = document.getElementById('status');
+      const iframe = document.getElementById('app');
+      // Same-origin embed URL with the nonce in the hash.
+      iframe.src = '/?embed=1#n=' + NONCE;
+
+      let problemSent = 0;
+      window.addEventListener('message', (e) => {
+        if (e.origin !== window.location.origin) return;
+        if (e.source !== iframe.contentWindow) return;
+        const d = e.data;
+        if (d && d.type === 'relu_embed_ready') {
+          // Answer like content.js would: problem text + nonce, origin-targeted.
+          iframe.contentWindow.postMessage(
+            { type: 'relu_problem', nonce: NONCE, problemText: PROBLEM },
+            window.location.origin
+          );
+          problemSent++;
+          statusEl.textContent =
+            'ready ping received → sent 3Sum problem (x' + problemSent + '). ' +
+            'Pick "Nudge me", log in if prompted.';
+        }
+      });
+      statusEl.textContent = 'waiting for embed ready ping…';
+    </script>
+  </body>
+</html>
