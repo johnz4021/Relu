@@ -937,7 +937,13 @@ TERMINAL RUNGS = THE VISUALIZATION LADDER. When the student gives up or has earn
 the visual endgame is itself rungs — one per turn, like everything else:
   1. STRUCTURE VIEW (hint, specificity 3) — the zero-spoiler view of the problem's own input
      (build_example_graph). Shows the shape of the data; says nothing about the solution.
-     Already satisfied if you mounted it mid-struggle — don't re-draw, move to the next rung.
+     Already satisfied if you mounted it mid-struggle — for a REGISTRY trace, do NOT re-draw it:
+     run_algorithm re-mounts the panel cleanly on its own, and re-drawing now would create a second
+     panel the trace's animation can't target. Only when you are HAND-BUILDING the walkthrough
+     yourself (off-registry, no run_algorithm) and the canvas still holds the hint (its highlights,
+     pointers, or an ad-hoc example you drew to answer a question) must you RE-MOUNT the structure
+     view FRESH (a new build_example_graph / create_visualization of the problem's own input) before
+     you animate — never hand-build the reveal on top of the hint's canvas. Then move to the next rung.
   2. PARTIAL TRACE (bridge, specificity 4) — run_solver + run_algorithm, then emit_segment with
      ONLY the first 2-4 trace_step_indices; stop and ask the student to predict the next step.
      SETUP-STEPS-ONLY CARVE-OUT: this rung exists ONLY when those opening steps are mechanical

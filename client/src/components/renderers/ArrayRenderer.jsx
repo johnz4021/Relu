@@ -45,6 +45,12 @@ export default function ArrayRenderer({
   const [classes, setClasses] = useState([]);
   const [labels, setLabels] = useState([]);
   const [pointers, setPointers] = useState({});
+  // Bumped on every in-place data swap (set_data). Pointer Motion elements are keyed
+  // by `${dataEpoch}:${name}` so a swap gives them a FRESH identity instead of the
+  // spring interpolating from the previous data's stale layout (the orphaned-pointer
+  // bug). Within one data epoch the key is stable, so a pointer moving index→index
+  // still animates smoothly.
+  const [dataEpoch, setDataEpoch] = useState(0);
   const [windowRange, setWindowRange] = useState(null);
   const [overlayState, setOverlayState] = useState(null);
   const [ghostState, setGhostState] = useState(null);
@@ -88,6 +94,7 @@ export default function ArrayRenderer({
     switch (action) {
       case 'set_data': {
         const values = params.values || [];
+        setDataEpoch((e) => e + 1); // fresh Motion identity for pointers on a data swap
         setData(values);
         setClasses(new Array(values.length).fill('default'));
         setLabels(params.labels || new Array(values.length).fill(''));
@@ -445,7 +452,7 @@ export default function ArrayRenderer({
                 const leftPx = barCenterPx(idx, data.length, containerWidth);
                 return (
                   <m.div
-                    key={name}
+                    key={`${dataEpoch}:${name}`}
                     layout
                     className="absolute text-center"
                     animate={{ left: leftPx }}

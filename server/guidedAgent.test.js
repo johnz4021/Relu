@@ -323,6 +323,20 @@ describe('buildGuidedSystemPrompt (eng D7 — prompt-contract eval)', () => {
     expect(companion).toContain('PARTIAL TRACE');
   });
 
+  // viz-reset fix 2026-06-17: the terminal reveal must start on a CLEAN panel. For the
+  // hand-built (off-registry) walkthrough the model re-mounts the structure view fresh
+  // rather than painting the reveal over the hint's canvas (the registry path is handled
+  // server-side: run_algorithm re-declares the panel with a bumped mountKey).
+  it('companion doctrine: registry reveal does NOT re-draw (server remounts); off-registry re-mounts fresh', () => {
+    // Registry path: run_algorithm re-mounts the panel server-side, so the model must NOT
+    // re-draw the structure view (re-drawing creates a second panel the trace can't target).
+    expect(companion).toContain('do NOT re-draw it');
+    expect(companion).toContain('run_algorithm re-mounts the panel cleanly');
+    // Off-registry (hand-built, no run_algorithm): the model re-mounts a fresh structure view.
+    expect(companion).toContain('a new build_example_graph / create_visualization');
+    expect(companion).toContain('off-registry, no run_algorithm');
+  });
+
   // eng review 2026-06-09 D8: the partial-trace bridge rung is narrowed so it can
   // never contradict RESERVE THE KEY INSIGHT — setup-steps-only, honest self-report,
   // and resume-at-k transition semantics (re-emitting corrupts stateful mapper replay).

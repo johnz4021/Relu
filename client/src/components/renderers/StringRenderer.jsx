@@ -88,7 +88,7 @@ function Pointer({ name, index, cellSize, gap }) {
   );
 }
 
-function StringRow({ chars, charStates, windowRange, windowClass, pointers, label, stagger = false }) {
+function StringRow({ chars, charStates, windowRange, windowClass, pointers, label, stagger = false, dataEpoch = 0 }) {
   const n = chars.length;
 
   return (
@@ -114,7 +114,7 @@ function StringRow({ chars, charStates, windowRange, windowClass, pointers, labe
         <div className="relative" style={{ height: 36 }}>
           <AnimatePresence>
             {Object.entries(pointers).map(([name, idx]) => (
-              <Pointer key={name} name={name} index={idx} cellSize={CELL_SIZE} gap={CELL_GAP} />
+              <Pointer key={`${dataEpoch}:${name}`} name={name} index={idx} cellSize={CELL_SIZE} gap={CELL_GAP} />
             ))}
           </AnimatePresence>
         </div>
@@ -178,6 +178,10 @@ export default function StringRenderer({
   const [windowRange, setWindowRange] = useState(null);
   const [windowClass, setWindowClass] = useState(null);
   const [pointers, setPointers] = useState({});
+  // Bumped on every string swap (set_string / set_pattern) so pointer Motion elements
+  // (keyed `${dataEpoch}:${name}`) get a fresh identity instead of springing from the
+  // previous string's stale layout. Mirrors ArrayRenderer's dataEpoch.
+  const [dataEpoch, setDataEpoch] = useState(0);
   const [patternChars, setPatternChars] = useState([]);
   const [patternStates, setPatternStates] = useState([]);
   const [patternOffset, setPatternOffset] = useState(0);
@@ -221,6 +225,7 @@ export default function StringRenderer({
       case 'set_string': {
         const s = String(params.s || '');
         const arr = [...s];
+        setDataEpoch((e) => e + 1); // fresh Motion identity for pointers on a string swap
         setMode('single');
         setChars(arr);
         setCharStates(new Array(arr.length).fill('default'));
@@ -237,6 +242,7 @@ export default function StringRenderer({
       case 'set_pattern': {
         const p = String(params.p || '');
         const arr = [...p];
+        setDataEpoch((e) => e + 1); // fresh Motion identity for the pattern-row pointers
         setMode('dual');
         setPatternChars(arr);
         setPatternStates(new Array(arr.length).fill('default'));
@@ -376,6 +382,7 @@ export default function StringRenderer({
         pointers={pointers}
         label={mode === 'dual' ? 'text' : null}
         stagger
+        dataEpoch={dataEpoch}
       />
 
       {/* Pattern row (KMP dual-string mode) */}
@@ -410,7 +417,7 @@ export default function StringRenderer({
             <div className="relative" style={{ height: 36 }}>
               <AnimatePresence>
                 {Object.entries(patternPointers).map(([name, idx]) => (
-                  <Pointer key={name} name={name} index={idx} cellSize={CELL_SIZE} gap={CELL_GAP} />
+                  <Pointer key={`${dataEpoch}:${name}`} name={name} index={idx} cellSize={CELL_SIZE} gap={CELL_GAP} />
                 ))}
               </AnimatePresence>
             </div>

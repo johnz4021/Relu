@@ -453,9 +453,24 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           if (!session.currentGraph) session.currentGraph = g;
         }
       }
+      // Companion reveal / re-mount: re-declaring an EXISTING renderer panel in companion
+      // mode (the Tier-3 hand-built walkthrough, or a mid-struggle borrow-and-return) must
+      // remount a fresh instance, not paint the reveal over the hint canvas. run_algorithm
+      // has no role on the Tier-3 path, so this is the only remount lever there. Bump a
+      // shared mountKey once and attach it to any panel re-declaring an existing renderer
+      // panel. session._panels still reflects the prior (hint) registration here, because
+      // registerPanels for THIS call runs after sendJSON below.
+      const isExistingRendererPanel = (p) => session._panels?.[p.id || p.renderer]?.type === 'renderer';
+      const cvReveal = !!session.companionMode && panels.some(isExistingRendererPanel);
+      const cvRemountKey = cvReveal
+        ? (session._panelMountKey = (session._panelMountKey || 0) + 1)
+        : undefined;
       const vizMsg = {
         type: 'create_visualization',
-        panels: panels.map(p => ({ ...p, id: p.id, title: p.title })),
+        panels: panels.map((p) => {
+          const base = { ...p, id: p.id, title: p.title };
+          return (cvRemountKey != null && isExistingRendererPanel(p)) ? { ...base, mountKey: cvRemountKey } : base;
+        }),
         context_panels: input.context_panels || [],
       };
       sendJSON(ws, vizMsg);
@@ -569,6 +584,22 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
           // Use 'algorithm_step' instead of 'lesson_start' to avoid wiping transcript/viz state.
           sendJSON(ws, { type: 'algorithm_step', algorithm: algo });
 
+          // ── Companion reveal: force a fresh panel remount UNIFORMLY across every
+          // panel-mounting branch below (multi-panel, graph, non-graph else) ──
+          // In companion mode run_algorithm is always the terminal walkthrough, and any
+          // existing renderer panel is the student's HINT canvas. Bumping a shared mountKey
+          // makes the client (VizLayout keys `${id}#${mountKey}`) tear down the hint renderer
+          // instance and mount a clean one — clearing stale React state, reused cytoscape
+          // instances, and overlays that a data-set action alone does not reset. Branch-local
+          // remount logic was the root cause of the graph/multi-panel gaps; this hoist fixes
+          // them generally instead of per-renderer.
+          const hasExistingRendererPanel = Object.values(session._panels || {}).some((p) => p?.type === 'renderer');
+          const companionReveal = !!session.companionMode && hasExistingRendererPanel;
+          const remountKey = companionReveal
+            ? (session._panelMountKey = (session._panelMountKey || 0) + 1)
+            : undefined;
+          const withMountKey = (obj) => (remountKey != null ? { ...obj, mountKey: remountKey } : obj);
+
           if (algoInfo?.panels?.length > 0) {
             // Multi-panel registry declaration (median_finder, merge_k_sorted):
             // mount EVERY declared panel. The mapper targets these panel ids
@@ -576,7 +607,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             // rewrite would be ambiguous with two panels of the same type.
             const autoVizMsg = {
               type: 'create_visualization',
-              panels: algoInfo.panels.map(p => ({ id: p.id, renderer: p.renderer, title: p.title, config: {} })),
+              panels: algoInfo.panels.map(p => withMountKey({ id: p.id, renderer: p.renderer, title: p.title, config: {} })),
               context_panels: contextPanels,
             };
             sendJSON(ws, autoVizMsg);
@@ -637,7 +668,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
               }
               const finalGraph = { ...graphData, edges, positions, directed };
               console.log(`[Agent] Auto-creating graph: ${finalGraph.nodes?.length} nodes, directed=${directed}`);
-              const autoGraphMsg = { type: 'create_graph', graph: finalGraph };
+              const autoGraphMsg = withMountKey({ type: 'create_graph', graph: finalGraph });
               sendJSON(ws, autoGraphMsg);
               session.currentGraph = finalGraph;
               session._addedNodeIds = new Set();
@@ -681,17 +712,21 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
             const rendererPanelId = existingEntry ? existingEntry[0] : rendererType;
             // Store so emit_segment can rewrite Tier 2 viz_action renderer targets
             session._rendererPanelId = rendererPanelId;
+            // Companion reveal (companionReveal/remountKey/withMountKey hoisted above the
+            // branch dispatch): re-declare the existing hint panel with a bumped mountKey so
+            // the client remounts a FRESH instance instead of the panels:[] preserve. Outside
+            // the companion reveal, keep preserve so a normal lesson's renderer state survives.
+            const sendPanels = (existingEntry && !companionReveal)
+              ? []
+              : [withMountKey({ id: rendererPanelId, renderer: rendererType, config: {} })];
             const autoVizMsg = {
               type: 'create_visualization',
-              // If the agent already registered a named panel (e.g. 'string_main'), send
-              // panels:[] so the client preserves the existing mounted panel rather than
-              // remounting it — which would strip its title and reset renderer state.
-              panels: existingEntry ? [] : [{ id: rendererPanelId, renderer: rendererType, config: {} }],
+              panels: sendPanels,
               context_panels: contextPanels,
             };
             sendJSON(ws, autoVizMsg);
-            registerPanels(session, existingEntry ? [] : [{ id: rendererPanelId, renderer: rendererType }], contextPanels);
-            if (!existingEntry) session._lastVizMessage = autoVizMsg;
+            registerPanels(session, sendPanels.length ? [{ id: rendererPanelId, renderer: rendererType }] : [], contextPanels);
+            if (sendPanels.length) session._lastVizMessage = autoVizMsg;
             if (!session._rendererVizHistory) session._rendererVizHistory = {};
             session._rendererVizHistory[rendererType] = [];
           }

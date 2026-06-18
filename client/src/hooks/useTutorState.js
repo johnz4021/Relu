@@ -81,7 +81,17 @@ export function reducer(state, action) {
       const existingPanels = state.vizPanels;
       // Preserve existing graph panel id to avoid key change → remount → snapshot loss
       const existingGraphId = existingPanels?.find((p) => p.renderer === 'graph')?.id || 'graph';
-      const graphPanel = { id: existingGraphId, renderer: 'graph', props: { graph: action.graph, directed: action.graph.directed } };
+      // mountKey (companion reveal) forces a fresh GraphRenderer instance: cy.elements().remove()
+      // only clears cytoscape classes, but the reused cy instance plus React state (annotations,
+      // showingResidual) and snapshot refs survive without a remount. VizLayout keys `${id}#${mountKey}`,
+      // so a bumped key tears the hint graph down and mounts clean. Absent (non-companion), the id is
+      // preserved as before (no remount → no snapshot loss).
+      const graphPanel = {
+        id: existingGraphId,
+        renderer: 'graph',
+        ...(action.mountKey != null ? { mountKey: action.mountKey } : {}),
+        props: { graph: action.graph, directed: action.graph.directed },
+      };
       // If a multi-panel layout is active, replace only the graph panel in place
       // rather than wiping the whole layout (preserves co-mounted panels like table)
       const hasMultiPanel = existingPanels && existingPanels.length > 1;
@@ -394,7 +404,7 @@ export function useTutorState() {
         dispatch({ type: 'ALGORITHM_STEP', algorithm: msg.algorithm });
         break;
       case 'create_graph':
-        dispatch({ type: 'CREATE_GRAPH', graph: msg.graph });
+        dispatch({ type: 'CREATE_GRAPH', graph: msg.graph, mountKey: msg.mountKey });
         if (msg.context_panels) {
           dispatch({ type: 'SET_CONTEXT_PANELS', panels: msg.context_panels });
         }
@@ -410,6 +420,10 @@ export function useTutorState() {
             return {
               id,
               renderer: p.renderer,
+              // mountKey forces a fresh renderer instance when the server re-declares a
+              // panel under the SAME id (companion reveal): VizLayout keys on id#mountKey,
+              // so a bump remounts cleanly instead of painting on the hint's instance.
+              ...(p.mountKey != null ? { mountKey: p.mountKey } : {}),
               props: { ...(p.config || {}), title: typeof p.title === 'string' ? p.title : p.title?.text || (p.title ? String(p.title) : undefined) },
             };
           });
