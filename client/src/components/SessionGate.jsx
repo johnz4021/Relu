@@ -77,6 +77,19 @@ export default function SessionGate({ count, limit, send, onKeySuccess, apiKeyRe
               <p className="text-xs text-text-tertiary mb-3">
                 20 tutoring sessions per month on our API key. Cancel any time from Settings.
               </p>
+              {/* Cross-problem roadmap line (plan-design-review 2026-06-18): part of the
+                  PACKAGE pitch. "Coming" badge keeps it honest (not shipped); the concrete
+                  example shows the value without a built surface. No date. This is the
+                  convert-on-promise line the cohort-retention metric watches. */}
+              <p className="text-xs text-text-tertiary mb-3 flex items-start gap-1.5">
+                <span className="inline-flex items-center rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary shrink-0">
+                  Coming
+                </span>
+                <span>
+                  A coach that spots the patterns you keep missing across problems — like reaching
+                  for nested loops when two pointers was the tell.
+                </span>
+              </p>
               <button
                 onClick={handleSubscribe}
                 disabled={checkoutLoading}
