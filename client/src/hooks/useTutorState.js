@@ -30,7 +30,6 @@ const initialState = {
   conversations: [],           // conversation history list
   loadedConversation: null,    // loaded transcript messages for viewing
   viewingHistory: false,       // whether we're viewing a transcript
-  creditsExhausted: false,     // whether Anthropic credits are exhausted (triggers BYOK modal)
   independentWork: null,        // null | { checkpoint_summary, task_description, hints, revealedHints: [] }
 };
 
@@ -172,9 +171,6 @@ export function reducer(state, action) {
         ],
       };
 
-    case 'SET_EXPLANATION_MODE':
-      return { ...state, explanationMode: action.explanationMode };
-
     case 'CLEAR_EXPLANATION_MODE':
       return { ...state, explanationMode: null, rewindStep: 0 };
 
@@ -267,17 +263,6 @@ export function reducer(state, action) {
       return { ...state, status: 'teaching', mode: 'guided', guidedPhase: 'analyzing', segments: restored, loadedConversation: null, viewingHistory: false };
     }
 
-    case 'LOAD_TRANSCRIPT':
-      return {
-        ...state,
-        segments: action.messages.map((m, i) => ({
-          id: m.id || `loaded_${i}`,
-          narration: m.content,
-          type: m.type,
-          active: false,
-        })),
-      };
-
     case 'GUIDED_PHASE':
       return { ...state, guidedPhase: action.phase };
 
@@ -342,15 +327,6 @@ export function reducer(state, action) {
 
     case 'CLEAR_LOADED_CONVERSATION':
       return { ...state, loadedConversation: null, viewingHistory: false };
-
-    case 'TTS_AUTO_DISABLED':
-      return { ...state, ttsMuted: true };
-
-    case 'CREDITS_EXHAUSTED':
-      return { ...state, creditsExhausted: true };
-
-    case 'CLEAR_CREDITS_EXHAUSTED':
-      return { ...state, creditsExhausted: false };
 
     case 'INDEPENDENT_WORK':
       return {
@@ -540,12 +516,6 @@ export function useTutorState() {
         break;
       case 'error':
         dispatch({ type: 'ERROR', message: msg.message });
-        break;
-      case 'tts_auto_disabled':
-        dispatch({ type: 'TTS_AUTO_DISABLED' });
-        break;
-      case 'credits_exhausted':
-        dispatch({ type: 'CREDITS_EXHAUSTED' });
         break;
     }
   }, []);

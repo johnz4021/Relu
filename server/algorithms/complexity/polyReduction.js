@@ -70,10 +70,6 @@ export const DEFAULT_REDUCTION_GRAPH = {
   },
 };
 
-function litToStr(lit) {
-  return lit.replace('x', 'x₁').replace('x₁', lit.startsWith('¬') ? lit.replace('¬x', '¬x₁').slice(0) : lit);
-}
-
 function formatClause(clause) {
   return `(${clause.join(' ∨ ')})`;
 }

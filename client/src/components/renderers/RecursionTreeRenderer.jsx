@@ -101,7 +101,6 @@ function buildRecurrenceTree(a, b, d, n) {
 
       // Connect to parent
       if (k > 0) {
-        const parentIndex = Math.floor((nodeCounter - Math.pow(a, k)) / a) + Math.floor((nodeCounter - levelStart) / a);
         // Parent is at level k-1, child i's parent is floor(i/a) at level k-1
         const parentLevelStart = levelStart - Math.pow(a, k - 1);
         const parentIdx = parentLevelStart + Math.floor(i / a);
@@ -168,7 +167,6 @@ function buildHierarchy(nodes, edges, rootId) {
 
 export default function RecursionTreeRenderer({
   rendererId = 'recursion_tree',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

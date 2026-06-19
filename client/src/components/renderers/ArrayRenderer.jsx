@@ -36,7 +36,6 @@ let nextStableId = 0;
 
 export default function ArrayRenderer({
   rendererId = 'array',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

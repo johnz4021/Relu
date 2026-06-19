@@ -3,7 +3,6 @@ import { m, AnimatePresence } from 'motion/react';
 import { registerRenderer, unregisterRenderer } from '../../lib/rendererRegistry';
 
 const CELL_SIZE = 40;
-const CELL_SIZE_MOBILE = 36;
 const CELL_GAP = 4;
 const POINTER_SPRING = { type: 'spring', stiffness: 300, damping: 25 };
 const PATTERN_SPRING = { type: 'spring', stiffness: 200, damping: 30 };
@@ -167,7 +166,6 @@ function EmptyState() {
 
 export default function StringRenderer({
   rendererId = 'string',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

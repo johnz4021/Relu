@@ -7,7 +7,6 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@gsap/react": "^2.1.2",
     "@supabase/supabase-js": "^2.98.0",
     "cytoscape": "^3.30.4",
     "d3": "^7.9.0",

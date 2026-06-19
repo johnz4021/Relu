@@ -340,7 +340,6 @@ function applyGraphAction(cy, action, params) {
 export default function GraphRenderer({
   graph,
   vizActions,
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

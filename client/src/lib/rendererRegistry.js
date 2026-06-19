@@ -150,18 +150,6 @@ export function setTimelineSpeed(speed) {
   if (activeTimeline) activeTimeline.timeScale(speed);
 }
 
-export function takeSnapshot(rendererName) {
-  return renderers[rendererName]?.takeSnapshot?.();
-}
-
-export function restoreSnapshot(rendererName, snapshot) {
-  renderers[rendererName]?.restoreSnapshot?.(snapshot);
-}
-
-export function getRenderer(name) {
-  return renderers[name] || null;
-}
-
 /**
  * Synchronously load graph data into a renderer, bypassing React's async state/effect cycle.
  * Called from the WS message handler so the graph is ready before any viz actions arrive.

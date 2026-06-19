@@ -1,1 +1,1 @@
-export { huffman, buildHuffmanLeafGraph } from './huffman.js';
+export { huffman } from './huffman.js';

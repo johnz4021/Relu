@@ -38,7 +38,6 @@ const ARROW_COLORS = {
 
 export default function TableRenderer({
   rendererId = 'table',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

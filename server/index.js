@@ -5,7 +5,6 @@ import { WebSocketServer } from 'ws';
 import { parse as parseUrl } from 'url';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { DEFAULT_GRAPH } from './algorithms.js';
 import { startGuidedSession, resumeGuidedSession } from './guidedAgent.js';
 import { resolveHighlightResult, abortHighlightWait } from './agentLib.js';
 import { resetTTSDisabled } from './tts.js';
@@ -14,7 +13,7 @@ import { verifyJWT } from './supabase.js';
 import { createConversation, listConversations, loadConversationMessages, loadAgentState, countConversations, getUserSettings, saveUserSettings, saveFeedback, createLcSession, masterLcSession, listLcSessions, getSubscription } from './db.js';
 import { registerStripeWebhook, registerStripeRoutes, isSubscriptionActive, billingEnabled } from './stripe.js';
 import { parseLeetcodeProblem } from './leetcodeAgent.js';
-import { ALGORITHMS, runRegisteredAlgorithm, runAlgorithmWithFallback } from './algorithms/registry.js';
+import { ALGORITHMS, runAlgorithmWithFallback } from './algorithms/registry.js';
 import { encrypt, decrypt } from './crypto.js';
 import { KEY_VALIDATION_MODEL } from './models.js';
 
@@ -496,37 +495,6 @@ function attachHandlers(ws, session) {
           // Drop the active client so the next session falls back to the server key (or the paywall)
           session.anthropicClient = null;
           ws.send(JSON.stringify({ type: 'api_key_result', success: true, action: 'deleted' }));
-          break;
-        }
-
-        case 'register_interest': {
-          if (!session.userId) return;
-          // Auth-tied "would pay" intent → user_settings (existing schema).
-          // Comments column kept populated with wedge_other for backward-compat
-          // with anything reading it; full structured payload also goes to
-          // feedback table for queryable analysis.
-          await saveUserSettings(session.userId, {
-            would_pay: true,
-            would_pay_amount: msg.amount || null,
-            other_classes: msg.otherClasses || null,
-            comments: msg.wedgeOther || msg.comments || null,
-          });
-          // Survey signal → feedback table with category='gate_survey'. Lets
-          // us run group-by queries on which wedge selections drive intent
-          // without polluting user_settings with N more columns per question.
-          saveFeedback('gate_survey', {
-            email: session.userEmail || null,
-            message: msg.problemContext || '',
-            meta: {
-              amount: msg.amount || null,
-              other_classes: msg.otherClasses || null,
-              wedge_selections: Array.isArray(msg.wedgeSelections) ? msg.wedgeSelections : [],
-              wedge_other: msg.wedgeOther || null,
-              nps_score: typeof msg.npsScore === 'number' ? msg.npsScore : null,
-              had_problem_context: !!(msg.problemContext && msg.problemContext.trim()),
-            },
-          });
-          ws.send(JSON.stringify({ type: 'interest_registered' }));
           break;
         }
 

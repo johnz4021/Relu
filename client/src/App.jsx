@@ -16,7 +16,6 @@ import SessionFeedback from './components/SessionFeedback';
 import SessionGate from './components/SessionGate';
 import SettingsModal from './components/SettingsModal';
 import ContextPanelHost from './components/context/ContextPanelHost';
-import ContextOverlay from './components/context/ContextOverlay';
 import PseudocodePanel from './components/context/PseudocodePanel';
 import ResizableSplit from './components/ResizableSplit';
 import ExitConfirmModal from './components/ExitConfirmModal';
@@ -262,9 +261,6 @@ export default function App() {
             sendRef.current?.({ type: 'check_session_status' });
           }
         }
-      }
-      if (msg.type === 'interest_registered') {
-        track('would_pay_registered', {});
       }
       if (msg.type === 'session_resumed') {
         console.log('[App] Session resumed after reconnection');

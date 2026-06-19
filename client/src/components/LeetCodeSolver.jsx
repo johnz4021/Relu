@@ -8,7 +8,6 @@ const DISPLAY_NAMES = {
   dfs: 'DFS',
   bst_insert: 'BST Insert',
   dag_shortest: 'DAG Shortest Path',
-  bell_ford: 'Bellman-Ford',
   bellman_ford: 'Bellman-Ford',
 };
 

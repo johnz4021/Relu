@@ -35,7 +35,6 @@ const MACHINE_COLOR_LABELS = [
 
 export default function IntervalRenderer({
   rendererId = 'interval',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

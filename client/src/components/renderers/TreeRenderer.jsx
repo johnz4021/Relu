@@ -98,7 +98,6 @@ function buildEdgeKeys(path) {
 
 export default function TreeRenderer({
   rendererId = 'tree',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

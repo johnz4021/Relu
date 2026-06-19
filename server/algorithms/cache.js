@@ -95,11 +95,3 @@ export function outputMatchesExpected(trace, expectedOutput) {
   if (!resultStep?.output) return true;
   return String(resultStep.output).trim() === String(expectedOutput).trim();
 }
-
-export function getCacheStats() {
-  const stats = {};
-  for (const [id, entry] of memCache) {
-    stats[id] = { renderer: entry.renderer, hitCount: entry.hitCount, verifiedAt: entry.verifiedAt };
-  }
-  return stats;
-}

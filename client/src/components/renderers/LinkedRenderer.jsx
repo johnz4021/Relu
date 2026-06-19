@@ -26,7 +26,6 @@ let stableIdCounter = 0;
 
 export default function LinkedRenderer({
   rendererId = 'linked',
-  phase,
   explanationMode,
   segmentCount,
   rewindStep = 0,

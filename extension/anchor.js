@@ -116,7 +116,7 @@
     };
   }
 
-  const api = { DESCRIPTION_SELECTORS, normalizeText, locateQuote, buildNormalizedIndex };
+  const api = { DESCRIPTION_SELECTORS, normalizeText, locateQuote };
 
   // Classic-script consumers (content.js) and the vitest suite both read this.
   globalThis.ReLUAnchor = api;

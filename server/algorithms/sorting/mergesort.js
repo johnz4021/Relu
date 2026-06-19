@@ -79,8 +79,6 @@ export function mergesort(arr) {
     });
   }
 
-  let depth = 0;
-
   function ms(left, right, currentDepth, parentCallId) {
     if (left < right) {
       const callId = `${left}-${right}`;

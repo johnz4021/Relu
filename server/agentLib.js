@@ -1,15 +1,14 @@
 // Shared agent utilities — used by agent.js, guidedAgent.js, and explainAgent.js
 
 import Anthropic from '@anthropic-ai/sdk';
-import { tools } from './tools.js';
 import { runAlgorithmWithFallback, ALGORITHMS } from './algorithms/registry.js';
 import { validateAlgorithmInput } from './algorithms/validateInput.js';
 import { adaptAlgorithmInput } from './algorithms/adaptInput.js';
-import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
+import { synthesizeAndStream } from './tts.js';
 import { mapTraceStep } from './vizMapper.js';
 import { validateVizActionSchemas } from './vizValidator.js';
 import { getDefaultContextPanels } from './contextPanelDefaults.js';
-import { layoutGrid, autoLayout } from './graphLayout.js';
+import { autoLayout } from './graphLayout.js';
 
 // Proxy that always reads session.ws dynamically, so agent loops survive WS reconnects
 export function liveWs(session) {
@@ -1244,7 +1243,7 @@ export async function handleToolCall(session, toolCall, graph, algorithm, source
     }
 
     case 'send_options': {
-      const { prompt, options } = input;
+      const { prompt } = input;
 
       sendJSON(ws, { type: 'guided_options', prompt, options: input.options || [], mode: input.mode || 'mc', input_placeholder: input.input_placeholder });
 

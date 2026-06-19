@@ -344,16 +344,3 @@ export function dfs(graph, sourceId) {
 
   return trace;
 }
-
-export function runAlgorithm(algorithm, graph, sourceId) {
-  switch (algorithm) {
-    case 'dijkstra':
-      return dijkstra(graph, sourceId);
-    case 'bfs':
-      return bfs(graph, sourceId);
-    case 'dfs':
-      return dfs(graph, sourceId);
-    default:
-      throw new Error(`Unknown algorithm: ${algorithm}`);
-  }
-}

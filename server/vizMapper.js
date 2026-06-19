@@ -194,14 +194,6 @@ function mapGraphStep(algo, step, state) {
             { key: 'Status', value: 'Initialized' },
           ],
         }));
-      } else if (algo === 'graph_coloring_np') {
-        c.push(ctxUpdate('stats', {
-          entries: [
-            { key: 'Phase', value: 'Starting', status: 'default' },
-            { key: 'Attempts', value: '0' },
-          ],
-        }));
-        c.push(ctxUpdate('concepts', { entries: [] }));
       } else if (algo === 'poly_reduction') {
         c.push(ctxUpdate('reduction_status', {
           entries: [
@@ -585,15 +577,6 @@ function mapGraphStep(algo, step, state) {
           ],
         }));
       }
-      if (algo === 'graph_coloring_np' && step.coloring) {
-        c.push(ctxUpdate('stats', {
-          entries: [
-            { key: 'Phase', value: 'Complete', status: 'updated' },
-            { key: 'Result', value: 'Graph 3-Coloring is NP-Complete' },
-          ],
-        }));
-        // Concepts panel already built incrementally via concept_intro steps — don't overwrite
-      }
       if (algo === 'poly_reduction') {
         c.push(ctxUpdate('reduction_status', {
           entries: [
@@ -871,100 +854,6 @@ function mapGraphStep(algo, step, state) {
           { key: 'Status', value: 'Complete' },
         ],
       }));
-      break;
-    }
-
-    // ── Graph Coloring NP ─────────────────────────────────────────────
-    case 'attempt_coloring': {
-      v.push(viz('graph', 'reset_highlights', {}));
-      if (step.node_classes) {
-        for (const [node, cls] of Object.entries(step.node_classes)) {
-          v.push(viz('graph', 'highlight_node', { node, className: cls }));
-        }
-      }
-      c.push(ctxUpdate('stats', {
-        entries: [
-          { key: 'Attempts', value: `${step.attempt_number} / ${step.total_possible}`, status: 'highlight' },
-          { key: 'Phase', value: 'Brute-force search' },
-        ],
-      }));
-      c.push(ctxLog('attempt_log', `Attempt #${step.attempt_number}: ${step.description?.split(': ')[1] || '...'}`, 'info'));
-      break;
-    }
-
-    case 'coloring_conflict': {
-      v.push(viz('graph', 'highlight_edge', { from: step.from, to: step.to, className: 'examining' }));
-      c.push(ctxUpdate('stats', {
-        entries: [
-          { key: 'Attempts', value: `${step.attempt_number} / ${step.total_possible}` },
-          { key: 'Phase', value: 'Brute-force search' },
-          { key: 'Last result', value: 'CONFLICT', status: 'updated' },
-        ],
-      }));
-      c.push(ctxLog('attempt_log', `FAIL: ${step.from}-${step.to} both ${step.color}`, 'decision'));
-      break;
-    }
-
-    case 'coloring_success': {
-      c.push(ctxUpdate('stats', {
-        entries: [
-          { key: 'Attempts', value: `${step.attempt_number} / ${step.total_possible}` },
-          { key: 'Phase', value: 'Brute-force search' },
-          { key: 'Last result', value: 'VALID!', status: 'updated' },
-        ],
-      }));
-      c.push(ctxLog('attempt_log', `SUCCESS on attempt #${step.attempt_number}: ${step.coloring_str}`, 'result'));
-      break;
-    }
-
-    case 'verify_start': {
-      v.push(viz('graph', 'reset_highlights', {}));
-      if (step.node_classes) {
-        for (const [node, cls] of Object.entries(step.node_classes)) {
-          v.push(viz('graph', 'highlight_node', { node, className: cls }));
-        }
-      }
-      c.push(ctxUpdate('stats', {
-        entries: [
-          { key: 'Phase', value: 'Certificate verification', status: 'highlight' },
-          { key: 'Edges checked', value: `0 / ${step.total_edges}` },
-        ],
-      }));
-      c.push(ctxLog('attempt_log', 'Verification phase: checking certificate...', 'info'));
-      break;
-    }
-
-    case 'verify_edge': {
-      // Keep coloring visible
-      if (step.node_classes) {
-        for (const [node, cls] of Object.entries(step.node_classes)) {
-          v.push(viz('graph', 'highlight_node', { node, className: cls }));
-        }
-      }
-      v.push(viz('graph', 'highlight_edge', {
-        from: step.from, to: step.to,
-        className: step.pass ? 'highlighted' : 'examining',
-      }));
-      c.push(ctxUpdate('stats', {
-        entries: [
-          { key: 'Phase', value: 'Certificate verification' },
-          { key: 'Edges checked', value: `${step.check_number} / ${step.total_edges}`, status: 'highlight' },
-          { key: 'Current edge', value: `${step.from}-${step.to}: ${step.pass ? 'PASS' : 'FAIL'}` },
-        ],
-      }));
-      c.push(ctxLog('attempt_log', `Edge ${step.from}-${step.to}: ${step.color_from} vs ${step.color_to} → ${step.pass ? 'PASS' : 'FAIL'}`, step.pass ? 'info' : 'decision'));
-      break;
-    }
-
-    case 'verify_complete': {
-      c.push(ctxUpdate('stats', {
-        entries: [
-          { key: 'Phase', value: 'Verification complete', status: 'updated' },
-          { key: 'Edges checked', value: `${step.checks} / ${step.checks}` },
-          { key: 'Result', value: 'Certificate VALID', status: 'updated' },
-        ],
-      }));
-      c.push(ctxLog('attempt_log', `All ${step.checks} edges verified — certificate is valid!`, 'result'));
       break;
     }
 
@@ -1289,14 +1178,6 @@ function mapArrayStep(algo, step, state) {
           entries: [
             { key: 'Left', value: 0 },
             { key: 'Right', value: (step.array?.length ?? 1) - 1 },
-          ],
-        }));
-      } else if (algo === 'gcd') {
-        const cs = step.conceptual_state || {};
-        c.push(ctxUpdate('stats', {
-          entries: [
-            { key: 'a', value: cs.a ?? step.array?.[0] ?? '–' },
-            { key: 'b', value: cs.b ?? step.array?.[1] ?? '–' },
           ],
         }));
       } else if (algo === 'max_subarray') {
@@ -3308,11 +3189,6 @@ function mapStringStep(algo, step, state) {
       // char_freq kept only by sliding_window_string; min_window_substring cut it
       // (window_state summarizes have/need).
       if (step.char_freq && algo === 'sliding_window_string') c.push(ctxUpdate('char_freq', { entries: freqEntries(step.char_freq) }));
-      break;
-    }
-
-    case 'window_invalid': {
-      s('set_window', { start: step.window_start, end: step.window_end, windowClass: 'mismatch' });
       break;
     }
 

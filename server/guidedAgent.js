@@ -6,8 +6,7 @@ import { handleToolCall, sendJSON, sendBinary, liveWs, getClient, registerPanels
 import { synthesizeAndStream, resetTTSDisabled } from './tts.js';
 import { CANONICAL_EXAMPLES } from './examples/canonicalExamples.js';
 import { getDefaultContextPanels, getModeDefaultPanels } from './contextPanelDefaults.js';
-import { layoutGrid, autoLayout } from './graphLayout.js';
-import { RENDERER_MANIFEST, buildRendererDocs } from './rendererManifest.js';
+import { buildRendererDocs } from './rendererManifest.js';
 import { solveProblem, solveLeetcodeProblem, solveProblems } from './solver.js';
 import { buildExampleGraph } from './graphBuilder.js';
 import { saveMessage, saveAgentState, completeConversation } from './db.js';
@@ -1186,36 +1185,6 @@ const guidedTools = [
     },
   },
 ];
-
-// Input size validation
-function validateInputSize(input, algorithm) {
-  const warnings = [];
-  const algoInfo = ALGORITHMS[algorithm];
-  if (!algoInfo) return warnings;
-
-  if (algoInfo.renderer === 'graph') {
-    if (input?.graph?.nodes?.length > 12) {
-      warnings.push(`Graph has ${input.graph.nodes.length} nodes (max 12 for visualization). Consider using a smaller example.`);
-    }
-    if (input?.graph?.edges?.length > 20) {
-      warnings.push(`Graph has ${input.graph.edges.length} edges (max 20 for visualization). Consider using a smaller example.`);
-    }
-  }
-  if (algoInfo.renderer === 'array') {
-    if (input?.array?.length > 15) {
-      warnings.push(`Array has ${input.array.length} elements (max 15 for visualization). Consider using a smaller example.`);
-    }
-  }
-  if (algoInfo.renderer === 'table') {
-    if (algorithm === 'knapsack' && input?.items?.length > 8) {
-      warnings.push(`${input.items.length} items would create a large DP table (max 8 for visualization).`);
-    }
-    if (algorithm === 'edit_distance' && (input?.str1?.length > 8 || input?.str2?.length > 8)) {
-      warnings.push(`String lengths exceed 8 characters, creating a large DP table. Consider using shorter strings.`);
-    }
-  }
-  return warnings;
-}
 
 /**
  * Compare two values for verification.

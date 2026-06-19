@@ -5,35 +5,6 @@
  * Used in file compression (gzip, JPEG, MP3).
  */
 
-/**
- * Build the initial leaf-node graph for a given string's character frequencies.
- * These positions lay leaves in a row at the bottom of the visualization.
- */
-export function buildHuffmanLeafGraph(str) {
-  const freq = {};
-  for (const ch of str) freq[ch] = (freq[ch] || 0) + 1;
-  const chars = Object.keys(freq).sort();
-  const spacing = 150;
-  const startX = 100;
-
-  const nodes = chars.map((ch, i) => ({
-    id: ch,
-    label: `${ch}:${freq[ch]}`,
-  }));
-
-  const positions = {};
-  chars.forEach((ch, i) => {
-    positions[ch] = { x: startX + i * spacing, y: 400 };
-  });
-
-  return {
-    nodes,
-    edges: [],
-    directed: true,
-    positions,
-  };
-}
-
 function buildSubtree(rootId, nodeValues, childrenMap) {
   const nodes = [], edges = [];
   function dfs(id) {
